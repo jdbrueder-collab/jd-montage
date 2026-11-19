@@ -50,10 +50,11 @@ Deno.serve(async (req) => {
       });
       const body = await req.json().catch(() => ({}));
       // Benachrichtigungen: meta meldet „abholbereit“, oder Test an die eigenen Geräte (alle freigegebenen Nutzer)
-      if (body?.abholbereit || body?.pushTest) {
+      if (body?.abholbereit || body?.pushTest || body?.reklamation) {
         const { data: member } = await user.rpc("is_member");
         const { data: u } = await user.auth.getUser();
         if (!member || !u?.user) return json({ code: "approval_required", message: "Kein Zugriff." }, 403);
+        if (body.reklamation) return json(await pushReklamation(db, String(body.reklamation)));
         return json(body.pushTest ? await pushTest(db, u.user.id) : await pushAbholbereit(db, String(body.abholbereit)));
       }
       const { data: owner } = await user.rpc("is_owner");
@@ -107,6 +108,23 @@ async function pushAbholbereit(db: any, id: string) {
     url: APP_URL + "#a-" + id,
   });
   return r;
+}
+/** Neue Reklamation (oder Leerfahrt) → Chefs sofort benachrichtigen (einmal je Reklamation) */
+const URSACHEN_TEXT: Record<string, string> = { selbst: "Selbst verursacht", baustelle: "Baustelle nicht montagefertig", teile: "Fehlerhafte Teile", sonst: "Sonstiges" };
+async function pushReklamation(db: any, rid: string) {
+  const r = await getDoc(db, "reklamationen", rid);
+  if (!r || !r.am || Date.now() - r.am > 15 * 60_000) return { gesendet: 0, grund: "nicht gefunden oder zu alt" };
+  if (r.gemeldetAm) return { gesendet: 0, grund: "schon gemeldet" };
+  await updDoc(db, "reklamationen", rid, { gemeldetAm: Date.now() });
+  const o = (await getDoc(db, "auftraege", r.auftragId)) || {};
+  const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
+  const von = rollen.info?.[r.von]?.firma || rollen.info?.[r.von]?.name || "";
+  return await pushSenden(db, await chefIds(db), {
+    titel: `${r.leerfahrt ? "Leerfahrt" : "Reklamation"}: ${o.nr || r.auftragId}`,
+    text: `${URSACHEN_TEXT[r.ursache] || r.ursache || ""}${von ? " · " + von : ""}
+${String(r.text || "").slice(0, 140)}`,
+    url: APP_URL + "#a-" + r.auftragId,
+  });
 }
 async function pushTest(db: any, uid: string) {
   return await pushSenden(db, new Set([uid]), { titel: "Benachrichtigungen sind an ✓", text: "Du bekommst Bescheid, sobald meta einen Auftrag als abholbereit meldet.", url: APP_URL });
