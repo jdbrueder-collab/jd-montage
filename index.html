@@ -310,6 +310,31 @@ const FAHRZEUG_ALT = {zwei:"Zwei Autos mit Anhänger"}; // ältere Einträge
 function fahrzeugText(x){ if(!x) return ""; if(x.fahrzeug==="sonst") return x.fahrzeugText||"Sonstiges"; return FAHRZEUGE[x.fahrzeug]||FAHRZEUG_ALT[x.fahrzeug]||x.fahrzeug||""; }
 // Anhängerfahrt? (Auswahl „Auto mit Anhänger“ oder „Anhänger“ im selbst eingetragenen Text)
 function mitAnhaenger(x){ if(!x) return false; return x.fahrzeug==="anhaenger"||x.fahrzeug==="zwei"||(x.fahrzeug==="sonst"&&/anh[äa]nger/i.test(x.fahrzeugText||"")); }
+// Übernachtungen: je Nacht Datum + Personen (bericht.naechte); ältere Berichte haben nur eine Zahl (bericht.uebernachtungen)
+function uebernachtet(b){ b=b||{}; if(b.uebernachtet) return b.uebernachtet; if((b.naechte||[]).length) return "ja"; if(b.hotel==="ja") return "ja"; if(!leer(b.uebernachtungen)) return nn(b.uebernachtungen)>0?"ja":"nein"; return ""; }
+function naechteAnzahl(b){ b=b||{}; if(uebernachtet(b)!=="ja") return 0; if((b.naechte||[]).length) return b.naechte.length; return nn(b.uebernachtungen)||nn(b.hotelInfo)||(b.hotel==="ja"?1:0); }
+function nachtTag(d){ if(!d) return "Datum ?"; const x=new Date(d+"T12:00:00"); return isNaN(x)?String(d):x.toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"}); }
+function personenNaechte(b){ return (b?.naechte||[]).reduce((a,x)=>a+(nn(x.personen)||0),0); }
+function naechteText(b){
+  const u=uebernachtet(b); if(u==="nein") return "keine"; if(u!=="ja") return "";
+  const n=b.naechte||[], z=naechteAnzahl(b);
+  if(!n.length) return `${z} ${z===1?"Nacht":"Nächte"}`;
+  const pn=personenNaechte(b);
+  return `${z} ${z===1?"Nacht":"Nächte"} (${n.map(x=>`${nachtTag(x.datum)}: ${x.personen||"?"} Pers.`).join("; ")})${pn&&n.length>1?` = ${pn} Personen-Übernachtungen`:""}`;
+}
+const isoTag=t=>{ const d=new Date(t); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const naechsterTag=d=>{ const x=new Date((d||isoTag(Date.now()))+"T12:00:00"); x.setDate(x.getDate()+1); return isoTag(x); };
+// erste Nacht: erster Montagetag (Zeiterfassung), sonst Termin, sonst heute
+function ersteNacht(o){ const z=(o.zeiten||[]).map(x=>x.s).filter(Boolean).sort((a,c)=>a-c)[0]; return isoTag(z||o.termin||Date.now()); }
+// Liste der Nächte bauen – aus genannten Nächten und/oder einer Anzahl
+function naechteBauen(o,anzahl,liste){
+  const pers=String((o.bericht||{}).personen??o.einsatz?.personenVorOrt??"");
+  const out=[]; let d=null;
+  (Array.isArray(liste)?liste:[]).forEach(x=>{ const dt=/^\d{4}-\d{2}-\d{2}$/.test(String(x?.datum||""))?x.datum:(d?naechsterTag(d):ersteNacht(o)); out.push({datum:dt,personen:String(x?.personen??pers)}); d=dt; });
+  const soll=Math.max(out.length,parseInt(anzahl,10)||0);
+  while(out.length<soll){ d=d?naechsterTag(d):ersteNacht(o); out.push({datum:d,personen:pers}); }
+  return out;
+}
 // km-Sätze nur für den Chef (stehen in lohn/preise, das sieht sonst niemand)
 const kmSatz=x=>{ const P=S.preise||{}; return mitAnhaenger(x)?nn(P.fahrtSatzAnhaenger??1.10):nn(P.fahrtSatzAuto??0.80); };
 const LEERFAHRT_NMB = "Leerfahrt – Baustelle nicht montagefertig";
@@ -457,7 +482,10 @@ async function boot(){
   const err = e => { clearTimeout(timer); S.loadErr = e.code==="revoked" ? "Kein Zugriff mehr auf die Daten." : "Datenverbindung unterbrochen ("+e.code+"). Seite neu öffnen."; render(); };
   db.collection("auftraege").onSnapshot(snap=>{
     clearTimeout(timer); S.loaded=true; S.loadErr="";
-    const o={}; snap.docs.forEach(d=>o[d.id]={id:d.id,...d.data()}); S.orders=o;
+    const o={}; snap.docs.forEach(d=>o[d.id]={id:d.id,...d.data()});
+    // gerade eingegebene Bericht-Listen (Sonderarbeiten, Nächte) gelten, bis der Server sie bestätigt hat
+    Object.entries(S.lokal||{}).forEach(([k,l])=>{ if(Date.now()>l.bis||!o[k]){ delete S.lokal[k]; return; } o[k].bericht={...(o[k].bericht||{}),...l.patch}; });
+    S.orders=o;
     loadProfiles(Object.values(o).flatMap(x=>[...(x.monteure||[]),x.abschluss?.by].filter(Boolean)));
     scheduleRender();
   }, err);
@@ -647,7 +675,7 @@ function viewListe(){
   if(can.planen() && pruef.length && S.filter!=="pruefung") h+=`<div class="banner warn" style="margin-top:10px;cursor:pointer" id="pruefBanner">📥 <b>${pruef.length} Bericht${pruef.length>1?"e":""} von Subunternehmern</b> zu prüfen. <u>Anzeigen</u></div>`;
   if(S.filter==="pruefung") h+=`<div class="banner warn" style="margin-top:10px">Berichte von Subunternehmern zur Prüfung · <a href="#" id="abnBack">alle anzeigen</a></div>`;
   const faellig=Object.values(S.orders).filter(o=>sichtbar(o)&&meinAuftrag(o)&&abnahmeFaellig(o));
-  if(faellig.length && S.filter!=="abnahme") h+=`<div class="banner bad" style="margin-top:10px;cursor:pointer" id="abnBanner">⏰ <b>${faellig.length} Abnahme${faellig.length>1?"n":""}</b> seit über einer Woche offen${faellig.some(o=>o.berichtGesendetAm)?" (Bericht schon verschickt)":""} – bitte beim Kunden nachhaken. <u>Anzeigen</u></div>`;
+  if(faellig.length && S.filter!=="abnahme") h+=`<div class="banner bad" style="margin-top:10px;cursor:pointer" id="abnBanner">⏰ <b>${faellig.length} Sichtabnahme${faellig.length>1?"n":""}</b> seit über einer Woche offen${faellig.some(o=>o.berichtGesendetAm)?" (Bericht schon verschickt)":""} – bitte beim Kunden nachhaken. <u>Anzeigen</u></div>`;
   if(S.filter==="abnahme") h+=`<div class="banner warn" style="margin-top:10px">Aufträge mit offener Sichtabnahme · <a href="#" id="abnBack">alle anzeigen</a></div>`;
   if(!list.length) h+=`<div class="empty">Keine Aufträge in dieser Ansicht.</div>`;
   const nowK=wkKey(NOW.jahr,NOW.kw);
@@ -790,7 +818,7 @@ function viewDetail(id){
    </div>`;
   h+=erl?`<div id="unterlagenCard">${fold("unter","Unterlagen &amp; Zeichnungen",`${fk("unterlagen").length} Datei(en)`,unterInhalt)}</div>`:`<div class="card" id="unterlagenCard"><h3>Unterlagen &amp; Zeichnungen</h3>${unterInhalt}</div>`;
 
-  // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Abnahme → Versand
+  // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Sichtabnahme → Versand
   if(erl){
     if(o.abschluss||o.bericht) h+=`<button class="card fold foldbtn" id="berichtAnsehen" style="width:100%;text-align:left;border:0;cursor:pointer"><b>📄 Montagebericht</b><span class="small mute">ansehen – fertig, nicht mehr änderbar</span></button>`;
   } else if(can.einsatz() && !frueh){
@@ -809,7 +837,7 @@ function viewDetail(id){
   if(o.berichtStatus==="pruefung"){
     h+=`<div class="card" style="border-left:5px solid var(--accent)"><h3>Bericht Subunternehmer</h3>
      ${can.planen()?(()=>{ const sl=S.lohn[lohnDocId(o.id,o.berichtVonSub)]; const sc=sl?calcLohn(sl,S.preise):null; const meta=can.finanzen()&&S.fin[o.id]?Number(S.fin[o.id].summe)||0:null;
-       return `<div class="banner warn">Bericht von <b>${esc(nameOf(o.berichtVonSub))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Abnahme). Erst nach deiner Freigabe geht er an meta und der Subunternehmer darf seine Rechnung schreiben.</div>
+       return `<div class="banner warn">Bericht von <b>${esc(nameOf(o.berichtVonSub))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Sichtabnahme). Erst nach deiner Freigabe geht er an meta und der Subunternehmer darf seine Rechnung schreiben.</div>
        ${sc?`<div class="grid3" style="text-align:center;margin-bottom:10px"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Sub berechnet</div><b>${fmtEUR(sc.total)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">meta zahlt</div><b>${meta!=null?fmtEUR(meta):"–"}</b></div><div style="background:${meta!=null&&meta-sc.total<0?"var(--badbg)":"var(--okbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b>${meta!=null?fmtEUR(r2(meta-sc.total)):"–"}</b></div></div>
        <div class="small mute" style="margin-bottom:8px">${sc.lines.map(z=>`${z.menge!==""?String(z.menge).replace(".",",")+"× ":""}${esc(z.label)} ${fmtEUR(z.gp)}`).join(" · ")} – Mengen kannst du unter „Positionsergänzung“ korrigieren.</div>`:""}
        <button class="btn ok block" id="subFrei">✓ Geprüft – freigeben &amp; an meta senden</button>`; })():`<div class="banner info">Dein Bericht liegt bei JD Brüder zur Prüfung. Nach der Freigabe kannst du deine Rechnung schreiben.</div>`}</div>`;
@@ -820,7 +848,7 @@ function viewDetail(id){
   } else if(o.berichtStatus){
     h+=`<div class="card"><h3>Bericht an meta</h3>
      ${o.berichtStatus==="gesendet"?`<div class="banner ok">Gesendet am ${fmtDT(o.berichtGesendetAm)} an ${esc(o.berichtAn||"")}</div>`:`<div class="banner warn">Bericht ist fertig und wartet auf Versand${can.senden()?"":" durch den Chef"}.</div>`}
-     ${o.berichtStatus!=="gesendet"&&!abnahmeOk(o)&&o.berichtTyp!=="leerfahrt"?`<div class="small mute" style="margin-bottom:8px">Die Abnahme steht noch aus – der Bericht kann trotzdem schon verschickt werden. Eine Woche nach dem Versand erinnert die App, falls dann noch keine Abnahme vorliegt.</div>`:""}
+     ${o.berichtStatus!=="gesendet"&&!abnahmeOk(o)&&o.berichtTyp!=="leerfahrt"?`<div class="small mute" style="margin-bottom:8px">Die Sichtabnahme steht noch aus – der Bericht kann trotzdem schon verschickt werden. Eine Woche nach dem Versand erinnert die App, falls dann noch keine Sichtabnahme vorliegt.</div>`:""}
      ${can.senden()?`<button class="btn pri block" id="sendBericht">✉︎ ${o.berichtStatus==="gesendet"?"Erneut senden":"Bericht abschicken"}</button>`:""}
      ${S.isOwner&&!S.mcp?`<div class="small mute">Gmail ist noch nicht eingerichtet.</div>`:""}</div>`;
   }
@@ -873,16 +901,16 @@ function berichtAnsicht(id){
    <dl class="kv">
     ${z("Tätigkeit",esc(b.taetigkeit||"").replace(/\n/g,"<br>"))}
     ${z("Positionen",pos.join(", "))}
-    ${z("Arbeitszeit",az?fmtHMin(az)+" Std.":"")}
     ${z("Personen",[b.personen?b.personen+" vor Ort":"",b.personenMit?b.personenMit+" mitgefahren":""].filter(Boolean).join(", "))}
     ${z("Fahrzeug",esc(fahrzeugText(o.einsatz))+(mitAnhaenger(o.einsatz)?" – Anhängerfahrt":""))}
     ${z("Gefahrene km",esc(b.istKm||""))}
+    ${z("Hotelfahrten",esc(hotelText(o)))}
     ${z("Geschosse",esc(b.geschosse||""))}
-    ${z("Übernachtungen",esc(b.uebernachtungen||""))}
-    ${z("Sonderleistungen",(b.sonder||[]).map(x=>`${esc(x.arbeit)} (${x.personen||1} Pers. × ${fmtStd(x.min)} Std.)`).join("<br>"))}
+    ${z("Übernachtungen",esc(naechteText(b)))}
+    ${z("Sonderarbeiten",sonderFertig(b).map(x=>esc(sonderZeile(x))).join("<br>"))}
     ${z("Vorleistung",vorleistungZeilen(o).map(esc).join("<br>"))}
     ${z("Bemerkungen",esc(b.bemerkung||""))}
-    ${z("Abnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
+    ${z("Sichtabnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
    </dl>
    ${fotos.length?`<label class="f">Fotos</label><div class="thumbs">${fotos.map(f=>`<div class="t" data-z="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt=""></div>`).join("")}</div>`:""}
    <label class="f">Montagebericht (PDF an meta, ohne Preise)</label><div id="pv"><span class="spin"></span> Vorschau wird erstellt …</div>
@@ -937,7 +965,7 @@ function finanzCard(o,f){
 }
 
 /* ---------- Einsatz-Ablauf ---------- */
-const SCHRITTE=[["fahrzeug","Abfahrt"],["ankunft","Ankunft"],["vorher","Vorher-Fotos"],["nmb","Montagebereit"],["start","Montagestart"],["montage","Montage"],["bericht","Montagebericht"],["fertig","Abgeschlossen"]];
+const SCHRITTE=[["fahrzeug","Abfahrt"],["ankunft","Ankunft"],["start","Montagestart"],["vorher","Vorher-Fotos"],["nmb","Montagebereit"],["montage","Montage"],["uebernachtung","Übernachtung"],["bericht","Montagebericht"],["fertig","Abgeschlossen"]];
 const LEISTUNG={wc:"WC-Trennwände",schraenke:"Schränke",sonst:"Sonstiges"};
 const leer=v=>v===undefined||v===null||String(v).trim()==="";
 function schritt(o){
@@ -946,10 +974,12 @@ function schritt(o){
   if(!e){ if(running(o)) return "montage"; if((o.zeiten||[]).length) return "bericht"; return "fahrzeug"; }
   if(!e.fahrzeug) return "fahrzeug";
   if(!e.ankunftAm) return "ankunft";
+  if(!e.startAm) return "start";
   if(!e.bereit) return "vorher";
   if(e.bereit==="nein" && !e.nmb?.weiter) return "nmb";
-  if(!e.startAm) return "start";
   if(!e.fertigAm) return "montage";
+  // ältere Berichte mit nur einer Zahl (ohne Ja/Nein) gelten als beantwortet
+  if(!e.uebernachtungOk && !(o.bericht?.uebernachtungen!=null && !o.bericht?.uebernachtet)) return "uebernachtung";
   return "bericht";
 }
 // "6:30", "6h30", "6 Std 30" → Minuten; "6,5" oder "6" → Stunden; "90 min" → Minuten
@@ -961,6 +991,70 @@ function parseMin(v){
 }
 const fmtHMin=min=>`${Math.floor(min/60)}:${String(Math.round(min%60)).padStart(2,"0")}`;
 const fmtStd=min=>String(Math.round((nn(min)/60)*100)/100).replace(".",",");
+// Arbeitszeit je Kalendertag (Zeitblöcke über Mitternacht werden aufgeteilt) – nur intern / Statistik
+function tageZeiten(o){
+  const m={}, pd=nn(o.einsatz?.personenVorOrt)||nn(o.bericht?.personen)||0;
+  (o.zeiten||[]).forEach(z=>{ let t=z.s; const e=z.e||Date.now();
+    while(t<e){ const d=new Date(t), mid=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1).getTime(), bis=Math.min(e,mid), k=isoTag(t);
+      const x=m[k]||(m[k]={tag:k,ms:0,p:0}); x.ms+=bis-t; x.p=Math.max(x.p,nn(z.p)||pd); t=bis; } });
+  return Object.values(m).sort((a,c)=>a.tag.localeCompare(c.tag));
+}
+function tageListe(o){
+  const tg=tageZeiten(o); if(!tg.length) return "";
+  const heute=isoTag(Date.now()), r=running(o);
+  return `<div style="margin-top:10px;background:var(--greybg);border-radius:10px;padding:8px 10px">
+    ${tg.map(t=>`<div class="row between" style="padding:3px 0"><span>${esc(nachtTag(t.tag))}${r&&t.tag===heute?` <span class="chip ok" style="font-size:11px">läuft</span>`:""}</span><b>${fmtHMin(Math.round(t.ms/60000))} Std.${t.p?` <span class="small mute">· ${t.p} Pers.</span>`:""}</b></div>`).join("")}
+    ${tg.length>1?`<div class="row between" style="padding:4px 0 0;border-top:1px solid var(--line);margin-top:4px"><span>Gesamt · ${tg.length} Tage</span><b>${fmtHMin(Math.round(totalMs(o)/60000))} Std.</b></div>`:""}
+    <details style="margin-top:4px"><summary class="small mute" style="cursor:pointer">Einzelne Zeiten</summary>${zeitenListe(o)}</details>
+  </div>`;
+}
+// Montage-Statistik (nur intern): Kabinen, Zeit, Personen
+function statistikCard(){
+  const rows=Object.values(S.orders).filter(o=>o.abschluss&&!o.storniert&&(o.zeiten||[]).length).map(o=>{
+    const tg=tageZeiten(o), std=tg.reduce((a,t)=>a+t.ms,0)/3600000, mh=tg.reduce((a,t)=>a+t.ms/3600000*(t.p||1),0);
+    return {o,tage:tg.length,std,mh,p:Math.max(0,...tg.map(t=>t.p)),kab:nn(summeMengen(o).vorderfront)||nn(o.kabinen)};
+  }).sort((a,c)=>c.o.abschluss.am-a.o.abschluss.am);
+  const f1=x=>String(Math.round(x*10)/10).replace(".",",");
+  const mitK=rows.filter(r=>r.kab), sk=mitK.reduce((a,r)=>a+r.kab,0), smh=mitK.reduce((a,r)=>a+r.mh,0);
+  return `<div class="card"><h3>📊 Montage-Statistik <span class="small mute">(nur intern – steht nicht im Montagebericht)</span></h3>
+   ${rows.length?`<div class="grid3" style="text-align:center;margin-bottom:8px"><div><div class="small mute">Montagen</div><b style="font-size:17px">${rows.length}</b></div><div><div class="small mute">Kabinen</div><b style="font-size:17px">${fmtZahl(sk)}</b></div><div><div class="small mute">Ø Mann-Std. / Kabine</div><b style="font-size:17px">${sk?f1(smh/sk):"–"}</b></div></div>
+   <table class="pos"><thead><tr><th>Auftrag</th><th>Kabinen</th><th>Tage</th><th>Std.</th><th>Pers.</th><th>Mann-Std./Kab.</th></tr></thead><tbody>${rows.slice(0,40).map(r=>`<tr><td><a href="#a-${esc(r.o.id)}">${esc(r.o.nr)}</a><div class="small mute">${new Date(r.o.abschluss.am).toLocaleDateString("de-DE")}</div></td><td>${r.kab?fmtZahl(r.kab):"–"}</td><td>${r.tage}</td><td>${fmtHMin(Math.round(r.std*60))}</td><td>${r.p||"–"}</td><td>${r.kab?f1(r.mh/r.kab):"–"}</td></tr>`).join("")}</tbody></table>`
+   :`<div class="small mute">Noch keine abgeschlossenen Montagen mit Zeiterfassung.</div>`}</div>`;
+}
+// Sonderarbeiten: frei beschrieben, je Punkt Personen, Dauer, Bemerkung und Fotos
+const sonderListe=b=>(b?.sonder||[]).map((x,i)=>({...x,id:x.id||"s"+i}));
+const sonderFertig=b=>sonderListe(b).filter(x=>!leer(x.arbeit));
+const sonderZeile=x=>`${x.arbeit} (${x.personen||1} Pers. × ${fmtStd(x.min)} Std.)${leer(x.bemerkung)?"":" – "+x.bemerkung}`;
+// Aufklappbarer Bereich (Zustand bleibt beim Neuzeichnen erhalten)
+function klapp(id,key,titel,info,inhalt,{card=true,offen=false}={}){
+  return `<details class="${card?"card ":""}fold" data-fold="${esc(id)}:${key}" ${(S.fold[id+":"+key]??offen)?"open":""}${card?"":` style="background:var(--greybg);border-radius:10px;padding:10px 12px;margin-top:8px"`}><summary><b>${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
+}
+// Geschosse, in die Material getragen wurde: antippen statt tippen
+const GESCH_BASIS=["UG","EG","1. OG","2. OG","3. OG","4. OG","5. OG"];
+const GESCH_ALLE=["KG","UG","EG","1. OG","2. OG","3. OG","4. OG","5. OG","6. OG","7. OG","8. OG","DG"];
+function geschListe(t){
+  return [...new Set(String(t||"").split(/[,;+]|\bund\b/i).map(x=>x.trim()).filter(Boolean).map(x=>{
+    if(/^eg$|^erdgeschoss$/i.test(x)) return "EG"; if(/^kg$|^keller/i.test(x)) return "KG"; if(/^ug$/i.test(x)) return "UG"; if(/^dg$|^dach/i.test(x)) return "DG";
+    const m=x.match(/^(\d+)\s*\.?\s*(og|obergeschoss)$/i); return m?`${m[1]}. OG`:x; }))];
+}
+const geschText=l=>[...l].sort((a,c)=>{ const i=GESCH_ALLE.indexOf(a), j=GESCH_ALLE.indexOf(c); return (i<0?99:i)-(j<0?99:j); }).join(", ");
+function geschTeil(o){
+  const sel=geschListe(o.bericht?.geschosse), alte=sel.filter(g=>!GESCH_BASIS.includes(g)); // ältere Einträge (z. B. KG) bleiben abwählbar
+  const knopf=g=>`<button class="btn sm ${sel.includes(g)?"pri":""}" data-gs="${esc(g)}" style="min-height:38px">${sel.includes(g)?"✓ ":""}${esc(g)}</button>`;
+  return `<label class="f">Geschosse (Material getragen) <span class="small mute">– antippen, mehrere möglich</span></label>
+   <div class="row" style="gap:6px">${[...GESCH_BASIS,...alte].map(knopf).join("")}</div>`;
+}
+// Fahrten Baustelle ↔ Hotel (beim Feierabend / am nächsten Morgen erfasst)
+const hotelFahrten=o=>(o.einsatz?.hotelFahrten||[]).filter(f=>f&&nn(f.km));
+const hotelKm=o=>hotelFahrten(o).reduce((a,f)=>a+nn(f.km),0);
+function hotelText(o){ const l=hotelFahrten(o); if(!l.length) return "";
+  return `${fmtZahl(hotelKm(o))} km (${l.map(f=>`${nachtTag(f.tag).replace(/,\s*\d{4}$/,"").replace(/\.\d{4}$/,".")}: ${f.richtung==="zurueck"?"Hotel → Baustelle":"Baustelle → Hotel"} ${fmtZahl(f.km)} km`).join("; ")})`; }
+// Nächte aus aufeinanderfolgenden Arbeitstagen + schon eingetragene (z. B. Hotel) – mit Datum und Personen
+function autoNaechte(o){
+  const tg=tageZeiten(o), m=new Map((o.bericht?.naechte||[]).map(n=>[n.datum,n]));
+  tg.forEach((t,i)=>{ const nx=tg[i+1]; if(nx && nx.tag===naechsterTag(t.tag) && !m.has(t.tag)) m.set(t.tag,{datum:t.tag,personen:String(t.p||nx.p||o.bericht?.personen||""),auto:true}); });
+  return [...m.values()].sort((a,c)=>String(a.datum).localeCompare(String(c.datum)));
+}
 function arbeitszeitMin(o){ const b=o.bericht||{}; if(b.arbeitszeitMin!=null&&b.arbeitszeitMin!=="") return nn(b.arbeitszeitMin); const ms=totalMs(o); return ms?Math.round(ms/60000):null; }
 function zeitenListe(o){
   return (o.zeiten||[]).length?`<div class="small mute" style="margin-top:6px">${o.zeiten.map((z,i)=>`${fmtDT(z.s)} – ${z.e?new Date(z.e).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"läuft"} (${fmtHM((z.e||Date.now())-z.s)})${can.planen()?` <a href="#" data-delz="${i}">löschen</a>`:""}`).join("<br>")}</div>`:"";
@@ -969,10 +1063,12 @@ function stepBackPatch(o){
   const st=schritt(o), e=o.einsatz||{};
   if(!o.einsatz||istFertig(o)) return null;
   if(st==="ankunft") return {einsatz:{fahrzeug:null,fahrzeugText:null,abfahrtAm:null}};
-  if(st==="vorher") return {einsatz:{ankunftAm:null}};
+  if(st==="start") return {einsatz:{ankunftAm:null}};
+  if(st==="vorher") return {einsatz:{startAm:null},zeiten:(o.zeiten||[]).filter(z=>z.s<(e.startAm||0))};
   if(st==="nmb") return {einsatz:{bereit:null}};
-  if(st==="start") return e.bereit==="nein"?{einsatz:{nmb:{weiter:false}}}:{einsatz:{bereit:null}};
-  if(st==="bericht") return {einsatz:{fertigAm:null}};
+  if(st==="montage") return e.bereit==="nein"?{einsatz:{nmb:{weiter:false}}}:{einsatz:{bereit:null}};
+  if(st==="uebernachtung") return {einsatz:{fertigAm:null}};
+  if(st==="bericht") return e.uebernachtungOk?{einsatz:{uebernachtungOk:null}}:{einsatz:{fertigAm:null}};
   return null;
 }
 function einsatzCard(o,fk){
@@ -991,34 +1087,64 @@ function einsatzCard(o,fk){
      <div class="small mute" style="margin-bottom:10px">Abfahrt ${fmtDT(e.abfahrtAm)} · ${esc(adresseOf(o))}</div>
      <button class="btn ok block" id="ankunft" style="min-height:56px;font-size:16px">✓ Ja, wir sind angekommen</button>`;
   } else if(st==="vorher"){
-    const n=fk("vorher").length, frei=n||!S.assets, w=S.bereitWahl[id];
-    h+=`<div class="q">Vorher-Fotos machen</div>
+    const n=fk("vorher").length, frei=n||!S.assets||e.vorherSkip, w=S.bereitWahl[id];
+    h+=`${zeitLeiste(o)}
+     <div class="q">Vorher-Fotos machen</div>
      <div class="banner info small">Bitte fotografiert die Baustelle, bevor ihr anfangt. So ist festgehalten, wie ihr sie vorgefunden habt.</div>
      ${thumbs(fk("vorher"),"vorher",true)}
+     ${!n&&S.assets?(e.vorherSkip?`<div class="small mute" style="margin-top:6px">Vorher-Fotos übersprungen – ihr könnt sie trotzdem noch hinzufügen.</div>`:`<button class="btn ghost block" id="vorherSkip" style="margin-top:8px">Fotos überspringen →</button>`):""}
      <div class="q" style="margin-top:16px">Baustelle montagebereit?</div>
-     ${frei?"":`<div class="small" style="color:var(--bad);margin-bottom:6px">Bitte zuerst mindestens ein Vorher-Foto hinzufügen.</div>`}
+     ${frei?"":`<div class="small" style="color:var(--bad);margin-bottom:6px">Bitte zuerst ein Vorher-Foto hinzufügen – oder „Fotos überspringen“.</div>`}
      <div class="grid2"><button class="btn ${w==="ja"?"ok":""}" id="bereitJa" ${frei?"":"disabled"} style="min-height:52px">✓ Ja</button><button class="btn" id="bereitNein" ${frei?"":"disabled"} style="min-height:52px">✕ Nein</button></div>
-     ${w==="ja"?`<button class="btn pri block" id="bereitWeiter" style="margin-top:10px;min-height:52px">Weiter → Montagestart</button>`:""}`;
+     ${w==="ja"?`<button class="btn pri block" id="bereitWeiter" style="margin-top:10px;min-height:52px">Weiter → Montage</button>`:""}`;
   } else if(st==="nmb"){
-    h+=nmbTeil(o);
+    h+=zeitLeiste(o)+nmbTeil(o);
   } else if(st==="start"){
     const pv=e.personenVorOrt||b.personen||(o.monteure||[]).length||"";
-    h+=`<div class="q">Montage beginnen?</div>
+    const akm=e.anfahrtKm??"";
+    h+=`<div class="banner ok" style="margin-bottom:14px"><b>📍 Angekommen um ${new Date(e.ankunftAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr</b>
+       <label class="f" style="margin-top:8px">Wie viele Kilometer seid ihr gefahren?</label>
+       <div class="row" style="flex-wrap:nowrap;align-items:center"><input class="i" id="anKm" inputmode="decimal" value="${esc(akm)}" placeholder="${esc(o.sollKm||"z. B. 85")}" style="font-size:18px;text-align:center;font-weight:700"><b>km</b></div>
+       ${o.sollKm?`<div class="small mute" style="margin-top:4px">Laut Route ca. ${esc(o.sollKm)} km</div>`:""}</div>
+     <div class="q">Montage beginnen?</div>
      <label class="f">Wie viele Personen sind vor Ort?</label>
      <div class="row" style="flex-wrap:nowrap"><button class="btn" data-pv="-1" style="width:56px">−</button><input class="i" id="pvo" inputmode="numeric" value="${esc(pv)}" style="text-align:center;font-weight:700"><button class="btn" data-pv="1" style="width:56px">＋</button></div>
      <div class="grid2" style="margin-top:12px"><button class="btn" id="startNein" style="min-height:52px">Nein, noch nicht</button><button class="btn ok" id="startJa" style="min-height:52px">▶ Ja, beginnen</button></div>`;
+  } else if(st==="uebernachtung"){
+    const u=uebernachtet(b);
+    const an=(b.naechte||[]).filter(x=>x.auto).length;
+    h+=`<div class="q">Habt ihr übernachtet?</div>
+     ${u==="ja"&&(b.naechte||[]).length?`<div class="banner info small">🛏 Ausgerechnet aus euren Arbeitstagen${hotelFahrten(o).length?" und Hotel-Feierabenden":""}: <b>${naechteText(b)}</b>. Bitte kurz prüfen – Tag und Personen lassen sich ändern.</div>`
+       :`<div class="small mute" style="margin-bottom:8px">Bei „Ja“ für jede Nacht eintragen: an welchem Tag und wie viele Personen.</div>`}
+     ${uebernachtungTeil(o,true)}
+     ${u==="ja"?`<button class="btn pri block" id="uebWeiter" style="margin-top:12px;min-height:52px">Weiter → Montagebericht</button>`:""}`;
   } else if(st==="montage"){
     const r=running(o);
-    h+=`<div class="row between"><div><div class="small mute">Arbeitszeit${e.personenVorOrt?` · ${esc(e.personenVorOrt)} Pers. vor Ort`:""}</div><div class="timer" data-timer="${esc(id)}">${fmtDur(totalMs(o))}</div></div>
-       <button class="btn ${r?"":"ok"}" id="timerBtn" style="min-width:120px">${r?"⏸ Pause":"▶ Weiter"}</button></div>
-     ${zeitenListe(o)}
+    const lz=(o.zeiten||[]).slice(-1)[0], neuerTag=!r&&lz&&isoTag(lz.s)!==isoTag(Date.now());
+    h+=`<div class="row between"><div><div class="small mute">Arbeitszeit gesamt <span class="small">(nur intern)</span></div><div class="timer" data-timer="${esc(id)}">${fmtDur(totalMs(o))}</div></div>
+       <span class="chip ${r?"ok":"warn"}">${r?"● läuft":lz?.hotel?"🏨 im Hotel":lz?.feierabend?"🌙 Feierabend":"⏸ Pause"}</span></div>
+     ${r?`<div class="grid2" style="margin-top:12px"><button class="btn" id="pauseBtn" style="min-height:52px">⏸ Pause</button><button class="btn" id="feierabendBtn" style="min-height:52px">🌙 Feierabend – morgen weiter</button></div>
+        <button class="btn block" id="hotelBtn" style="margin-top:8px;min-height:52px">🏨 Feierabend – ab ins Hotel</button>`
+        :`<button class="btn ok block" id="weiterBtn" style="margin-top:12px;min-height:56px;font-size:16px">▶ ${neuerTag?"Neuer Arbeitstag – weiterarbeiten":"Weiterarbeiten"}</button>`}
+     ${tageListe(o)}
+     ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}
      <button class="btn ok block" id="montageFertig" style="margin-top:14px;min-height:56px;font-size:16px">■ Timer stoppen – Montage abgeschlossen</button>`;
   } else {
     h+=`${istFertig(o)?`<div class="banner ${o.abschluss.typ==="ok"?"ok":"warn"}">Abgeschlossen am ${fmtDT(o.abschluss.am)} von ${esc(nameOf(o.abschluss.by))}${o.abschluss.typ==="rekla"?" – mit Reklamation":""}. ${can.planen()?`<button class="btn sm ghost" id="reopen" style="margin-left:6px">Wieder öffnen</button>`:""}</div>`:`<div class="banner ok">✓ Montage beendet${e.fertigAm?" am "+fmtDT(e.fertigAm):""}. Jetzt den Montagebericht ausfüllen.</div>`}
-     <div class="row between"><div><div class="small mute">Gemessene Arbeitszeit</div><div class="timer" style="font-size:26px">${fmtDur(totalMs(o))}</div></div>${istFertig(o)?"":`<button class="btn pri" id="toBericht">📝 Montagebericht</button>`}</div>
-     ${zeitenListe(o)}`;
+     <div class="row between"><div><div class="small mute">Arbeitszeit <span class="small">(nur intern, nicht im Bericht)</span></div><div class="timer" style="font-size:26px">${fmtDur(totalMs(o))}</div></div>${istFertig(o)?"":`<button class="btn pri" id="toBericht">📝 Montagebericht</button>`}</div>
+     ${tageListe(o)}
+     ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}`;
   }
   return h+`</div>`;
+}
+// Zeit-Leiste ab Montagestart: Zeit anzeigen und jederzeit stoppen / weiterlaufen lassen
+function zeitLeiste(o){
+  if(!(o.zeiten||[]).length) return "";
+  const r=running(o), lz=o.zeiten[o.zeiten.length-1], neuerTag=!r&&lz&&isoTag(lz.s)!==isoTag(Date.now());
+  return `<div class="row between" style="flex-wrap:nowrap;gap:8px;background:var(--greybg);border-radius:10px;padding:8px 10px;margin-bottom:12px">
+    <div style="min-width:0"><div class="small mute">⏱ Arbeitszeit ${r?`<span class="chip ok" style="font-size:11px">läuft</span>`:`<span class="chip warn" style="font-size:11px">gestoppt</span>`}</div><b class="timer" data-timer="${esc(o.id)}" style="font-size:20px">${fmtDur(totalMs(o))}</b></div>
+    ${r?`<button class="btn" id="pauseBtn" style="white-space:nowrap">⏸ Zeit stoppen</button>`:`<button class="btn ok" id="weiterBtn" style="white-space:nowrap">▶ ${neuerTag?"Neuer Tag – weiter":"Zeit weiterlaufen"}</button>`}
+  </div>`;
 }
 function nmbTeil(o){
   const n=o.einsatz?.nmb||{}; const tel=(o.bauleiterTel||"").replace(/[^\d+]/g,"");
@@ -1033,7 +1159,7 @@ function nmbTeil(o){
    <div class="q" style="font-size:16px;margin-top:16px">${n.schreibenAm?"3":"2"}. Freigabe</div>
    <label class="row" style="flex-wrap:nowrap;gap:10px;padding:8px 0;cursor:pointer"><input type="checkbox" data-nmb="freigabeMail" ${n.freigabeMail?"checked":""} style="width:24px;height:24px"><span>Freigabe liegt <b>per E-Mail</b> vor</span></label>
    <label class="row" style="flex-wrap:nowrap;gap:10px;padding:8px 0;cursor:pointer"><input type="checkbox" data-nmb="freigabeTel" ${n.freigabeTel?"checked":""} style="width:24px;height:24px"><span>Freigabe wurde <b>telefonisch bestätigt</b></span></label>
-   <button class="btn pri block" id="nmbWeiter" ${ok?"":"disabled"} style="margin-top:8px;min-height:52px">Weiter → Montagestart</button>
+   <button class="btn pri block" id="nmbWeiter" ${ok?"":"disabled"} style="margin-top:8px;min-height:52px">Weiter → Montage</button>
    ${ok?"":`<div class="small mute" style="margin-top:4px">„Weiter“ geht erst, wenn beide Freigaben abgehakt sind.</div>`}
    <button class="btn ghost block" id="nmbLeer" style="margin-top:14px;color:var(--bad)">✕ Ohne Freigabe beenden – ${LEERFAHRT_NMB}</button>`;
 }
@@ -1056,32 +1182,47 @@ function berichtCard(o,fk){
    <label class="f">Was wurde gemacht? (Tätigkeit)</label>
    <textarea class="i" data-b="taetigkeit" id="fTaet" placeholder="z. B. 9 Kabinen in EG, 1. und 2. OG montiert, Passschnitte vor Ort …">${esc(b.taetigkeit??"")}</textarea>
    <div class="grid3">
-     <div><label class="f">Arbeitszeit (Std:Min)</label><input class="i" id="fAz" value="${az!=null?fmtHMin(az):""}" placeholder="z. B. 6:30"></div>
      <div><label class="f">Personen vor Ort</label><input class="i" data-b="personen" inputmode="numeric" value="${esc(b.personen??e.personenVorOrt??"")}"></div>
      <div><label class="f">Mitgefahrene Personen</label><input class="i" data-b="personenMit" inputmode="numeric" value="${esc(b.personenMit??"")}"></div>
-     <div><label class="f">Selbst gefahrene km</label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}"></div>
-     <div><label class="f">Geschosse (Material getragen)</label><input class="i" data-b="geschosse" value="${esc(b.geschosse??"")}" placeholder="z. B. EG, 1. OG"></div>
-     <div><label class="f">Übernachtungen</label><input class="i" data-b="uebernachtungen" inputmode="numeric" value="${esc(b.uebernachtungen??(b.hotel==="ja"?(b.hotelInfo||"1"):""))}" placeholder="0"></div>
+     <div><label class="f">Selbst gefahrene km</label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}">${nn(e.anfahrtKm)?`<div class="small mute">Anfahrt: ${fmtZahl(e.anfahrtKm)} km</div>`:""}</div>
    </div>
-   ${gem!=null&&az!=null&&az!==gem?`<div class="small mute" style="margin-top:4px">Gemessen: ${fmtHMin(gem)} Std. · <a href="#" id="azReset">übernehmen</a></div>`:""}
+   ${hotelFahrten(o).length||(o.einsatz?.hotelFahrten||[]).length?`<div style="margin-top:8px;background:var(--greybg);border-radius:10px;padding:8px 10px"><div class="small"><b>🏨 Hotelfahrten: ${fmtZahl(hotelKm(o))} km</b> <span class="mute">– werden im Bericht extra aufgeführt</span></div>
+     ${(o.einsatz?.hotelFahrten||[]).map((f,i)=>`<div class="row" style="flex-wrap:nowrap;gap:6px;margin-top:6px"><span class="small" style="flex:1">${esc(nachtTag(f.tag))} · ${f.richtung==="zurueck"?"Hotel → Baustelle":"Baustelle → Hotel"}</span><input class="i" data-hfk="${i}" inputmode="decimal" value="${esc(f.km||"")}" style="width:80px;text-align:right"><span class="small">km</span><button class="btn sm ghost" data-hfdel="${i}" style="width:34px">✕</button></div>`).join("")}</div>`:""}
+   ${geschTeil(o)}
+   ${uebernachtungTeil(o)}
    ${route&&can.planen()?`<div class="small" style="margin-top:4px"><a href="${esc(route)}" target="_blank" rel="noopener">Strecke Betrieb → Baustelle ansehen ↗</a>${o.sollKm?` · Soll: ${esc(o.sollKm)} km`:""}</div>`:""}
-   <label class="f" style="margin-top:16px">Sonderleistungen</label>
-   ${(b.sonder||[]).map((s,i)=>`<div class="sonder"><div style="flex:1;min-width:0"><b>${esc(s.arbeit)}</b><div class="small mute">${esc(s.personen||1)} Pers. · ${fmtStd(s.min)} Std.</div></div><button class="btn sm ghost" data-sdel="${i}" title="Entfernen">✕</button></div>`).join("")||`<div class="small mute">Noch keine Sonderleistungen.</div>`}
-   <div style="margin-top:8px;background:var(--greybg);border-radius:10px;padding:10px">
-     <input class="i" id="sArb" list="sonderListe" placeholder="Ausgeführte Arbeit – auswählen oder eintippen">
-     <datalist id="sonderListe">${sv.map(t=>`<option value="${esc(t)}">`).join("")}</datalist>
-     <div class="row" style="margin-top:6px;gap:5px">${sv.slice(0,6).map(t=>`<button class="chip" data-spick="${esc(t)}" style="border:0;cursor:pointer;white-space:normal;text-align:left">${esc(t)}</button>`).join("")}</div>
-     <div class="grid3" style="margin-top:6px"><input class="i" id="sPers" inputmode="numeric" placeholder="Personen"><input class="i" id="sDauer" placeholder="Dauer, z. B. 1:30"><button class="btn" id="sAdd">＋ Hinzufügen</button></div>
-   </div>
+   <div style="margin-top:14px">${klapp(o.id,"sonder","🛠 Sonderarbeiten",sonderFertig(b).length?`${sonderFertig(b).length} eingetragen`:"keine – antippen zum Ergänzen",`
+   <div class="small mute">Was wurde zusätzlich gemacht? Pro Punkt: Arbeit, Personen, Dauer, Bemerkung und ein Foto.</div>
+   ${sonderListe(b).map((x,i)=>`<div style="margin-top:8px;background:var(--card,#fff);border:1px solid var(--line);border-radius:10px;padding:10px">
+     <div class="row between" style="margin-bottom:6px"><b>Sonderarbeit ${i+1}</b><button class="btn sm ghost" data-sdel="${i}" title="Entfernen">✕</button></div>
+     <input class="i" data-sf="arbeit" data-si="${i}" value="${esc(x.arbeit||"")}" placeholder="Was wurde gemacht? z. B. Füße geklebt und gebohrt">
+     <div class="grid2" style="margin-top:6px"><input class="i" data-sf="personen" data-si="${i}" inputmode="numeric" value="${esc(x.personen??"")}" placeholder="Personen"><input class="i" data-sf="dauer" data-si="${i}" value="${x.min?fmtHMin(x.min):""}" placeholder="Dauer, z. B. 1:30"></div>
+     <textarea class="i" data-sf="bemerkung" data-si="${i}" placeholder="Bemerkung (optional)" style="margin-top:6px;min-height:54px">${esc(x.bemerkung||"")}</textarea>
+     <div class="small mute" style="margin-top:6px">Foto</div>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,true)}
+   </div>`).join("")}
+   <button class="btn block" id="sAdd" style="margin-top:8px">＋ ${(b.sonder||[]).length?"Weitere Sonderarbeit":"Sonderarbeit hinzufügen"}</button>
+`,{card:false})}</div>
    <label class="f">Weitere Bemerkungen</label>
    <textarea class="i" data-b="bemerkung" placeholder="Alles, was sonst noch in den Bericht gehört …">${esc(b.bemerkung??"")}</textarea>
    <label class="f">Fotos</label>${thumbs(fk("nachher"),"nachher",true)}
    <button class="btn ghost block" id="fahrtAdd" style="margin-top:12px">🚗 Fahrt ins Fahrtenbuch eintragen${fahrtKm?` · bisher ${fahrtKm} km`:""}</button>
   </div>`;
 }
+function uebernachtungTeil(o,schritt){
+  const b=o.bericht||{}, u=uebernachtet(b), n=b.naechte||[], alt=u==="ja"&&!n.length?naechteAnzahl(b):0;
+  return `${schritt?`<div class="grid2"><button class="btn ${u==="nein"?"on":""}" data-ueb="nein" style="min-height:52px">✕ Nein</button><button class="btn ${u==="ja"?"ok":""}" data-ueb="ja" style="min-height:52px">🛏 Ja, übernachtet</button></div>`:`<label class="f" style="margin-top:14px">Habt ihr übernachtet?</label>
+   <div class="seg" id="uebSeg"><button data-ueb="nein" class="${u==="nein"?"on":""}">Nein</button><button data-ueb="ja" class="${u==="ja"?"on":""}">🛏 Ja, übernachtet</button></div>`}
+   ${u==="ja"?`<div style="margin-top:8px;background:var(--greybg);border-radius:10px;padding:10px">
+     ${alt?`<div class="small mute" style="margin-bottom:6px">Bisher eingetragen: ${alt} ${alt===1?"Nacht":"Nächte"} – bitte Tag und Personen ergänzen.</div>`:""}
+     <div class="small mute" style="display:flex;gap:6px;padding:0 2px 4px"><span style="flex:1">Nacht vom (Tag)</span><span style="width:96px">Personen</span><span style="width:36px"></span></div>
+     ${n.map((x,i)=>`<div class="row" style="flex-wrap:nowrap;gap:6px;margin-bottom:6px"><input type="date" class="i" data-nd="${i}" value="${esc(x.datum||"")}" style="flex:1;min-width:0"><input class="i" data-np="${i}" inputmode="numeric" value="${esc(x.personen??"")}" placeholder="Pers." style="width:96px"><button class="btn sm ghost" data-ndel="${i}" title="Nacht entfernen" style="width:36px">✕</button></div>`).join("")}
+     <button class="btn sm" id="nAdd">＋ ${n.length?"Weitere Nacht":"Nacht eintragen"}</button>
+     ${n.length?`<div class="small" style="margin-top:6px"><b>${n.length} ${n.length===1?"Nacht":"Nächte"}</b>${personenNaechte(b)?` · ${personenNaechte(b)} Personen-Übernachtungen`:""}</div>`:""}
+   </div>`:""}`;
+}
 function abnahmeTeil(o,fk){
   const art=o.bericht?.abnahmeArt||(o.unterschrift?"handy":o.abnahmePapier?"papier":"");
-  let h=`<div class="card" id="abnahmeTeil"><h3>Abnahme</h3>
+  let h=`<div class="card" id="abnahmeTeil"><h3>Sichtabnahme</h3>
    <div class="seg" id="abnArt"><button data-aa="papier" class="${art==="papier"?"on":""}">📄 Papierbericht</button><button data-aa="handy" class="${art==="handy"?"on":""}">✍️ Unterschrift am Handy</button></div>`;
   if(art==="papier") h+=`<label class="f">Foto vom unterschriebenen Papierbericht</label>${thumbs(fk("vordruck"),"vordruck",true)}
     <label class="row" style="flex-wrap:nowrap;gap:10px;padding:10px 0 0;cursor:pointer"><input type="checkbox" id="abnPapier" ${o.abnahmePapier?"checked":""} style="width:24px;height:24px"><span>Der Papierbericht ist unterschrieben</span></label>`;
@@ -1089,24 +1230,26 @@ function abnahmeTeil(o,fk){
     const v=vd(o);
     if(o.unterschrift) h+=`<div class="row" style="margin-top:10px;flex-wrap:nowrap"><img src="_blob/${esc(o.unterschrift.assetId)}" alt="Unterschrift" style="height:70px;max-width:50%;border:1px solid var(--line);border-radius:8px;background:#fff"><div class="small">${esc(o.unterschrift.name||"")}<br><span class="mute">${fmtDT(o.unterschrift.am)}<br>${esc(v.leistung==="sonst"?(v.leistungSonst||"Sonstiges"):LEISTUNG[v.leistung]||"")} · ${v.maengelJa==="ja"?"Mängel":"Keine Mängel"}</span></div></div>
        <div class="grid2" style="margin-top:8px"><button class="btn sm" id="sign">Neu unterschreiben lassen</button><button class="btn sm ghost" id="sigDel" style="color:var(--bad)">Unterschrift löschen</button></div>`;
-    else h+=`<button class="btn pri block" id="sign" style="margin-top:10px">✍️ Abnahme am Handy starten</button>`;
-    if(fk("abnahme").length) h+=`<label class="f">Fotos zur Abnahme</label>${thumbs(fk("abnahme"),"abnahme",true)}`;
+    else h+=`<button class="btn pri block" id="sign" style="margin-top:10px">✍️ Sichtabnahme am Handy starten</button>`;
+    if(fk("abnahme").length) h+=`<label class="f">Fotos zur Sichtabnahme</label>${thumbs(fk("abnahme"),"abnahme",true)}`;
   }
-  h+=`<div class="small ${abnahmeOk(o)?"":"mute"}" style="margin-top:10px">${abnahmeOk(o)?"✓ Abnahme liegt vor":"Abnahme steht noch aus – der Bericht kann trotzdem verschickt werden."}</div></div>`;
+  h+=`<div class="small ${abnahmeOk(o)?"":"mute"}" style="margin-top:10px">${abnahmeOk(o)?"✓ Sichtabnahme liegt vor":"Sichtabnahme steht noch aus – der Bericht kann trotzdem verschickt werden."}</div></div>`;
   return h;
 }
 function fehlendeAngaben(o,fk){
   const b=o.bericht||{}, r=[];
   if(leer(b.taetigkeit)) r.push({t:"Tätigkeit fehlt"});
-  if(!arbeitszeitMin(o)) r.push({t:"Arbeitszeit fehlt"});
   if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen"});
   if(leer(b.personenMit)) r.push({t:"Mitgefahrene Personen fehlen"});
   if(leer(b.istKm)) r.push({t:"Kilometer fehlen"});
   if(leer(b.geschosse)) r.push({t:"Geschosse fehlen"});
+  if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Sonderarbeit: Personen und Dauer angeben"});
+  if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true});
+  else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben"});
   if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Positionen fehlen"});
   if(fk && !fk("vorher").length) r.push({t:"Vorher-Fotos fehlen",soft:true});
   if(fk && !fk("nachher").length) r.push({t:"Fotos nach der Montage fehlen"});
-  if(!abnahmeOk(o)) r.push({t:"Abnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true});
+  if(!abnahmeOk(o)) r.push({t:"Sichtabnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true});
   return r;
 }
 const missList=f=>`<ul class="miss">${f.map(x=>`<li class="${x.soft?"soft":""}">• ${esc(x.t)}</li>`).join("")}</ul>`;
@@ -1123,8 +1266,9 @@ function bindEinsatz(o){
   const id=o.id, P=orderPath(id), e=o.einsatz||{};
   document.querySelectorAll("[data-fz]").forEach(b=>b.onclick=()=>upd(P,{einsatz:{fahrzeug:b.dataset.fz,fahrzeugText:null,abfahrtAm:Date.now(),von:myId()}}));
   $("#fzTextOk") && ($("#fzTextOk").onclick=()=>{ const t=($("#fzText").value||"").trim(); if(!t) return toast("Bitte eintragen, womit gefahren wird"); upd(P,{einsatz:{fahrzeug:"sonst",fahrzeugText:t,abfahrtAm:Date.now(),von:myId()}}); });
-  $("#ankunft") && ($("#ankunft").onclick=()=>{ upd(P,{einsatz:{ankunftAm:Date.now()}}); toast("Bitte jetzt Vorher-Fotos machen 📷",3500); });
+  $("#ankunft") && ($("#ankunft").onclick=()=>{ upd(P,{einsatz:{ankunftAm:Date.now()}}); toast("Angekommen ✓ – bitte die gefahrenen km eintragen",3500); });
   $("#bereitJa") && ($("#bereitJa").onclick=()=>{ S.bereitWahl[id]="ja"; render(); });
+  $("#vorherSkip") && ($("#vorherSkip").onclick=()=>upd(P,{einsatz:{vorherSkip:Date.now()}}));
   $("#bereitWeiter") && ($("#bereitWeiter").onclick=()=>{ delete S.bereitWahl[id]; upd(P,{einsatz:{bereit:"ja"}}); });
   $("#bereitNein") && ($("#bereitNein").onclick=async()=>{ if(!await confirmBox("Baustelle nicht montagebereit?","Dann wird zuerst ein Schreiben an den Kunden vorbereitet. Weiter geht es erst mit Freigabe per E-Mail und Telefon.","Ja, nicht montagebereit","warn")) return; delete S.bereitWahl[id]; upd(P,{einsatz:{bereit:"nein",nmb:{am:Date.now()}}}); });
   $("#nmbBrief") && ($("#nmbBrief").onclick=()=>nmbDialog(id));
@@ -1134,13 +1278,18 @@ function bindEinsatz(o){
   $("#nmbLeer") && ($("#nmbLeer").onclick=()=>leerfahrtDialog(id));
   document.querySelectorAll("[data-pv]").forEach(b=>b.onclick=()=>{ const i=$("#pvo"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.pv)); });
   $("#startNein") && ($("#startNein").onclick=()=>toast("Okay – tippe auf „Ja, beginnen“, sobald ihr loslegt."));
+  $("#anKm") && ($("#anKm").onchange=()=>{ const v=$("#anKm").value.trim().replace(",","."); if(v&&!nn(v)) return toast("Bitte nur eine Zahl eintragen"); upd(P,{einsatz:{anfahrtKm:v}}); });
   $("#startJa") && ($("#startJa").onclick=async()=>{
+    if(document.activeElement?.closest?.("#app")) document.activeElement.blur();
+    const km=($("#anKm")?.value||"").trim().replace(",",".");
+    if(!nn(km)) { $("#anKm")?.focus(); return toast("Bitte eintragen, wie viele km ihr gefahren seid"); }
     const pv=parseInt($("#pvo").value,10); if(!(pv>0)) return toast("Bitte die Anzahl der Personen vor Ort eintragen");
-    const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(!running(o)) z.push({s:now,by:myId()});
-    await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv},bericht:{personen:String(pv)}}); toast("Montage läuft ⏱");
+    const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(!running(o)) z.push({s:now,by:myId(),p:pv});
+    const bp={personen:String(pv)}; if(leer(o.bericht?.istKm)) bp.istKm=km;
+    await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv,anfahrtKm:km},bericht:bp}); toast("Montage läuft ⏱ – jetzt Vorher-Fotos machen 📷",3500);
   });
   $("#montageFertig") && ($("#montageFertig").onclick=async()=>{
-    if(!await confirmBox("Montage abgeschlossen?","Der Timer wird gestoppt und die gemessene Zeit als Arbeitszeit in den Bericht übernommen.","Ja, abgeschlossen","ok")) return;
+    if(!await confirmBox("Montage abgeschlossen?","Der Timer wird gestoppt. Die Arbeitszeit je Tag wird nur intern für die Statistik gespeichert – sie steht nicht im Montagebericht.","Ja, abgeschlossen","ok")) return;
     const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
     const min=Math.round(z.reduce((s,x)=>s+(x.e-x.s),0)/60000);
     await upd(P,{zeiten:z,einsatz:{fertigAm:now},bericht:{arbeitszeitMin:min}});
@@ -1152,16 +1301,62 @@ function bindEinsatz(o){
   $("#manuell") && ($("#manuell").onclick=()=>{ const t=$("#fTaet"); t.scrollIntoView({behavior:"smooth",block:"center"}); setTimeout(()=>t.focus(),350); });
   const az=$("#fAz"); if(az) az.onchange=()=>{ const v=az.value.trim(); if(!v) return upd(P,{bericht:{arbeitszeitMin:null}}); const m=parseMin(v); if(m==null) return toast("Arbeitszeit bitte als Std:Min eingeben, z. B. 6:30"); upd(P,{bericht:{arbeitszeitMin:m}}); };
   $("#azReset") && ($("#azReset").onclick=ev=>{ ev.preventDefault(); upd(P,{bericht:{arbeitszeitMin:Math.round(totalMs(o)/60000)}}); });
-  document.querySelectorAll("[data-spick]").forEach(c=>c.onclick=()=>{ $("#sArb").value=c.dataset.spick; $("#sPers").focus(); });
-  $("#sAdd") && ($("#sAdd").onclick=()=>{
-    const arbeit=$("#sArb").value.trim(), pers=parseInt($("#sPers").value,10), min=parseMin($("#sDauer").value);
-    if(!arbeit) return toast("Bitte die ausgeführte Arbeit eintragen");
-    if(!(pers>0)) return toast("Bitte die Anzahl der Personen eintragen");
-    if(!min) return toast("Bitte die Dauer eintragen, z. B. 1:30 oder 1,5");
-    upd(P,{bericht:{sonder:[...(o.bericht?.sonder||[]),{arbeit,personen:pers,min}]}}); toast("Sonderleistung hinzugefügt");
+  const cur=()=>S.orders[id]||o; // immer den neuesten Stand nehmen (Eingaben kurz hintereinander)
+  // Bericht-Teil sofort auch lokal übernehmen, damit schnelle Eingaben nacheinander nichts überschreiben
+  const bUpd=patch=>{ const c=cur(); if(c) c.bericht={...(c.bericht||{}),...patch};
+    S.lokal=S.lokal||{}; S.lokal[id]={patch:{...(S.lokal[id]?.patch||{}),...patch},bis:Date.now()+8000};
+    return upd(P,{bericht:patch}); };
+  // Übernachtungen: beim ersten Öffnen des Schritts aus den Arbeitstagen ausrechnen (einmalig)
+  if(schritt(o)==="uebernachtung" && !o.einsatz?.naechteAutoAm){
+    const n=autoNaechte(o), alt=(o.bericht?.naechte||[]).length;
+    upd(P,{einsatz:{naechteAutoAm:Date.now()},...(n.length>alt?{bericht:{uebernachtet:"ja",naechte:n,uebernachtungen:String(n.length)}}:{})});
+  }
+  const nSave=n=>bUpd({uebernachtet:n.length?"ja":(cur().bericht?.uebernachtet||"ja"),naechte:n,uebernachtungen:String(n.length)});
+  document.querySelectorAll("[data-ueb]").forEach(bt=>bt.onclick=()=>{
+    const b=cur().bericht||{};
+    if(bt.dataset.ueb==="nein") return upd(P,{bericht:{uebernachtet:"nein",naechte:[],uebernachtungen:"0"},...(schritt(o)==="uebernachtung"?{einsatz:{uebernachtungOk:Date.now()}}:{})});
+    const n=(b.naechte||[]).length?b.naechte:naechteBauen(o,naechteAnzahl({...b,uebernachtet:"ja"})||1,[]);
+    upd(P,{bericht:{uebernachtet:"ja",naechte:n,uebernachtungen:String(n.length)}});
   });
-  document.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Sonderleistung entfernen?","","Entfernen","bad")) return; upd(P,{bericht:{sonder:(o.bericht?.sonder||[]).filter((_,i)=>i!==Number(b.dataset.sdel))}}); });
-  // Abnahme
+  document.querySelectorAll("[data-nd],[data-np]").forEach(inp=>inp.onchange=()=>{
+    const n=(cur().bericht?.naechte||[]).map(x=>({...x})), i=Number(inp.dataset.nd??inp.dataset.np);
+    if(!n[i]) return; if(inp.dataset.nd!=null) n[i].datum=inp.value; else n[i].personen=inp.value.trim();
+    n.sort((a,c)=>String(a.datum).localeCompare(String(c.datum))); nSave(n);
+  });
+  document.querySelectorAll("[data-ndel]").forEach(bt=>bt.onclick=()=>{ const n=(cur().bericht?.naechte||[]).filter((_,i)=>i!==Number(bt.dataset.ndel)); upd(P,{bericht:{uebernachtet:n.length?"ja":"nein",naechte:n,uebernachtungen:String(n.length)}}); });
+  $("#uebWeiter") && ($("#uebWeiter").onclick=()=>{
+    const n=cur().bericht?.naechte||[];
+    if(!n.length) return toast("Bitte mindestens eine Nacht eintragen");
+    if(n.some(x=>!x.datum)) return toast("Bitte bei jeder Nacht den Tag eintragen");
+    if(n.some(x=>!(nn(x.personen)>0))) return toast("Bitte bei jeder Nacht die Anzahl der Personen eintragen");
+    upd(P,{einsatz:{uebernachtungOk:Date.now()}});
+  });
+  $("#nAdd") && ($("#nAdd").onclick=()=>{
+    const n=(cur().bericht?.naechte||[]), last=n[n.length-1];
+    const neu=last?{datum:naechsterTag(last.datum),personen:last.personen||""}:naechteBauen(o,1,[])[0];
+    nSave([...n,neu]);
+  });
+  // Hotelfahrten
+  const hfL=()=>[...((cur().einsatz||{}).hotelFahrten||[])].map(x=>({...x}));
+  document.querySelectorAll("[data-hfk]").forEach(i=>i.onchange=()=>{ const l=hfL(), k=Number(i.dataset.hfk); if(!l[k]) return; l[k].km=i.value.trim().replace(",","."); upd(P,{einsatz:{hotelFahrten:l}}); });
+  document.querySelectorAll("[data-hfdel]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Hotelfahrt entfernen?","","Entfernen","bad")) return; upd(P,{einsatz:{hotelFahrten:hfL().filter((_,k)=>k!==Number(b.dataset.hfdel))}}); });
+  // Geschosse
+  const gSave=l=>bUpd({geschosse:geschText(l)});
+  document.querySelectorAll("[data-gs]").forEach(bt=>bt.onclick=()=>{ const l=geschListe(cur().bericht?.geschosse), g=bt.dataset.gs; gSave(l.includes(g)?l.filter(x=>x!==g):[...l,g]); });
+  // Sonderarbeiten
+  const sSave=l=>bUpd({sonder:l});
+  // Klappe öffnen ohne Einträge → gleich ein leeres Feld anlegen
+  document.querySelector('[data-fold$=":sonder"]')?.addEventListener("toggle",ev=>{ if(ev.target.open && !sonderListe(cur().bericht).length) $("#sAdd")?.click(); });
+  $("#sAdd") && ($("#sAdd").onclick=()=>{ S.fold[id+":sonder"]=true; sSave([...sonderListe(cur().bericht),{id:"s"+Date.now().toString(36),arbeit:"",personen:"",min:null,bemerkung:""}]); setTimeout(()=>{ const l=document.querySelectorAll('[data-sf="arbeit"]'); l[l.length-1]?.focus(); },300); });
+  document.querySelectorAll("[data-sf]").forEach(inp=>{ const save=()=>{
+    const l=sonderListe(cur().bericht), i=Number(inp.dataset.si), f=inp.dataset.sf, v=inp.value.trim(); if(!l[i]) return;
+    if(f==="dauer"){ if(v&&parseMin(v)==null) return toast("Dauer bitte als Std:Min eingeben, z. B. 1:30 oder 1,5"); l[i].min=v?parseMin(v):null; }
+    else if(f==="personen") l[i].personen=v?(parseInt(v,10)||v):"";
+    else l[i][f]=v;
+    sSave(l); };
+    inp.onchange=save; if(inp.tagName==="TEXTAREA") inp.onblur=save; });
+  document.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Sonderarbeit entfernen?","","Entfernen","bad")) return; sSave(sonderListe(cur().bericht).filter((_,i)=>i!==Number(b.dataset.sdel))); });
+  // Sichtabnahme
   document.querySelectorAll("#abnArt [data-aa]").forEach(b=>b.onclick=()=>upd(P,{bericht:{abnahmeArt:b.dataset.aa}}));
   $("#abnPapier") && ($("#abnPapier").onchange=()=>upd(P,{abnahmePapier:$("#abnPapier").checked?{am:Date.now(),von:myId()}:null}));
   $("#sigDel") && ($("#sigDel").onclick=async()=>{ if(!await confirmBox("Unterschrift löschen?","Danach kann eine neue Unterschrift erfasst werden.","Löschen","bad")) return; const a=o.unterschrift?.assetId; await upd(P,{unterschrift:null}); if(a&&S.assets){ try{ await S.assets.delete(a); }catch(err){} } toast("Unterschrift gelöscht"); });
@@ -1323,14 +1518,15 @@ function lohnCard(o){
   const sortiert=[...S.lohnPos].sort((a,b)=>(nutz[b.k]||0)-(nutz[a.k]||0)||(b.haeufig?1:0)-(a.haeufig?1:0)||String(a.label).localeCompare(String(b.label),"de"));
   const c=calcLohn(d,P);
   const anz=Object.values(d.mengen||{}).filter(v=>nn(v)).length;
-  const offen=S.lohnOpen[o.id]??true;
+  const offen=S.lohnOpen[o.id]??false;
+  const gewaehlt=sortiert.filter(p=>!leer(d.mengen?.[p.k])&&nn(d.mengen[p.k]));
   return `<div class="card"><details id="lohnDet" ${offen?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionsergänzung</b><div class="small mute">${anz?`${anz} Position${anz>1?"en":""} eingetragen`:"Mengen der montierten Positionen eintragen"}${c?` · Montagebetrag ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
    <div class="small mute" style="margin-bottom:6px">${esc(nameOf(uid))} · Auftrag ${esc(o.nr)} · ${esc(adresseOf(o))}${d.am?` · zuletzt ${fmtDT(d.am)}`:""}</div>
    <label class="f">Datum</label><input class="i" data-lf="datum" value="${esc(d.datum??tage)}" placeholder="z. B. 16.–17.11.2026" ${editable?"":"disabled"}>
-   <label class="f">Positionen (Menge eintragen) – häufig genutzte stehen oben</label>
-   ${sortiert.length>10?`<input class="i" id="posQ" placeholder="🔎 Position suchen, z. B. Aussparung" style="margin-bottom:6px">`:""}
-   <div id="posListe">${sortiert.map(posRow).join("")}</div>
+   <label class="f">Positionen</label>
+   <div id="posListe">${gewaehlt.length?gewaehlt.map(p=>posRow(p).replace(/<\/div>$/,editable?`<button class="btn sm ghost" data-ldel="${esc(p.k)}" title="Entfernen" style="width:34px">✕</button></div>`:"</div>")).join(""):`<div class="small mute">Noch keine Position eingetragen.</div>`}</div>
+   ${editable?`<button class="btn block" id="posWahl" style="margin-top:8px">＋ Position auswählen</button>`:""}
    <label class="f">Etagengeld</label>
    <div class="grid3"><div><div class="small mute">Stockwerke</div><input class="i" data-lf="stockwerke" inputmode="decimal" value="${esc(d.stockwerke??"")}" ${editable?"":"disabled"}></div>
    <div><div class="small mute">Anzahl</div><input class="i" data-lf="etagenAnzahl" inputmode="decimal" value="${esc(d.etagenAnzahl??"")}" ${editable?"":"disabled"}></div>
@@ -1351,15 +1547,42 @@ async function saveLohn(o,uid,patch){
   S.lohn[key]={id:key,...next};
   await setDoc("lohnberichte/"+key,next);
 }
+// Position auswählen: suchen → antippen → Menge eintragen
+function posWahlDialog(o,save){
+  const nutz=posNutzung(o.id);
+  const liste=[...S.lohnPos].sort((a,b)=>(nutz[b.k]||0)-(nutz[a.k]||0)||(b.haeufig?1:0)-(a.haeufig?1:0)||String(a.label).localeCompare(String(b.label),"de"));
+  modal(`<h2>Position auswählen</h2>
+   <input class="i" id="pq" placeholder="🔎 Suchen, z. B. Aussparung">
+   <div id="pl" style="max-height:52vh;overflow:auto;margin-top:8px">${liste.map(p=>`<button class="btn block" data-pk="${esc(p.k)}" style="justify-content:space-between;text-align:left;margin-bottom:6px;min-height:46px"><span>${esc(p.label)}</span><span class="small mute">${esc(p.einheit||"")}</span></button>`).join("")}</div>
+   <div id="pm" class="hide"></div>
+   <button class="btn block" data-close style="margin-top:8px">Abbrechen</button>`,(m,close)=>{
+    const q=m.querySelector("#pq"); q.oninput=()=>{ const t=q.value.trim().toLowerCase(); m.querySelectorAll("[data-pk]").forEach(b=>b.style.display=!t||b.textContent.toLowerCase().includes(t)?"":"none"); };
+    m.querySelectorAll("[data-pk]").forEach(b=>b.onclick=()=>{
+      const p=S.lohnPos.find(x=>x.k===b.dataset.pk); const alt=(S.lohn[lohnDocId(o.id,S.lohnFor[o.id]||myId())]?.mengen||{})[p.k]||"";
+      m.querySelector("#pl").classList.add("hide"); q.classList.add("hide");
+      const pm=m.querySelector("#pm"); pm.classList.remove("hide");
+      pm.innerHTML=`<div style="font-weight:700;font-size:16px;margin-top:4px">${esc(p.label)}</div><label class="f">Menge${p.einheit?" ("+esc(p.einheit)+")":""}</label>
+        <input class="i" id="pmq" inputmode="decimal" value="${esc(alt)}" style="font-size:18px;text-align:center">
+        <div class="grid2" style="margin-top:10px"><button class="btn" id="pmz">← andere Position</button><button class="btn ok" id="pmok">✓ Übernehmen</button></div>`;
+      const mi=pm.querySelector("#pmq"); setTimeout(()=>mi.focus(),50);
+      pm.querySelector("#pmz").onclick=()=>{ pm.classList.add("hide"); m.querySelector("#pl").classList.remove("hide"); q.classList.remove("hide"); };
+      const ok=()=>{ const v=mi.value.trim(); if(!nn(v)) return toast("Bitte eine Menge eintragen"); S.lohnOpen[o.id]=true; close(); if(document.activeElement?.closest?.("#app")) document.activeElement.blur(); Promise.resolve(save({mengen:{[p.k]:v}})).finally(()=>render()); toast(`${p.label}: ${v} ✓`); };
+      pm.querySelector("#pmok").onclick=ok; mi.onkeydown=e=>{ if(e.key==="Enter") ok(); };
+    });
+  });
+}
 function bindLohn(o){
   document.querySelectorAll("#lohnWho [data-lw]").forEach(b=>b.onclick=()=>{ S.lohnFor[o.id]=b.dataset.lw; render(); });
   const det=$("#lohnDet"); if(det) det.ontoggle=()=>{ S.lohnOpen[o.id]=det.open; };
+  S.lohnNeu=S.lohnNeu||{};
   const pq=$("#posQ"); if(pq) pq.oninput=()=>{ const q=pq.value.trim().toLowerCase(); document.querySelectorAll("#posListe [data-lq]").forEach(i=>{ const row=i.closest(".row"); row.style.display=!q||row.textContent.toLowerCase().includes(q)?"":"none"; }); };
   let uid=S.lohnFor[o.id]; if(!uid||(!can.planen()&&uid!==myId())) uid=myId();
   if(!uid) return;
   const path="lohnberichte/"+lohnDocId(o.id,uid);
   const save=patch=>saveLohn(o,uid,patch);
   document.querySelectorAll("[data-lq]").forEach(i=>i.onchange=()=>save({mengen:{[i.dataset.lq]:i.value.trim()}}));
+  document.querySelectorAll("[data-ldel]").forEach(b=>b.onclick=()=>{ delete S.lohnNeu[o.id+":"+b.dataset.ldel]; save({mengen:{[b.dataset.ldel]:""}}); });
+  $("#posWahl") && ($("#posWahl").onclick=()=>posWahlDialog(o,save));
   document.querySelectorAll("[data-lf]").forEach(i=>i.onchange=()=>save({[i.dataset.lf]:i.value.trim()}));
 }
 
@@ -1417,8 +1640,8 @@ Ziehe daraus NUR Angaben, die wirklich genannt werden. Antworte NUR mit JSON in 
 "personenMit":Zahl Personen, die mitgefahren sind,
 "istKm":Zahl selbst gefahrene Kilometer,
 "geschosse":"Geschosse, in die Material getragen wurde, z.B. EG, 1. OG, 2. OG",
-"uebernachtungen":Zahl Übernachtungen,
-"arbeitszeit":"Arbeitszeit als Std:Min, nur wenn ausdrücklich genannt",
+"uebernachtungen":Zahl Übernachtungen (0, wenn ausdrücklich nicht übernachtet wurde),
+"naechte":[{"datum":"YYYY-MM-DD – nur wenn der Tag genannt wird (heute ist ${isoTag(Date.now())})","personen":Zahl Personen, die in dieser Nacht übernachtet haben}],
 "mengen":{"<schlüssel>":Zahl},
 "sonder":[{"arbeit":"Sonderleistung/Zusatzarbeit, kurz","personen":Zahl,"stunden":Zahl Stunden (Dezimal)}],
 "bemerkung":"weitere Bemerkungen, die in keines der Felder passen",
@@ -1432,7 +1655,9 @@ Hinweise: "Kabinen" zählen als Vorderfront. Sonderleistungen sind Zusatzarbeite
 function zeigeVorschlag(m,o,r,text,close){
   r=r||{}; const rows=[]; const lbl=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k;
   if(r.personenVorOrt!=null&&r.personen==null) r.personen=r.personenVorOrt;
-  const B={taetigkeit:"Was wurde gemacht",personen:"Personen vor Ort",personenMit:"Mitgefahrene Personen",istKm:"Selbst gefahrene km",geschosse:"Geschosse (Material getragen)",uebernachtungen:"Übernachtungen",arbeitszeit:"Arbeitszeit",bemerkung:"Weitere Bemerkungen"};
+  const B={taetigkeit:"Was wurde gemacht",personen:"Personen vor Ort",personenMit:"Mitgefahrene Personen",istKm:"Selbst gefahrene km",geschosse:"Geschosse (Material getragen)",uebernachtungen:"Übernachtungen",bemerkung:"Weitere Bemerkungen"};
+  const nl=Array.isArray(r.naechte)?r.naechte.filter(x=>x&&(x.datum||x.personen!=null)):[];
+  if(nl.length||nn(r.uebernachtungen)>0){ const n=naechteBauen(o,r.uebernachtungen,nl); rows.push({t:"n",label:"Übernachtungen",v:naechteText({uebernachtet:"ja",naechte:n}),n}); delete r.uebernachtungen; }
   Object.keys(B).forEach(k=>{ if(!leer(r[k])) rows.push({t:"b",k,label:B[k],v:String(r[k])}); });
   Object.entries(r.mengen||{}).forEach(([k,v])=>{ if(nn(v)&&S.lohnPos.some(p=>p.k===k)) rows.push({t:"m",k,label:lbl(k),v:String(v)}); });
   (Array.isArray(r.sonder)?r.sonder:[]).forEach(s=>{ if(!leer(s?.arbeit)) rows.push({t:"s",label:"Sonderleistung",v:`${s.arbeit} – ${s.personen||1} Pers. × ${String(s.stunden??"?").replace(".",",")} Std.`,s}); });
@@ -1450,11 +1675,13 @@ function zeigeVorschlag(m,o,r,text,close){
       if(x.t==="b"){
         if(x.k==="taetigkeit"||x.k==="bemerkung"){ const alt=cur[x.k]; b[x.k]=alt&&!alt.includes(x.v)?alt+"\n"+x.v:x.v; }
         else if(x.k==="arbeitszeit"){ const mn=parseMin(x.v); if(mn) b.arbeitszeitMin=mn; }
+        else if(x.k==="uebernachtungen"){ if(nn(x.v)===0){ b.uebernachtet="nein"; b.naechte=[]; b.uebernachtungen="0"; } }
         else b[x.k]=x.v;
-      } else if(x.t==="m") l.mengen[x.k]=x.v;
-      else if(x.t==="s"){ const mn=Math.round(nn(x.s.stunden)*60); sonder.push({arbeit:String(x.s.arbeit).trim(),personen:parseInt(x.s.personen,10)||1,min:mn||0}); }
+      } else if(x.t==="n"){ b.uebernachtet="ja"; b.naechte=x.n; b.uebernachtungen=String(x.n.length); }
+      else if(x.t==="m") l.mengen[x.k]=x.v;
+      else if(x.t==="s"){ const mn=Math.round(nn(x.s.stunden)*60); sonder.push({id:"s"+Date.now().toString(36)+sonder.length,arbeit:String(x.s.arbeit).trim(),personen:parseInt(x.s.personen,10)||1,min:mn||0,bemerkung:""}); }
     });
-    if(sonder.length) b.sonder=[...(cur.sonder||[]),...sonder];
+    if(sonder.length) b.sonder=[...sonderListe(cur),...sonder];
     if(b.personen) l.personen=b.personen;
     if(b.istKm && !S.lohn[lohnDocId(o.id,myId())]?.kmSelbst) l.kmSelbst=b.istKm;
     try{
@@ -1465,7 +1692,7 @@ function zeigeVorschlag(m,o,r,text,close){
   };
 }
 
-/* ---------- Abnahme-Pflicht ---------- */
+/* ---------- Sichtabnahme-Pflicht ---------- */
 function abnahmeOk(o){ return !!(o.unterschrift||o.abnahmeDatei||o.abnahmePapier); }
 const TAG=86400000;
 function abnahmeStatus(o){
@@ -1475,7 +1702,7 @@ function abnahmeStatus(o){
   return "offen";
 }
 function abnahmeFaellig(o){ // Erinnerung an die zuständige Person
-  if(abnahmeOk(o)) return false; // aktueller Status zuerst: nachgereichte Abnahme beendet die Erinnerung
+  if(abnahmeOk(o)) return false; // aktueller Status zuerst: nachgereichte Sichtabnahme beendet die Erinnerung
   const st=abnahmeStatus(o);
   if(st==="versendet") return Date.now()>o.abnahmeAnfrage.frist;
   if(o.abschluss && o.berichtGesendetAm && Date.now()-o.berichtGesendetAm>7*TAG && st!=="verzicht") return true; // eine Woche nach Berichtsversand (nicht bei Leerfahrten)
@@ -1490,17 +1717,17 @@ function abnahmeCard(o){
   const tage=o.abschluss?Math.floor((Date.now()-o.abschluss.am)/TAG):0;
   let h=`<div class="card" style="border-left:5px solid var(--${c==="ok"?"ok":c==="warn"?"accent":c==="bad"?"bad":"line"})"><h3>Sichtabnahme</h3>
    <div class="row between"><b style="font-size:16px">${ic} ${l}</b></div>`;
-  if(st==="ok") h+=`<div class="small mute" style="margin-top:4px">${o.unterschrift?`Unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?`Unterschriebene Abnahme hochgeladen am ${fmtDT(o.abnahmeDatei.am)} – <a href="_blob/${esc(o.abnahmeDatei.assetId)}" target="_blank" rel="noopener">ansehen</a>`:"Auf Papier erledigt"}</div>`;
+  if(st==="ok") h+=`<div class="small mute" style="margin-top:4px">${o.unterschrift?`Unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?`Unterschriebene Sichtabnahme hochgeladen am ${fmtDT(o.abnahmeDatei.am)} – <a href="_blob/${esc(o.abnahmeDatei.assetId)}" target="_blank" rel="noopener">ansehen</a>`:"Auf Papier erledigt"}</div>`;
   if(st==="versendet") h+=`<div class="small" style="margin-top:4px">Gesendet am ${fmtDT(a.am)} an ${esc(a.an)} · Frist bis <b>${new Date(a.frist).toLocaleDateString("de-DE")}</b></div>`;
   if(st==="verzicht") h+=`<div class="small mute" style="margin-top:4px">Ihr habt entschieden, die Sichtabnahme nicht an den Kunden zu schicken.</div>`;
-  if(abnahmeFaellig(o) && o.berichtGesendetAm && st!=="versendet") h+=`<div class="banner bad" style="margin:10px 0 0">⏰ Der Bericht ging am ${fmtDT(o.berichtGesendetAm)} raus – seitdem liegt keine Abnahme vor. Bitte beim Kunden nachhaken oder die Sichtabnahme anfordern.</div>`;
-  else if(abnahmeFaellig(o)) h+=`<div class="banner bad" style="margin:10px 0 0">⏰ ${st==="offen"?`Seit ${tage} Tagen keine Abnahme. Bitte den Kunden informieren: Sichtabnahme prüfen und entscheiden, ob sie an das Bauvorhaben geschickt wird.`:"Frist abgelaufen – beim Kunden nachhaken oder erneut senden."}</div>`;
+  if(abnahmeFaellig(o) && o.berichtGesendetAm && st!=="versendet") h+=`<div class="banner bad" style="margin:10px 0 0">⏰ Der Bericht ging am ${fmtDT(o.berichtGesendetAm)} raus – seitdem liegt keine Sichtabnahme vor. Bitte beim Kunden nachhaken oder die Sichtabnahme anfordern.</div>`;
+  else if(abnahmeFaellig(o)) h+=`<div class="banner bad" style="margin:10px 0 0">⏰ ${st==="offen"?`Seit ${tage} Tagen keine Sichtabnahme. Bitte den Kunden informieren: Sichtabnahme prüfen und entscheiden, ob sie an das Bauvorhaben geschickt wird.`:"Frist abgelaufen – beim Kunden nachhaken oder erneut senden."}</div>`;
   if(st!=="ok"){
     h+=`<div style="display:grid;gap:8px;margin-top:12px">
      ${can.einsatz()?`<button class="btn block" id="signNow">✍️ Jetzt am Handy unterschreiben lassen</button>`:""}
      ${can.planen()&&can.mails()?`<button class="btn ${abnahmeFaellig(o)?"warn":"ghost"} block" id="reqAbn">👁 Sichtabnahme prüfen &amp; an Kunden senden</button>`:""}
      ${can.planen()&&st==="offen"?`<button class="btn ghost block" id="noAbn">Nicht an Kunden senden</button>`:""}
-     ${can.planen()&&S.assets?`<label class="btn ghost block">📎 Unterschriebene Abnahme hochladen<input type="file" accept="image/*,application/pdf" hidden id="abnUp"></label>`:""}
+     ${can.planen()&&S.assets?`<label class="btn ghost block">📎 Unterschriebene Sichtabnahme hochladen<input type="file" accept="image/*,application/pdf" hidden id="abnUp"></label>`:""}
     </div>`;
   }
   return h+`</div>`;
@@ -1513,7 +1740,7 @@ function abnahmeMailText(o,frist){
 
 die Montage der ${v.leistung==="schraenke"?"Schränke":v.leistung==="sonst"?(v.leistungSonst||"Anlagen"):"WC-Trennwände"} für das Bauvorhaben ${[o.bauvorhaben,adresseOf(o)].filter(Boolean).join(", ")} (meta-Auftrag ${o.nr}) wurde am ${v.fertigAm} durch uns fertiggestellt.
 
-Leider konnte die Abnahme vor Ort nicht unterschrieben werden. Im Anhang finden Sie die vorbereitete Zustandsfeststellung / Sichtabnahmebescheinigung. Wir bitten Sie, diese zu prüfen, zu unterschreiben und innerhalb einer Woche, spätestens bis zum ${new Date(frist).toLocaleDateString("de-DE")}, an ${an} zurückzusenden.
+Leider konnte die Sichtabnahme vor Ort nicht unterschrieben werden. Im Anhang finden Sie die vorbereitete Zustandsfeststellung / Sichtabnahmebescheinigung. Wir bitten Sie, diese zu prüfen, zu unterschreiben und innerhalb einer Woche, spätestens bis zum ${new Date(frist).toLocaleDateString("de-DE")}, an ${an} zurückzusenden.
 
 Ein Foto oder Scan der unterschriebenen Seite genügt.
 
@@ -1532,7 +1759,7 @@ async function makeAbnahmePdf(o){
 function abnahmeDialog(id){
   const o=S.orders[id]; const frist=Date.now()+7*86400000;
   modal(`<h2>Sichtabnahme an Kunden senden</h2>
-   <div class="small mute">Bitte prüfen, ob alles richtig ausgefüllt ist. Ändern kannst du die Angaben in der Karte „Montagebericht &amp; Abnahme“.</div>
+   <div class="small mute">Bitte prüfen, ob alles richtig ausgefüllt ist. Ändern kannst du die Angaben in der Karte „Montagebericht &amp; Sichtabnahme“.</div>
    <div id="pv" style="margin-top:8px;min-height:60px"><span class="spin"></span> Vorschau wird erstellt …</div>
    <label class="f">An (Bauleiter)</label><input class="i" id="to" value="${esc(o.bauleiterMail||"")}" placeholder="E-Mail des Bauleiters">
    ${o.bauleiterMail?"":`<div class="small" style="color:var(--bad)">Keine Bauleiter-Mail im Auftrag – bitte eintragen (steht auf dem Aufmaß-Deckblatt).</div>`}
@@ -1560,7 +1787,7 @@ function abnahmeDialog(id){
   });
 }
 
-/* ---------- meta-Vordruck: Montagebericht + Abnahmebescheinigung ---------- */
+/* ---------- meta-Vordruck: Montagebericht + Sichtabnahmebescheinigung ---------- */
 const BG1="_blob/15d9b4f55478c0e3a07f28f8b6f3ff99", BG2="_blob/555df47188d464b5dd8fbbf853931172";
 const ARTEN={lieferung:"Lieferung",fertigmontage:"Fertigmontage",teilmontage:"Teilmontage",restmontage:"Restmontage",rekla:"Rekl. Behebung"};
 function tageText(o){
@@ -1584,14 +1811,13 @@ function vdDefaults(o){
   d.m1=S.settings.monteurName||"JD Brüder GbR"; d.n1=S.settings.monteurNr||"286"; d.p1="100";
   // Bemerkungen: alle übrigen Berichtseinträge – Positionen mit Mengen, Tätigkeiten, Sonderleistungen, weitere Bemerkungen
   const tot=summeMengen(o); const lbl=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k;
-  const sonder=(b.sonder||[]).filter(s=>s&&s.arbeit);
+  const sonder=sonderFertig(b);
   const bem=[];
   const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${lbl(k)}`);
   if(pos.length) bem.push("Montiert: "+pos.join(", "));
   if(b.taetigkeit) bem.push(b.taetigkeit);
-  sonder.forEach(s=>bem.push(`Sonderleistung: ${s.arbeit} (${s.personen||1} Pers. × ${fmtStd(s.min)} Std.)`));
-  const az=arbeitszeitMin(o);
-  if(az) bem.push(`Arbeitszeit: ${fmtHMin(az)} Std.${leer(b.personen)?"":`, ${b.personen} Pers. vor Ort`}${leer(b.personenMit)?"":`, ${b.personenMit} Pers. mitgefahren`}`);
+  sonder.forEach(s=>bem.push(`Sonderarbeit: ${sonderZeile(s)}`));
+  if(!leer(b.personen)||!leer(b.personenMit)) bem.push(`Personen: ${[leer(b.personen)?"":`${b.personen} vor Ort`,leer(b.personenMit)?"":`${b.personenMit} mitgefahren`].filter(Boolean).join(", ")}`);
   if(rk && rk.ursache!=="teile" && !rk.leerfahrt) bem.push(`Reklamation (${URSACHEN[rk.ursache]||rk.ursache}): ${rk.text}`);
   if(b.bemerkung) bem.push(b.bemerkung);
   vorleistungZeilen(o).forEach(z=>bem.push(z));
@@ -1602,13 +1828,15 @@ function vdDefaults(o){
   const lk=leerKm(o), ld=(o.leerfahrten||[]).filter(l=>nn(l.km)).map(leerDatum).join(", ");
   if(!leer(b.istKm)) ab.push(`${fmtZahl(b.istKm)} km${lk?` + ${fmtZahl(lk)} km Leerfahrt (${ld})`:""}`);
   else if(lk) ab.push(`${fmtZahl(lk)} km Leerfahrt (${ld})`);
+  if(hotelKm(o)) ab.push(`Hotelfahrten ${fmtZahl(hotelKm(o))} km`);
   if(mitAnhaenger(o.einsatz)) ab.push("Bitte beachten: Anhängerfahrt");
   const g=leer(b.geschosse)?"":b.geschosse; if(g) ab.push(`Geschosse: ${g}`);
+  if((b.naechte||[]).length && uebernachtet(b)==="ja") ab.push(`Übernachtung: ${b.naechte.map(x=>`${x.datum?new Date(x.datum+"T12:00:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"}):"?"} ${x.personen||"?"} Pers.`).join(", ")}`);
   d.abrechnung=ab.join(", ");
   // Stunden-Bereich: Sonderleistungen mit Personen und Dauer
   sonder.slice(0,4).forEach((s,i)=>{ d[`s${i+1}n`]=String(s.personen||1); d[`s${i+1}h`]=fmtStd(s.min); d[`s${i+1}f`]=s.arbeit; });
   if(!sonder.length && tot.stunden){ d.s1n=b.personen||"1"; d.s1h=fmtZahl(tot.stunden); d.s1f="Zusatzarbeiten"; }
-  d.uebern=!leer(b.uebernachtungen)?(String(b.uebernachtungen).trim()==="0"?"":String(b.uebernachtungen)):(b.hotel==="ja"?(b.hotelInfo||"1"):"");
+  d.uebern=naechteAnzahl(b)?String(naechteAnzahl(b)):"";
   d.leistung="wc"; d.leistungSonst="";
   d.fertigAm=o.abschluss?new Date(o.abschluss.am).toLocaleDateString("de-DE"):tageText(o).split("–").pop();
   const offen=Object.values(S.reklas).filter(r=>r.auftragId===o.id && !r.leerfahrt);
@@ -1623,7 +1851,8 @@ function vordruckCard(o){
   const v=vd(o); const ed=can.einsatz();
   const inp=(k,ph="",st="")=>`<input class="i" data-vd="${k}" value="${esc(v[k]??"")}" placeholder="${esc(ph)}" style="${st}" ${ed?"":"disabled"}>`;
   const ta=(k,ph)=>`<textarea class="i" data-vd="${k}" placeholder="${esc(ph)}" ${ed?"":"disabled"}>${esc(v[k]??"")}</textarea>`;
-  return `<div class="card"><h3>Montagebericht-PDF (meta-Vordruck)</h3>
+  return klapp(o.id,"vordruck","📄 Montagebericht-PDF (meta-Vordruck)","antippen zum Ansehen",`
+   <div class="grid2" style="margin-bottom:12px"><button class="btn pri" id="vdPrev">👁 Fertigen Bericht ansehen</button><button class="btn" id="vdPdf">⬇︎ PDF</button></div>
    <div class="small mute" style="margin-bottom:6px">Wird automatisch aus dem Auftrag und dem Montagebericht ausgefüllt: oben die Kopfdaten, unter Bemerkungen Positionen, Tätigkeiten, Sonderleistungen und weitere Bemerkungen, ganz unten nur km und Geschosse. Du kannst alles überschreiben. Preise stehen hier nie drin.</div>
    <div class="grid2"><div><label class="f">Datum</label>${inp("datum")}</div><div><label class="f">Montage ok</label><select class="i" data-vd="ok" ${ed?"":"disabled"}><option value="ja" ${v.ok==="ja"?"selected":""}>ja</option><option value="nein" ${v.ok==="nein"?"selected":""}>nein</option></select></div></div>
    <label class="f">Art</label><div class="seg" id="vdArt">${Object.entries(ARTEN).map(([k,l])=>`<button data-art="${k}" class="${v.art===k?"on":""}" ${ed?"":"disabled"}>${l}</button>`).join("")}</div>
@@ -1635,18 +1864,16 @@ function vordruckCard(o){
    <label class="f">Stunden (Sonderleistungen: Personen × Std. für …)</label>
    ${[1,2,3,4].map(i=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px">${inp("s"+i+"n","Pers.","width:64px")}<span>×</span>${inp("s"+i+"h","Std.","width:70px")}${inp("s"+i+"f","für …","flex:1")}</div>`).join("")}
    <label class="f">Übernachtungen</label>${inp("uebern","z. B. 2")}
-   <h3 style="margin-top:16px">Abnahmebescheinigung</h3>
+   <h3 style="margin-top:16px">Sichtabnahmebescheinigung</h3>
    <label class="f">Monteur(e)</label>${inp("monteurAbn")}
    <label class="f">Bauleistung</label><select class="i" data-vd="leistung" ${ed?"":"disabled"}><option value="wc" ${v.leistung==="wc"?"selected":""}>WC-Trennwände</option><option value="schraenke" ${v.leistung==="schraenke"?"selected":""}>Schränke</option><option value="sonst" ${v.leistung==="sonst"?"selected":""}>Sonstiges</option></select>
    ${v.leistung==="sonst"?inp("leistungSonst","Was?"):""}
    <label class="f">Leistung fertiggestellt am</label>${inp("fertigAm")}
    <label class="f">Mängel festgestellt?</label><select class="i" data-vd="maengelJa" ${ed?"":"disabled"}><option value="nein" ${v.maengelJa!=="ja"?"selected":""}>Nein, keine Mängel</option><option value="ja" ${v.maengelJa==="ja"?"selected":""}>Ja</option></select>
    ${v.maengelJa==="ja"?`<label class="f">Welche Mängel?</label>${ta("maengel","Mängel beschreiben …")}`:""}
-   <div class="grid2"><div><label class="f">Abnahme durch (Firma)</label>${inp("firma")}</div><div><label class="f">Name in Druckbuchstaben</label>${inp("abnahmeName")}</div></div>
-   <div class="small ${o.unterschrift?"":"mute"}" style="margin-top:8px">${o.unterschrift?"✓ Unterschrift vorhanden – wird eingesetzt":o.abnahmeDatei?"✓ Unterschriebene Abnahme vom Bauleiter liegt vor":"Unterschrift fehlt noch – am Handy unterschreiben lassen oder unten bei „Bericht an meta“ per Mail anfordern."}</div>
-   <div class="grid2" style="margin-top:12px"><button class="btn" id="vdPrev">👁 Vorschau</button><button class="btn" id="vdPdf">⬇︎ PDF</button></div>
-   ${o.vordruck?`<button class="btn sm ghost" id="vdReset" style="margin-top:8px">Auf automatische Werte zurücksetzen</button>`:""}
-  </div>`;
+   <div class="grid2"><div><label class="f">Sichtabnahme durch (Firma)</label>${inp("firma")}</div><div><label class="f">Name in Druckbuchstaben</label>${inp("abnahmeName")}</div></div>
+   <div class="small ${o.unterschrift?"":"mute"}" style="margin-top:8px">${o.unterschrift?"✓ Unterschrift vorhanden – wird eingesetzt":o.abnahmeDatei?"✓ Unterschriebene Sichtabnahme vom Bauleiter liegt vor":"Unterschrift fehlt noch – am Handy unterschreiben lassen oder unten bei „Bericht an meta“ per Mail anfordern."}</div>
+   ${o.vordruck?`<button class="btn sm ghost" id="vdReset" style="margin-top:8px">Auf automatische Werte zurücksetzen</button>`:""}`);
 }
 function bindVordruck(o){
   const P=orderPath(o.id);
@@ -1907,6 +2134,7 @@ function viewGeld(){
     h+=`<div class="card"><div class="row between"><h3 style="margin:0">Gewinn je Auftrag</h3>${alleM.length>1?`<select class="i" id="geldMonat" style="width:auto;min-height:36px;padding:4px 8px">${alleM.map(m=>`<option value="${m}" ${m===gm?"selected":""}>${monatName(m)}</option>`).join("")}</select>`:`<span class="small mute">${monatName(gm)}</span>`}</div>
      ${zeilen.length?`<table class="pos" style="margin-top:10px"><thead><tr><th>Auftrag</th><th>meta</th><th>Sub/Akkord</th><th>Gewinn</th></tr></thead><tbody>${zeilen.map(z=>`<tr><td><a href="#a-${esc(z.o.id)}"><b>${esc(z.o.nr||"")}</b></a><div class="small mute">${esc(z.wer.join(", ")||"–")}</div></td><td>${fmtEUR(z.ein)}</td><td>${z.k?"− "+fmtEUR(z.k):"–"}</td><td style="color:${z.g>=0?"var(--ok)":"var(--bad)"};font-weight:700">${fmtEUR(z.g)}</td></tr>`).join("")}</tbody>
      <tfoot><tr><td>Summe</td><td>${fmtEUR(S1)}</td><td>− ${fmtEUR(r2(S2))}</td><td style="color:var(--ok)">${fmtEUR(r2(S1-S2))}</td></tr></tfoot></table>`:`<div class="small mute" style="margin-top:8px">Noch keine Abrechnungen in diesem Monat.</div>`}</div>`; }
+  h+=statistikCard();
   if(!rows.length) h+=`<div class="empty">Noch keine Montageabrechnungen.</div>`;
   rows.forEach(({f,o})=>{ const st=f.rechnungStatus||"offen"; h+=`<a class="order" href="#a-${esc(f.id)}"><div class="row between"><span class="nr">${esc(o.nr||f.nr)}</span><b>${fmtEUR(f.summe)}</b></div><div class="small mute">${esc(o.bauvorhaben||f.bauvorhaben||"")} · ${f.datum?new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="chips"><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span>${f.rechnungsNr?`<span class="chip">${esc(f.rechnungsNr)}</span>`:""}${(()=>{ const g=r2((Number(f.summe)||0)-kostenAuftrag(f.id)); return `<span class="chip ${g>=0?"ok":"bad"}">Gewinn ${fmtEUR(g)}</span>`; })()}</div></a>`; });
   return h;
@@ -1970,7 +2198,7 @@ function viewSetup(){
   <div class="card"><h3>Betrieb</h3>
     <label class="f">Firmenadresse (Start für die Kilometer)</label><input class="i" data-s="firmenAdresse" value="${esc(s.firmenAdresse||"")}" placeholder="Straße, PLZ Ort">
     <div class="grid2"><div><label class="f">Monteur auf dem Vordruck</label><input class="i" data-s="monteurName" value="${esc(s.monteurName||"JD Brüder GbR")}"></div><div><label class="f">Monteursnummer</label><input class="i" data-s="monteurNr" value="${esc(s.monteurNr||"286")}"></div></div>
-    <label class="f">Unsere Antwort-Adresse (für unterschriebene Abnahmen)</label><input class="i" data-s="antwortEmail" value="${esc(s.antwortEmail||"jd.brueder.meta@gmail.com")}">
+    <label class="f">Unsere Antwort-Adresse (für unterschriebene Sichtabnahmen)</label><input class="i" data-s="antwortEmail" value="${esc(s.antwortEmail||"jd.brueder.meta@gmail.com")}">
     <label class="f">Montageberichte gehen an</label><input class="i" data-s="berichtEmail" value="${esc(s.berichtEmail||"Montagebericht@meta.de")}">
     <label class="f">Gmail-Suche für Aufträge</label><input class="i" data-s="gmailQuery" value="${esc(s.gmailQuery||DEFAULT_QUERY)}">
     <div class="small mute" style="margin-top:4px">Holt Wochenübersichten, Montagezusagen, Montageabrechnungen und Mails der Disposition mit Unterlagen (z. B. „Auftrag Nr. 16872“ mit Dokumente.pdf).</div>
@@ -2059,6 +2287,53 @@ function bindDetail(id){
   document.querySelectorAll("[data-dok]").forEach(b=>b.onclick=e=>{ e.preventDefault(); const c=$("#unterlagenCard"); c?.scrollIntoView({behavior:"smooth",block:"start"}); const d=Object.values(S.fotos).filter(f=>f.kat==="unterlagen").sort((a,b)=>(/pdf/.test(b.typ||"")?1:0)-(/pdf/.test(a.typ||"")?1:0))[0]; if(d){ setTimeout(()=>{ /pdf/.test(d.typ||"")?window.open("_blob/"+d.assetId,"_blank"):lightbox("_blob/"+d.assetId); },400); } else toast("Noch keine Unterlagen – bitte hochladen oder aus der Mail holen"); });
   $("#stornoSetzen") && ($("#stornoSetzen").onclick=()=>modal(`<h2>Auftrag stornieren?</h2><div class="small mute">Der Auftrag bleibt sichtbar, steht aber unter „Storniert“.</div><label class="f">Grund / Hinweis (optional)</label><textarea class="i" id="sg" placeholder="z. B. Bauherr hat abgesagt"></textarea><div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Stornieren</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd(P,{storniert:{am:Date.now(),von:myId(),quelle:"hand",grund:m.querySelector("#sg").value.trim()}}); close(); toast("Als storniert markiert"); }; }));
   $("#stornoAuf") && ($("#stornoAuf").onclick=async()=>{ if(await confirmBox("Storno aufheben?","Der Auftrag kommt wieder in die normale Liste.","Aufheben")) upd(P,{storniert:null,stornoAufgehobenAm:Date.now()}); });
+  // Pause / Feierabend: Zeit anhalten · Weiterarbeiten: neuer Zeitblock (am neuen Tag mit Personen von heute)
+  const zeitStop=async fa=>{ const z=[...(o.zeiten||[])].map(x=>({...x})); if(!running(o)) return; z[z.length-1].e=Date.now(); if(fa) z[z.length-1].feierabend=true;
+    await upd(P,{zeiten:z}); toast(fa?"Feierabend 🌙 – morgen einfach „Weiterarbeiten“ tippen":"Pause – Zeit angehalten",3500); };
+  $("#pauseBtn") && ($("#pauseBtn").onclick=()=>zeitStop(false));
+  $("#feierabendBtn") && ($("#feierabendBtn").onclick=async()=>{ if(await confirmBox("Feierabend für heute?","Die Zeit wird angehalten. Morgen tippt ihr einfach auf „Weiterarbeiten“ – die Stunden werden je Tag gezählt.","Ja, Feierabend")) zeitStop(true); });
+  $("#hotelBtn") && ($("#hotelBtn").onclick=()=>{
+    const c=S.orders[id]||o, z0=(c.zeiten||[]).slice(-1)[0], heute=isoTag(Date.now());
+    const kmAlt=[...hotelFahrten(c)].reverse().find(f=>f.richtung!=="zurueck")?.km||"";
+    const pAlt=nn(z0?.p)||nn(c.einsatz?.personenVorOrt)||nn(c.bericht?.personen)||"";
+    modal(`<h2>🏨 Feierabend – ab ins Hotel</h2><div class="small mute">${esc(nachtTag(heute))} · die Zeit wird angehalten</div>
+      <label class="f">Wie viele km von der Baustelle zum Hotel?</label>
+      <input class="i" id="hk" inputmode="decimal" value="${esc(kmAlt)}" placeholder="z. B. 12" style="font-size:18px;text-align:center">
+      <label class="f">Wie viele Personen übernachten?</label>
+      <div class="row" style="flex-wrap:nowrap"><button class="btn" data-hp="-1" style="width:56px">−</button><input class="i" id="hp" inputmode="numeric" value="${esc(pAlt)}" style="text-align:center;font-weight:700"><button class="btn" data-hp="1" style="width:56px">＋</button></div>
+      <div class="small mute" style="margin-top:6px">Die Übernachtung wird für heute automatisch im Bericht eingetragen.</div>
+      <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">🏨 Feierabend</button></div>`,(m,close)=>{
+      m.querySelectorAll("[data-hp]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#hp"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.hp)); });
+      m.querySelector("#ok").onclick=async()=>{
+        const km=m.querySelector("#hk").value.trim().replace(",","."), pp=parseInt(m.querySelector("#hp").value,10);
+        if(!nn(km)) return toast("Bitte die Kilometer zum Hotel eintragen");
+        if(!(pp>0)) return toast("Bitte die Anzahl der Personen eintragen");
+        const c=S.orders[id]||o, z=[...(c.zeiten||[])].map(x=>({...x})); if(running(c)){ z[z.length-1].e=Date.now(); z[z.length-1].feierabend=true; z[z.length-1].hotel=true; }
+        const hf=[...(c.einsatz?.hotelFahrten||[]),{am:Date.now(),tag:heute,richtung:"hin",km,von:myId()}];
+        const n=[...(c.bericht?.naechte||[]).filter(x=>x.datum!==heute),{datum:heute,personen:String(pp)}].sort((a,b)=>String(a.datum).localeCompare(String(b.datum)));
+        close(); await upd(P,{zeiten:z,einsatz:{hotelFahrten:hf},bericht:{uebernachtet:"ja",naechte:n,uebernachtungen:String(n.length)}});
+        toast("Gute Nacht 🏨 – morgen einfach „Weiterarbeiten“ tippen",3500);
+      };
+    });
+  });
+  $("#weiterBtn") && ($("#weiterBtn").onclick=()=>{
+    const z=[...(o.zeiten||[])].map(x=>({...x})), lz=z[z.length-1], pAlt=nn(lz?.p)||nn(o.einsatz?.personenVorOrt)||nn(o.bericht?.personen)||"";
+    const vomHotel=!!lz?.hotel && isoTag(lz.s)!==isoTag(Date.now());
+    const kmHin=[...hotelFahrten(o)].reverse().find(f=>f.richtung!=="zurueck")?.km||"";
+    const los=async(pp,hk)=>{ z.push({s:Date.now(),by:myId(),p:pp||pAlt||null}); const e2={...(pp?{personenVorOrt:pp}:{})};
+      if(nn(hk)) e2.hotelFahrten=[...((S.orders[id]||o).einsatz?.hotelFahrten||[]),{am:Date.now(),tag:isoTag(Date.now()),richtung:"zurueck",km:String(hk).replace(",","."),von:myId()}];
+      await upd(P,{zeiten:z,...(Object.keys(e2).length?{einsatz:e2}:{})}); toast("Zeit läuft weiter ⏱"); };
+    if(!lz || isoTag(lz.s)===isoTag(Date.now())) return los(null);
+    modal(`<h2>Neuer Arbeitstag</h2><div class="small mute">${esc(nachtTag(isoTag(Date.now())))}</div>
+      <label class="f">Wie viele Personen sind heute vor Ort?</label>
+      <div class="row" style="flex-wrap:nowrap"><button class="btn" data-pp="-1" style="width:56px">−</button><input class="i" id="ppH" inputmode="numeric" value="${esc(pAlt)}" style="text-align:center;font-weight:700"><button class="btn" data-pp="1" style="width:56px">＋</button></div>
+      ${vomHotel?`<label class="f">🏨 Wie viele km vom Hotel zur Baustelle?</label><input class="i" id="hkH" inputmode="decimal" value="${esc(kmHin)}" placeholder="z. B. 12" style="text-align:center">`:""}
+      <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">▶ Weiterarbeiten</button></div>`,(m,close)=>{
+      m.querySelectorAll("[data-pp]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#ppH"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.pp)); });
+      m.querySelector("#ok").onclick=()=>{ const pp=parseInt(m.querySelector("#ppH").value,10); if(!(pp>0)) return toast("Bitte die Anzahl der Personen eintragen");
+        const hk=m.querySelector("#hkH")?.value.trim()||""; if(vomHotel && !nn(hk.replace(",","."))) return toast("Bitte die Kilometer vom Hotel eintragen"); close(); los(pp,hk); };
+    });
+  });
   const tb=$("#timerBtn"); if(tb) tb.onclick=async()=>{
     const z=[...(o.zeiten||[])].map(x=>({...x}));
     if(running(o)) z[z.length-1].e=Date.now(); else z.push({s:Date.now(),by:myId()});
@@ -2089,7 +2364,7 @@ function bindDetail(id){
   $("#signNow") && ($("#signNow").onclick=()=>signDialog(id));
   $("#reqAbn") && ($("#reqAbn").onclick=()=>abnahmeDialog(id));
   $("#noAbn") && ($("#noAbn").onclick=async()=>{ if(await confirmBox("Nicht an Kunden senden?","Die Sichtabnahme wird nicht an das Bauvorhaben geschickt. Du kannst das später noch ändern.","Ja, nicht senden")) upd(P,{abnahmeKeinVersand:true}); });
-  const au=$("#abnUp"); if(au) au.onchange=async()=>{ const f=au.files[0]; if(!f) return; try{ const b=await shrink(f,2000,.85); const a=await S.assets.upload(b); await upd(P,{abnahmeDatei:{assetId:a.id,typ:b.type,name:f.name,am:Date.now()}}); toast("Unterschriebene Abnahme gespeichert ✓"); }catch(e){ toast("Upload fehlgeschlagen"); } };
+  const au=$("#abnUp"); if(au) au.onchange=async()=>{ const f=au.files[0]; if(!f) return; try{ const b=await shrink(f,2000,.85); const a=await S.assets.upload(b); await upd(P,{abnahmeDatei:{assetId:a.id,typ:b.type,name:f.name,am:Date.now()}}); toast("Unterschriebene Sichtabnahme gespeichert ✓"); }catch(e){ toast("Upload fehlgeschlagen"); } };
   $("#readDeck") && ($("#readDeck").onclick=()=>deckblattDialog(id));
   $("#mailUnterlagen") && ($("#mailUnterlagen").onclick=async()=>{ const b=$("#mailUnterlagen"); b.disabled=true; b.innerHTML=`<span class="spin"></span> lädt …`; try{ const n=await importUnterlagen(id, msg=>b.innerHTML=`<span class="spin"></span> ${esc(msg)}`); toast(n?`${n} Unterlagen übernommen`:"Keine Bilder in der Mail gefunden"); }catch(e){ toast("Fehler: "+mcpMsg(e)); } b.disabled=false; render(); });
   // Finanzen
@@ -2262,7 +2537,7 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
 }
 function signDialog(id){
   const o=S.orders[id], v0=vd(o);
-  modal(`<h2>Abnahme am Handy</h2>
+  modal(`<h2>Sichtabnahme am Handy</h2>
    <label class="f">1. Was wird abgenommen?</label><div class="seg" id="lst">${Object.entries(LEISTUNG).map(([k,l])=>`<button data-l="${k}" class="${v0.leistung===k?"on":""}">${l}</button>`).join("")}</div>
    <input class="i" id="lso" placeholder="Was genau?" value="${esc(v0.leistungSonst||"")}" style="margin-top:6px;${v0.leistung==="sonst"?"":"display:none"}">
    <label class="f">2. Mängel</label><div class="seg" id="mgl"><button data-m="nein" class="${v0.maengelJa!=="ja"?"on":""}">Keine Mängel</button><button data-m="ja" class="${v0.maengelJa==="ja"?"on":""}">Mängel</button></div>
@@ -2310,7 +2585,7 @@ function signDialog(id){
         const a=await S.assets.upload(blob);
         await upd(orderPath(id),{unterschrift:{assetId:a.id,name:nm,am:Date.now(),von:myId()},bericht:{abnahmeArt:"handy"},vordruck:{leistung:L,leistungSonst:m.querySelector("#lso").value.trim(),maengelJa:MJ,maengel:MJ==="ja"?m.querySelector("#mtx").value.trim():"",abnahmeName:nm}});
         if(alt&&alt!==a.id){ try{ await S.assets.delete(alt); }catch(err){} }
-        close(); toast("Abnahme gespeichert ✓");
+        close(); toast("Sichtabnahme gespeichert ✓");
       }catch(e){ b.disabled=false; toast("Fehler beim Speichern"); }
     };
   });
@@ -2486,20 +2761,20 @@ function berichtText(o){
   L.push("","Montagebericht:");
   if(typ==="leerfahrt"&&lf){ L.push(`- Status: ${lf.status||"Leerfahrt"}`,`- Datum: ${new Date(lf.am).toLocaleDateString("de-DE")}`,lf.fahrzeug?`- Fahrzeug: ${fahrzeugText(lf)}${mitAnhaenger(lf)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Selbst gefahrene km: ${lf.km||"-"}`,`- Personen vor Ort: ${lf.personen||"-"}`,lf.personenMit?`- Mitgefahren: ${lf.personenMit}`:null,`- Zeit: ${Math.floor(lf.minuten/60)} Std ${lf.minuten%60} Min`,`- Grund: ${lf.grund}`,lf.schreibenAm?`- Schreiben an den Kunden gesendet am ${new Date(lf.schreibenAm).toLocaleDateString("de-DE")}${lf.schreibenAn?" an "+lf.schreibenAn:""}`:null); }
   else {
-    const az=arbeitszeitMin(o), uebern=!leer(b.uebernachtungen)?b.uebernachtungen:(b.hotel==="ja"?(b.hotelInfo||"1"):"0");
-    L.push(`- Montagetag(e): ${tage||"-"}`,`- Arbeitszeit: ${az?fmtHMin(az)+" Std.":"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Mitgefahrene Personen: ${leer(b.personenMit)?"-":b.personenMit}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,o.einsatz?.fahrzeug?`- Fahrzeug: ${fahrzeugText(o.einsatz)}${mitAnhaenger(o.einsatz)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Geschosse (Material getragen): ${b.geschosse||"-"}`,`- Übernachtungen: ${uebern}`);
+    const uebern=naechteText(b)||"-";
+    L.push(`- Montagetag(e): ${tage||"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Mitgefahrene Personen: ${leer(b.personenMit)?"-":b.personenMit}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,hotelKm(o)?`- Hotelfahrten (Baustelle ↔ Hotel): ${hotelText(o)}`:null,o.einsatz?.fahrzeug?`- Fahrzeug: ${fahrzeugText(o.einsatz)}${mitAnhaenger(o.einsatz)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Geschosse (Material getragen): ${b.geschosse||"-"}`,`- Übernachtungen: ${uebern}`);
     const tot=summeMengen(o); const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${(S.lohnPos.find(p=>p.k===k)||{}).label||k}`);
     if(pos.length) L.push(`- Positionen: ${pos.join(", ")}`);
     if(b.taetigkeit) L.push(`- Ausgeführt: ${b.taetigkeit}`);
-    (b.sonder||[]).forEach(s=>L.push(`- Sonderleistung: ${s.arbeit} (${s.personen||1} Pers. × ${fmtStd(s.min)} Std.)`));
+    sonderFertig(b).forEach(s=>L.push(`- Sonderarbeit: ${sonderZeile(s)}`));
     if(b.bemerkung) L.push(`- Bemerkungen: ${b.bemerkung}`);
     vorleistungZeilen(o).forEach(z=>L.push(`- ${z}`));
-    if(o.unterschrift) L.push(`- Abnahme unterschrieben von: ${o.unterschrift.name||"-"} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
-    else if(o.abnahmePapier) L.push(`- Abnahme: auf Papier unterschrieben`);
-    else L.push(`- Abnahme: steht noch aus`);
+    if(o.unterschrift) L.push(`- Sichtabnahme unterschrieben von: ${o.unterschrift.name||"-"} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
+    else if(o.abnahmePapier) L.push(`- Sichtabnahme: auf Papier unterschrieben`);
+    else L.push(`- Sichtabnahme: steht noch aus`);
   }
   if((typ==="rekla"||typ==="leerfahrt") && rk){ L.push("","Reklamation:",`- Ursache: ${URSACHEN[rk.ursache]||rk.ursache}`,`- Beschreibung: ${rk.text}`); }
-  L.push("",typ==="leerfahrt"?"Montagebericht im Anhang.":abnahmeOk(o)?"Montagebericht und Abnahmebescheinigung im Anhang.":"Montagebericht im Anhang. Die Abnahme reichen wir nach.","","Mit freundlichen Grüßen","JD Brüder");
+  L.push("",typ==="leerfahrt"?"Montagebericht im Anhang.":abnahmeOk(o)?"Montagebericht und Sichtabnahmebescheinigung im Anhang.":"Montagebericht im Anhang. Die Sichtabnahme reichen wir nach.","","Mit freundlichen Grüßen","JD Brüder");
   return L.filter(x=>x!==null).join("\n");
 }
 async function blobToB64(blob){ return await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
@@ -2508,7 +2783,7 @@ function berichtDialog(id){
   const typ=o.berichtTyp||o.abschluss?.typ||"ok";
   const rk=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,c)=>c.am-a.am)[0];
   const cands=[];
-  Object.values(S.fotos).forEach(f=>{ if(/^image/.test(f.typ||"image") && f.kat!=="unterlagen") cands.push({assetId:f.assetId,label:{vorher:"Vorher",nachher:"Nachher",vordruck:"Berichtszettel",abnahme:"Abnahme"}[f.kat]||f.kat,def:f.kat!=="vorher"}); });
+  Object.values(S.fotos).forEach(f=>{ if(/^image/.test(f.typ||"image") && f.kat!=="unterlagen") cands.push({assetId:f.assetId,label:{vorher:"Vorher",nachher:"Nachher",vordruck:"Berichtszettel",abnahme:"Sichtabnahme"}[f.kat]||(/^sonder:/.test(f.kat)?"Sonderarbeit":f.kat),def:f.kat!=="vorher"}); });
   if((typ==="rekla"||typ==="leerfahrt") && rk) (rk.fotos||[]).forEach(a=>cands.push({assetId:a,label:"Reklamation",def:true}));
   if(o.unterschrift) cands.push({assetId:o.unterschrift.assetId,label:"Unterschrift",def:true,png:true});
   const subject=`${o.nr} ${o.bauvorhaben||""}`.trim()+(typ==="leerfahrt"?" – Leerfahrt":typ==="rekla"?" – Reklamation":"");
@@ -2520,7 +2795,7 @@ function berichtDialog(id){
    <label class="f">An</label><input class="i" id="to" value="${esc(to)}">
    <label class="f">Betreff</label><input class="i" id="sj" value="${esc(subject)}">
    <label class="f">Text</label><textarea class="i" id="bd" style="min-height:240px">${esc(berichtText(o))}</textarea>
-   <label class="row" style="margin-top:10px;gap:8px"><input type="checkbox" id="withPdf" checked style="width:20px;height:20px"><b>Montagebericht als PDF anhängen${abnahmeOk(o)?" (mit unterschriebener Abnahme)":""}</b></label>
+   <label class="row" style="margin-top:10px;gap:8px"><input type="checkbox" id="withPdf" checked style="width:20px;height:20px"><b>Montagebericht als PDF anhängen${abnahmeOk(o)?" (mit unterschriebener Sichtabnahme)":""}</b></label>
    ${abnahmeOk(o)?"":`<div class="small mute">Sichtabnahme noch nicht erfolgt – sie wird nicht mitgeschickt.</div>`}
    <label class="f">Fotos anhängen</label>
    <div class="thumbs">${cands.map((c,i)=>`<label class="t" style="cursor:pointer"><img src="_blob/${esc(c.assetId)}" alt=""><input type="checkbox" data-ci="${i}" ${c.def?"checked":""} style="position:absolute;top:5px;left:5px;width:20px;height:20px"><span style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;font-size:10.5px;padding:2px 4px">${esc(c.label)}</span></label>`).join("")||`<span class="small mute">Keine Fotos vorhanden.</span>`}</div>
@@ -2537,7 +2812,7 @@ function berichtDialog(id){
         try{ st.innerHTML=`<span class="spin"></span> PDF wird erstellt …`; let pdf=await makeVordruckPdf(o); if(pdf.size>520000) pdf=await makeVordruckPdf(o,.5); const b64=await blobToB64(pdf); size+=b64.length; atts.push({content:b64,filename:`Montagebericht_${idOf(o.nr)}.pdf`,mimeType:"application/pdf"}); }
         catch(e){ btn.disabled=false; st.textContent="PDF konnte nicht erstellt werden: "+(e.message||e); return; }
       }
-      if(!o.unterschrift && o.abnahmeDatei && !/^image/.test(o.abnahmeDatei.typ||"")){ try{ const raw=await (await fetch("_blob/"+o.abnahmeDatei.assetId)).blob(); const b64=await blobToB64(raw); size+=b64.length; atts.push({content:b64,filename:`Abnahme_unterschrieben_${idOf(o.nr)}.pdf`,mimeType:raw.type||"application/pdf"}); }catch(e){} }
+      if(!o.unterschrift && o.abnahmeDatei && !/^image/.test(o.abnahmeDatei.typ||"")){ try{ const raw=await (await fetch("_blob/"+o.abnahmeDatei.assetId)).blob(); const b64=await blobToB64(raw); size+=b64.length; atts.push({content:b64,filename:`Sichtabnahme_unterschrieben_${idOf(o.nr)}.pdf`,mimeType:raw.type||"application/pdf"}); }catch(e){} }
       const sel=[...m.querySelectorAll("[data-ci]:checked")].map(x=>cands[+x.dataset.ci]);
       for(const c of sel){
         try{
