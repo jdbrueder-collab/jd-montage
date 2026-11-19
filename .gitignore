@@ -2,3 +2,4 @@ google-client.json
 .env
 supabase/.temp/
 .gmail-secrets.env
+migration/
