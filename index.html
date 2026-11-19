@@ -111,6 +111,17 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .modal h2{margin:0 0 6px;font-size:19px}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#14171c;color:#fff;padding:10px 16px;border-radius:12px;z-index:60;font-size:14px;max-width:90vw;box-shadow:0 6px 20px rgba(0,0,0,.25)}
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:70;display:flex;align-items:center;justify-content:center;cursor:zoom-out}
+.dv{position:fixed;inset:0;z-index:90;background:#1b1f24;display:flex;flex-direction:column;color:#fff}
+.dvbar{display:flex;align-items:center;gap:6px;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));background:#111418}
+.dvt{flex:1;min-width:0;font-weight:650;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dvb{min-width:42px;height:42px;border-radius:10px;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:20px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.dvp{min-width:52px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums;opacity:.85}
+.dvstage{flex:1;position:relative;overflow:hidden;touch-action:none;cursor:grab}
+.dvinhalt{position:absolute;left:0;top:0;transform-origin:0 0}
+.dvinhalt img{display:block;user-select:none;-webkit-user-drag:none;max-width:none}
+.dvseite{position:absolute;left:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.dvlade{position:fixed;left:0;right:0;top:45%;text-align:center;color:#ddd}
+.dvhint{font-size:12px;text-align:center;opacity:.6;padding:6px 8px;padding-bottom:max(6px,env(safe-area-inset-bottom))}
 .lightbox img{max-width:96vw;max-height:92vh}
 canvas.sig{width:100%;height:200px;border:1px solid var(--line);border-radius:10px;background:#fff;touch-action:none}
 .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
@@ -377,7 +388,83 @@ function confirmBox(title, text, okLabel="Ja", cls="pri"){
     });
   });
 }
-function lightbox(src){ const d=document.createElement("div"); d.className="lightbox"; d.innerHTML=`<img src="${esc(src)}" alt="">`; d.onclick=()=>d.remove(); document.body.appendChild(d); }
+function lightbox(src){ dokViewer(src,"bild"); }
+/* ---------- Dokument-Betrachter: Fotos, Zeichnungen und PDFs mit Zoom ----------
+   Zwei Finger = zoomen, ein Finger = verschieben, doppelt tippen = näher/zurück, Mausrad/Trackpad am PC. */
+let pdfjsP=null;
+function loadPdfJs(){ if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib); if(!pdfjsP) pdfjsP=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"; sc.onload=()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); }; sc.onerror=()=>{ pdfjsP=null; rej(new Error("PDF-Anzeige konnte nicht geladen werden")); }; document.head.appendChild(sc); }); return pdfjsP; }
+function dokViewer(src, art="bild", titel=""){
+  const d=document.createElement("div"); d.className="dv";
+  d.innerHTML=`<div class="dvbar"><button class="dvb" data-dv="zu" title="Schließen">✕</button><span class="dvt">${esc(titel||(art==="pdf"?"PDF":"Foto"))}</span>
+    <button class="dvb" data-dv="minus" title="Kleiner">−</button><span class="dvp">100 %</span><button class="dvb" data-dv="plus" title="Größer">＋</button><button class="dvb" data-dv="fit" title="Einpassen">⤢</button>
+    ${art==="pdf"?`<a class="dvb" href="${esc(src)}" target="_blank" rel="noopener" title="Im Browser öffnen">↗</a>`:""}</div>
+    <div class="dvstage"><div class="dvinhalt"><div class="dvlade"><span class="spin"></span> wird geladen …</div></div></div>
+    <div class="dvhint">Mit zwei Fingern zoomen · doppelt tippen · ziehen zum Verschieben</div>`;
+  document.body.appendChild(d); document.body.style.overflow="hidden";
+  const stage=d.querySelector(".dvstage"), inh=d.querySelector(".dvinhalt"), pct=d.querySelector(".dvp");
+  let W=0,H=0,s=1,x=0,y=0,fit=1,einpassenGanz=true;
+  const zeigen=()=>{ inh.style.transform=`translate(${x}px,${y}px) scale(${s})`; pct.textContent=Math.round(s/fit*100)+" %"; };
+  const begrenzen=()=>{ const vw=stage.clientWidth, vh=stage.clientHeight, cw=W*s, ch=H*s;
+    x = cw<=vw ? (vw-cw)/2 : Math.min(0,Math.max(vw-cw,x));
+    y = ch<=vh ? (einpassenGanz?(vh-ch)/2:Math.max(0,Math.min(y,(vh-ch)/2))) : Math.min(0,Math.max(vh-ch,y)); };
+  const zoomUm=(ns,cx,cy)=>{ ns=Math.max(fit*.5,Math.min(fit*10,ns)); const r=ns/s; x=cx-(cx-x)*r; y=cy-(cy-y)*r; s=ns; begrenzen(); zeigen(); };
+  const einpassen=()=>{ const vw=stage.clientWidth, vh=stage.clientHeight; fit=einpassenGanz?Math.min(vw/W,vh/H):vw/W; s=fit; x=0; y=0; begrenzen(); zeigen(); };
+  // Fenstergröße ändert sich (Handy gedreht, Browserleiste): Zoom behalten, nur bei „eingepasst“ neu einpassen
+  const groesse=()=>{ if(!W) return; const vw=stage.clientWidth, vh=stage.clientHeight, nf=einpassenGanz?Math.min(vw/W,vh/H):vw/W; if(Math.abs(s-fit)<fit*.02) einpassen(); else { fit=nf; begrenzen(); zeigen(); } };
+  const bereit=(w,h,ganz)=>{ W=w; H=h; einpassenGanz=ganz; inh.style.width=w+"px"; inh.style.height=h+"px"; einpassen(); };
+  const zu=()=>{ d.remove(); document.body.style.overflow=""; window.removeEventListener("resize",groesse); document.removeEventListener("keydown",taste); };
+  const taste=e=>{ if(e.key==="Escape") zu(); if(e.key==="+"||e.key==="=") zoomUm(s*1.4,stage.clientWidth/2,stage.clientHeight/2); if(e.key==="-") zoomUm(s/1.4,stage.clientWidth/2,stage.clientHeight/2); };
+  document.addEventListener("keydown",taste); window.addEventListener("resize",groesse);
+  d.querySelector("[data-dv=zu]").onclick=zu;
+  d.querySelector("[data-dv=plus]").onclick=()=>zoomUm(s*1.5,stage.clientWidth/2,stage.clientHeight/2);
+  d.querySelector("[data-dv=minus]").onclick=()=>zoomUm(s/1.5,stage.clientWidth/2,stage.clientHeight/2);
+  d.querySelector("[data-dv=fit]").onclick=einpassen;
+  // Finger und Maus
+  const pts=new Map(); let start=null, tapZeit=0, tapX=0, tapY=0, bewegt=false;
+  const pos=e=>{ const r=stage.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
+  stage.addEventListener("pointerdown",e=>{ try{ stage.setPointerCapture(e.pointerId); }catch(_){} pts.set(e.pointerId,pos(e)); bewegt=false;
+    const a=[...pts.values()]; start=a.length>=2?{d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),s,x,y,mx:(a[0].x+a[1].x)/2,my:(a[0].y+a[1].y)/2}:{px:a[0].x,py:a[0].y,x,y}; });
+  stage.addEventListener("pointermove",e=>{ if(!pts.has(e.pointerId)) return; pts.set(e.pointerId,pos(e)); const a=[...pts.values()];
+    if(a.length>=2 && start?.d){ const dd=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y), mx=(a[0].x+a[1].x)/2, my=(a[0].y+a[1].y)/2;
+      const ns=Math.max(fit*.5,Math.min(fit*10,start.s*dd/start.d)), r=ns/start.s; s=ns; x=mx-(start.mx-start.x)*r; y=my-(start.my-start.y)*r; bewegt=true; begrenzen(); zeigen(); }
+    else if(a.length===1 && start && start.px!=null){ const dx=a[0].x-start.px, dy=a[0].y-start.py; if(Math.abs(dx)+Math.abs(dy)>4) bewegt=true; x=start.x+dx; y=start.y+dy; begrenzen(); zeigen(); } });
+  const los=e=>{ if(!pts.has(e.pointerId)) return; const p=pts.get(e.pointerId); pts.delete(e.pointerId);
+    const a=[...pts.values()]; start=a.length===1?{px:a[0].x,py:a[0].y,x,y}:null;
+    if(!a.length && !bewegt && e.type==="pointerup"){ const t=Date.now(); if(t-tapZeit<320 && Math.hypot(p.x-tapX,p.y-tapY)<30){ s>fit*1.3?einpassen():zoomUm(fit*2.5,p.x,p.y); tapZeit=0; } else { tapZeit=t; tapX=p.x; tapY=p.y; } } };
+  stage.addEventListener("pointerup",los); stage.addEventListener("pointercancel",los);
+  stage.addEventListener("wheel",e=>{ e.preventDefault(); const p=pos(e);
+    if(e.ctrlKey || art!=="pdf") zoomUm(s*Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),p.x,p.y);
+    else { x-=e.deltaX; y-=e.deltaY; begrenzen(); zeigen(); } },{passive:false});
+  const fehler=t=>{ inh.innerHTML=`<div class="dvlade">${esc(t)}${art==="pdf"?`<br><a href="${esc(src)}" target="_blank" rel="noopener" style="color:#fff">Im Browser öffnen</a>`:""}</div>`; };
+  if(art!=="pdf"){
+    const img=new Image(); img.alt=""; img.draggable=false;
+    img.onload=()=>{ inh.innerHTML=""; inh.appendChild(img); img.style.width=img.naturalWidth+"px"; img.style.height=img.naturalHeight+"px"; bereit(img.naturalWidth,img.naturalHeight,true); };
+    img.onerror=()=>fehler("Bild konnte nicht geladen werden."); img.src=src;
+  } else {
+    (async()=>{ try{
+      const lib=await loadPdfJs(); const buf=await (await fetch(src)).arrayBuffer();
+      const pdf=await lib.getDocument({data:buf}).promise; const n=Math.min(pdf.numPages,40);
+      const seiten=[]; for(let i=1;i<=n;i++) seiten.push(await pdf.getPage(i));
+      const breite=Math.max(...seiten.map(pg=>pg.getViewport({scale:1}).width)), GAP=12; let h=0;
+      inh.innerHTML="";
+      const dpr=Math.min(window.devicePixelRatio||1,2);
+      for(const pg of seiten){ const v1=pg.getViewport({scale:1}), k=breite/v1.width, cssH=v1.height*k;
+        const c=document.createElement("canvas"); c.className="dvseite"; c.style.top=h+"px"; c.style.width=breite+"px"; c.style.height=cssH+"px"; inh.appendChild(c); h+=cssH+GAP; c._pg=pg; c._k=k; }
+      bereit(breite,h-GAP,n===1);
+      // scharf zeichnen: Auflösung so wählen, dass auch starkes Hineinzoomen lesbar bleibt (begrenzt wegen Speicher)
+      const malen=async(stufe)=>{ for(const c of inh.querySelectorAll("canvas")){ const v=c._pg.getViewport({scale:c._k*stufe}); if(c.width>=Math.floor(v.width)) continue;
+        const tmp=document.createElement("canvas"); tmp.width=Math.floor(v.width); tmp.height=Math.floor(v.height);
+        await c._pg.render({canvasContext:tmp.getContext("2d"),viewport:v}).promise; c.width=tmp.width; c.height=tmp.height; c.getContext("2d").drawImage(tmp,0,0); } };
+      const maxPx=n>6?2600:4200;
+      await malen(Math.min(fit*dpr*1.2, maxPx/breite));
+      let t=null; const nachschaerfen=()=>{ clearTimeout(t); t=setTimeout(()=>{ if(d.isConnected) malen(Math.min(s*dpr, maxPx/breite)).catch(()=>{}); },250); };
+      stage.addEventListener("pointerup",nachschaerfen); stage.addEventListener("wheel",nachschaerfen); d.querySelector(".dvbar").addEventListener("click",nachschaerfen);
+      if(pdf.numPages>n) toast(`Es werden die ersten ${n} von ${pdf.numPages} Seiten gezeigt`);
+    }catch(e){ fehler("PDF konnte nicht angezeigt werden."); } })();
+  }
+}
+// PDFs (Unterlagen, Zeichnungen) im Betrachter statt in einem neuen Tab öffnen
+document.addEventListener("click",e=>{ const a=e.target.closest("a[data-pdf]"); if(!a || e.target.closest("button")) return; e.preventDefault(); dokViewer(a.dataset.pdf,"pdf",a.title); });
 
 /* ============ Rollen ============ */
 const can = {
@@ -935,7 +1022,7 @@ function berichtAnsicht(id){
   });
 }
 function thumbs(list, kat, canAdd){
-  return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
+  return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" data-pdf="_blob/${esc(f.assetId)}" target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
   ${canAdd&&S.assets?`<label class="add"><span>＋</span>Foto<input type="file" accept="image/*,application/pdf" multiple hidden data-upload="${kat}"></label>`:""}</div>
   ${canAdd&&!S.assets?`<div class="small mute">Fotos hochladen ist für dich gerade nicht freigeschaltet (Zugriff als „Bearbeiter“ nötig).</div>`:""}`;
 }
@@ -2351,7 +2438,7 @@ function bindDetail(id){
   document.querySelectorAll("[data-rm-m]").forEach(b=>b.onclick=()=>upd(P,{monteure:(o.monteure||[]).filter(x=>x!==b.dataset.rmM)}));
   const am=$("#addMonteur"); if(am) am.onclick=()=>pickPerson(id);
   const eb=$("#editBau"); if(eb) eb.onclick=()=>editBauDialog(id);
-  document.querySelectorAll("[data-dok]").forEach(b=>b.onclick=e=>{ e.preventDefault(); const c=$("#unterlagenCard"); c?.scrollIntoView({behavior:"smooth",block:"start"}); const d=Object.values(S.fotos).filter(f=>f.kat==="unterlagen").sort((a,b)=>(/pdf/.test(b.typ||"")?1:0)-(/pdf/.test(a.typ||"")?1:0))[0]; if(d){ setTimeout(()=>{ /pdf/.test(d.typ||"")?window.open("_blob/"+d.assetId,"_blank"):lightbox("_blob/"+d.assetId); },400); } else toast("Noch keine Unterlagen – bitte hochladen oder aus der Mail holen"); });
+  document.querySelectorAll("[data-dok]").forEach(b=>b.onclick=e=>{ e.preventDefault(); const c=$("#unterlagenCard"); c?.scrollIntoView({behavior:"smooth",block:"start"}); const d=Object.values(S.fotos).filter(f=>f.kat==="unterlagen").sort((a,b)=>(/pdf/.test(b.typ||"")?1:0)-(/pdf/.test(a.typ||"")?1:0))[0]; if(d){ setTimeout(()=>{ /pdf/.test(d.typ||"")?dokViewer("_blob/"+d.assetId,"pdf",d.name||"Unterlagen"):lightbox("_blob/"+d.assetId); },400); } else toast("Noch keine Unterlagen – bitte hochladen oder aus der Mail holen"); });
   $("#stornoSetzen") && ($("#stornoSetzen").onclick=()=>modal(`<h2>Auftrag stornieren?</h2><div class="small mute">Der Auftrag bleibt sichtbar, steht aber unter „Storniert“.</div><label class="f">Grund / Hinweis (optional)</label><textarea class="i" id="sg" placeholder="z. B. Bauherr hat abgesagt"></textarea><div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Stornieren</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd(P,{storniert:{am:Date.now(),von:myId(),quelle:"hand",grund:m.querySelector("#sg").value.trim()}}); close(); toast("Als storniert markiert"); }; }));
   $("#stornoAuf") && ($("#stornoAuf").onclick=async()=>{ if(await confirmBox("Storno aufheben?","Der Auftrag kommt wieder in die normale Liste.","Aufheben")) upd(P,{storniert:null,stornoAufgehobenAm:Date.now()}); });
   // Pause / Feierabend: Zeit anhalten · Weiterarbeiten: neuer Zeitblock (am neuen Tag mit Personen von heute)
