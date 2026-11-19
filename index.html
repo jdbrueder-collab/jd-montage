@@ -187,6 +187,13 @@ nav.bottom a.on .ic{stroke-width:2.2}
 .modal{border-radius:20px 20px 0 0}
 @media(min-width:600px){.modal{border-radius:20px}}
 .toast{border-radius:14px;font-weight:500}
+details.fold>summary,.foldbtn{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after,.foldbtn::after{content:"›";font-size:20px;color:var(--mute);transition:transform .15s}
+details.fold[open]>summary::after{transform:rotate(90deg)}
+details.fold>summary b,.foldbtn b{font-size:15px;white-space:nowrap}
+details.fold>summary .small,.foldbtn .small{flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.fold .foldin{margin-top:12px}
 .dokhinweis{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--warn);background:var(--warnbg);border-radius:999px;padding:1px 8px}
 .order.abh{background:#f0fdf4;box-shadow:var(--sh),inset 4px 0 0 var(--ok)}
 .chip.abh{background:var(--ok);color:#fff}
@@ -319,7 +326,7 @@ const S = {
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
   profiles:{},pendingRender:false,anfragen:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
-  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{}
+  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{}
 };
 
 function toast(msg,ms=2600){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms); }
@@ -509,7 +516,7 @@ function renderNav(){
   $("#nav").innerHTML=iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}"><span class="ic">${ic}</span>${l}${n?`<span class="dot">${n}</span>`:""}</a>`).join(""));
   $("#roleChip").textContent = S.isOwner ? "Chef · Admin" : (ROLLEN[S.role]||"");
   $("#syncBtn").classList.toggle("hide", !can.mails());
-  const pb=$("#pushBtn"); if(pb){ pb.classList.toggle("hide", !can.planen()); pb.classList.toggle("on", pushAktiv()); }
+  const pb=$("#pushBtn"); if(pb){ pb.classList.toggle("hide", !(can.planen()||can.sub())); pb.classList.toggle("on", pushAktiv()); }
 }
 
 function render(scrollTop){
@@ -573,7 +580,7 @@ function orderChips(o){
     else c.push(`<span class="chip warn">Muss terminiert werden</span>`);
     const p=PROD[o.prodStatus||"offen"];
     if(o.prodStatus==="abholbereit") c.push(`<span class="chip abh">✓ Abholbereit${o.abholbereitBestaetigt?" · meta":""}</span>`);
-    else if(o.prodStatus && o.prodStatus!=="offen") c.push(`<span class="chip ${p[1]}">${p[0]}</span>`);
+    // Produktionsstand (offen / in Produktion / produziert) wird nicht mehr angezeigt – nur „Abholbereit“
     if(o.quelle==="mail-dispo"&&!o.zusage) c.push(`<span class="chip gold">📨 Anfrage von meta</span>`);
     if(o.versand) c.push(`<span class="chip ${/nicht/i.test(o.versand)?"":"ok"}">${esc(o.versand)}</span>`);
     if((o.leerfahrten||[]).length){ const l=o.leerfahrten[o.leerfahrten.length-1]; c.push(`<span class="chip warn">↩ Zuvor ${o.leerfahrten.length>1?o.leerfahrten.length+"× ":""}Leerfahrt ${leerDatum(l)}${leerKm(o)?` · ${String(leerKm(o)).replace(".",",")} km`:""}</span>`); }
@@ -722,6 +729,11 @@ function viewDetail(id){
   const route=S.settings.firmenAdresse?`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(S.settings.firmenAdresse)}&destination=${encodeURIComponent(addr)}`:"";
   const reklas=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,b)=>b.am-a.am);
   const w=planWeek(o);
+  const erl=phase(o)==="erledigt";
+  // Nicht verplant / Abholbereit: nur Kopf, Baustelle & Kunde, Unterlagen (+ Knopf „Terminieren“)
+  const frueh=phase(o)==="offen"||phase(o)==="abholbereit";
+  // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
+  const fold=(key,titel,info,inhalt,offen=false)=>`<details class="card fold" data-fold="${id}:${key}" ${(S.fold[id+":"+key]??offen)?"open":""}><summary><b>${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
   let h=`<button class="back" data-back>‹ Alle Aufträge</button>`;
   if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
@@ -729,30 +741,26 @@ function viewDetail(id){
   h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
+     ${frueh&&can.planen()?`<button class="btn pri block" id="terminieren" style="margin-top:12px">📅 Terminieren</button>`:""}
      <div class="grid2" style="margin-top:12px">${addr?`<a class="btn pri" href="${esc(nav)}" target="_blank" rel="noopener">🧭 Zur Baustelle fahren</a>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument nachsehen</button>`}
      ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 ${esc(o.bauleiterTel)}</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument nachsehen</button>`:`<span class="btn" style="opacity:.5">📞 keine Nummer</span>`}</div>
      ${(addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel"))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
-  // Planung
-  h+=`<div class="card"><h3>Planung</h3>
+  // Planung: Datum eintragen (= terminiert), Auftrag zuteilen, ggf. stornieren
+  if(!erl && !frueh) h+=`<div class="card"><h3>Planung</h3>
     <label class="f">Termin</label>
-    <div class="seg" id="terminSeg"><button data-t="zu_terminieren" class="${o.terminStatus!=="fest"?"on":""}" ${can.planen()?"":"disabled"}>Muss terminiert werden</button><button data-t="fest" class="${o.terminStatus==="fest"?"on":""}" ${can.planen()?"":"disabled"}>Fest terminiert</button></div>
-    ${o.terminStatus==="fest"||can.planen()?`<div class="grid2"><div><label class="f">Datum Montage</label><input type="date" class="i" id="terminDatum" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}" ${can.planen()?"":"disabled"}></div>
-    <div><label class="f">KW laut meta</label><input class="i" id="kwInput" value="${esc(o.kw||"")}" inputmode="numeric" ${can.planen()?"":"disabled"}></div></div>`:""}
-    <label class="f">Produktion bei meta</label>
-    <div class="seg" id="prodSeg">${Object.entries(PROD).map(([k,[l]])=>`<button data-p="${k}" class="${(o.prodStatus||"offen")===k?"on":""}" ${can.produktion()?"":"disabled"}>${l}</button>`).join("")}</div>
-    ${o.abholung?`<div class="small mute" style="margin-top:6px">Abholung: ${esc(o.abholung)}</div>`:""}
+    ${can.planen()?`<input type="date" class="i" id="terminDatum" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">`:`<div style="font-weight:600">${o.termin?new Date(o.termin).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}):`<span class="mute">noch nicht terminiert</span>`}</div>`}
     ${o.prodStatus==="abholbereit"&&o.abholbereitBestaetigt?`<div class="small" style="margin-top:6px;color:var(--ok)">✓ Von meta als abholbereit bestätigt: <b>${esc(o.abholbereitBestaetigt.name)}</b>, ${fmtDT(o.abholbereitBestaetigt.am)}</div>`:""}
-    <label class="f">Monteure</label>
-    <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip info">👷 ${esc(nameOf(m))}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand eingeteilt</span>`}
-    ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ einteilen</button>`:""}</div>
+    <label class="f">Auftrag zuteilen</label>
+    <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip info">👷 ${esc(nameOf(m))}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand zugeteilt</span>`}
+    ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ zuteilen</button>`:""}</div>
     ${can.planen()&&!o.storniert?`<button class="btn sm ghost" id="stornoSetzen" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}
   </div>`;
 
   // Baustelle
   const kv=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
-  h+=`<div class="card"><div class="row between"><h3 style="margin:0">Baustelle &amp; Kunde</h3>${can.planen()?`<button class="btn sm ghost" id="editBau">Bearbeiten</button>`:""}</div>
-   <dl class="kv" style="margin-top:10px">
+  const bauInhalt=`${can.planen()?`<div style="text-align:right;margin-bottom:6px"><button class="btn sm ghost" id="editBau">Bearbeiten</button></div>`:""}
+   <dl class="kv">
    ${kv("Adresse",addr?esc(addr)+(unsicher(o,"adresse")?" "+DOK_HINWEIS:""):(o.deckblattGelesenAm?DOK_HINWEIS:""))}
    ${kv("Land",`${LAENDER[landOf(o)].join(" ")}${o.land?"":` <span class="mute small">(erkannt)</span>`}`)}
    ${kv("Bauleiter",o.bauleiterName?esc(o.bauleiterName)+(unsicher(o,"bauleiterName")?" "+DOK_HINWEIS:""):(unsicher(o,"bauleiterName")?DOK_HINWEIS:""))}
@@ -771,17 +779,21 @@ function viewDetail(id){
    </dl>
    ${!o.bauleiterName&&!o.adresse?`<div class="banner info" style="margin:10px 0 0">Die genauen Baustellendaten stehen auf dem Aufmaß-Deckblatt. ${can.planen()?"Lade das Deckblatt unten bei „Unterlagen“ hoch oder hol es aus der Mail – die App liest es dann aus.":""}</div>`:""}
    ${o.zusageMail?.viewUrl&&S.isOwner?`<div style="margin-top:10px"><a class="small" href="${esc(o.zusageMail.viewUrl)}" target="_blank" rel="noopener">Montagezusage-Mail in Gmail öffnen ↗</a></div>`:""}
-  </div>`;
+  `;
+  h+=erl?fold("bau","Baustelle &amp; Kunde",esc(adresseOf(o)||""),bauInhalt):`<div class="card"><h3>Baustelle &amp; Kunde</h3>${bauInhalt}</div>`;
 
   // Unterlagen
-  h+=`<div class="card" id="unterlagenCard"><h3>Unterlagen &amp; Zeichnungen</h3>${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
+  const unterInhalt=`${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
    <div class="row" style="margin-top:10px">
    ${can.planen()&&S.sample?`<button class="btn sm ghost" id="readDeck">🔎 Deckblatt auslesen</button>`:""}
    ${can.mails()&&o.zusageMail?.att?.length?`<button class="btn sm ghost" id="mailUnterlagen">✉︎ Unterlagen aus Mail holen</button>`:""}
-   </div></div>`;
+   </div>`;
+  h+=erl?`<div id="unterlagenCard">${fold("unter","Unterlagen &amp; Zeichnungen",`${fk("unterlagen").length} Datei(en)`,unterInhalt)}</div>`:`<div class="card" id="unterlagenCard"><h3>Unterlagen &amp; Zeichnungen</h3>${unterInhalt}</div>`;
 
   // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Abnahme → Versand
-  if(can.einsatz()){
+  if(erl){
+    if(o.abschluss||o.bericht) h+=`<button class="card fold foldbtn" id="berichtAnsehen" style="width:100%;text-align:left;border:0;cursor:pointer"><b>📄 Montagebericht</b><span class="small mute">ansehen – fertig, nicht mehr änderbar</span></button>`;
+  } else if(can.einsatz() && !frueh){
     h+=einsatzCard(o,fk);
     const st=schritt(o);
     if(st==="bericht"||st==="fertig"){
@@ -796,8 +808,13 @@ function viewDetail(id){
   // Bericht-Versand
   if(o.berichtStatus==="pruefung"){
     h+=`<div class="card" style="border-left:5px solid var(--accent)"><h3>Bericht Subunternehmer</h3>
-     ${can.planen()?`<div class="banner warn">Bericht von <b>${esc(nameOf(o.berichtVonSub))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Abnahme). Erst nach deiner Freigabe kann er an meta.</div>
-       <button class="btn ok block" id="subFrei">✓ Geprüft – an meta freigeben</button>`:`<div class="banner info">Dein Bericht liegt bei JD Brüder zur Prüfung.</div>`}</div>`;
+     ${can.planen()?(()=>{ const sl=S.lohn[lohnDocId(o.id,o.berichtVonSub)]; const sc=sl?calcLohn(sl,S.preise):null; const meta=can.finanzen()&&S.fin[o.id]?Number(S.fin[o.id].summe)||0:null;
+       return `<div class="banner warn">Bericht von <b>${esc(nameOf(o.berichtVonSub))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Abnahme). Erst nach deiner Freigabe geht er an meta und der Subunternehmer darf seine Rechnung schreiben.</div>
+       ${sc?`<div class="grid3" style="text-align:center;margin-bottom:10px"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Sub berechnet</div><b>${fmtEUR(sc.total)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">meta zahlt</div><b>${meta!=null?fmtEUR(meta):"–"}</b></div><div style="background:${meta!=null&&meta-sc.total<0?"var(--badbg)":"var(--okbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b>${meta!=null?fmtEUR(r2(meta-sc.total)):"–"}</b></div></div>
+       <div class="small mute" style="margin-bottom:8px">${sc.lines.map(z=>`${z.menge!==""?String(z.menge).replace(".",",")+"× ":""}${esc(z.label)} ${fmtEUR(z.gp)}`).join(" · ")} – Mengen kannst du unter „Positionsergänzung“ korrigieren.</div>`:""}
+       <button class="btn ok block" id="subFrei">✓ Geprüft – freigeben &amp; an meta senden</button>`; })():`<div class="banner info">Dein Bericht liegt bei JD Brüder zur Prüfung. Nach der Freigabe kannst du deine Rechnung schreiben.</div>`}</div>`;
+  } else if((erl||frueh) && o.berichtStatus==="gesendet"){
+    // erledigt und an meta gesendet – nichts mehr zu tun
   } else if(o.berichtStatus && can.sub()){
     h+=`<div class="card"><h3>Bericht</h3><div class="banner ok">Von JD Brüder geprüft${o.berichtStatus==="gesendet"?" und an meta übermittelt":""} ✓</div></div>`;
   } else if(o.berichtStatus){
@@ -810,14 +827,70 @@ function viewDetail(id){
   if(istFertig(o) && (can.einsatz()||can.produktion())) h+=abnahmeCard(o);
 
   // Reklamationen
-  if(reklas.length||can.einsatz()){
+  if(erl){
+    if(reklas.length) h+=fold("rekla","Reklamationen",`${reklas.filter(r=>r.offen).length} offen`,`${can.einsatz()||can.reklaErledigen()?`<div style="text-align:right"><button class="btn sm ghost" id="newRekla">＋ Reklamation</button></div>`:""}${reklas.map(reklaItem).join("")}`,reklas.some(r=>r.offen));
+  } else if(!frueh && (reklas.length||can.einsatz())){
     h+=`<div class="card"><div class="row between"><h3 style="margin:0">Reklamationen</h3>${can.einsatz()||can.reklaErledigen()?`<button class="btn sm ghost" id="newRekla">＋ Reklamation</button>`:""}</div>
       ${reklas.length?reklas.map(reklaItem).join(""):`<div class="small mute" style="margin-top:8px">Keine.</div>`}</div>`;
   }
 
   // Finanzen (nur Chef/Admin)
-  if(can.finanzen()) h+=finanzCard(o,f);
+  // Abrechnung nur bei erledigten Aufträgen zeigen
+  if(can.finanzen() && erl){ const st=f?(f.rechnungStatus||"offen"):"";
+    h+=fold("abr","💶 Abrechnung",f?`${fmtEUR(f.summe)} · ${RECHNUNG[st][0]}`:"noch keine Abrechnung von meta",finanzCard(o,f).replace(/^<div class="card"><h3>Abrechnung \(nur für dich sichtbar\)<\/h3>/,"<div>")); }
   return h;
+}
+// Terminieren aus „Nicht verplant“ / „Abholbereit“: Datum + zuteilen (danach wandert der Auftrag nach „Terminiert“)
+async function terminDialog(id){
+  const o=S.orders[id];
+  const cands=[...new Set([S.settings.ownerId, ...Object.keys(S.roles).filter(k=>S.roles[k]!=="hersteller")].filter(Boolean))];
+  await loadProfiles(cands);
+  modal(`<h2>Auftrag ${esc(o.nr)} terminieren</h2>
+   <label class="f">Datum der Montage *</label><input type="date" class="i" id="td" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">
+   <label class="f">Auftrag zuteilen</label>
+   ${cands.length?cands.map(c=>`<label class="person" style="cursor:pointer"><input type="checkbox" value="${esc(c)}" ${(o.monteure||[]).includes(c)?"checked":""} style="width:20px;height:20px"><span class="av">${esc(initials(c))}</span><b>${esc(nameOf(c))}</b></label>`).join(""):`<div class="small mute">Noch keine Leute angelegt – unter Setup → Team.</div>`}
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Terminieren</button></div>
+   ${!o.storniert?`<button class="btn sm ghost block" id="st" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}`,(m,close)=>{
+    m.querySelector("#ok").onclick=async()=>{
+      const d=m.querySelector("#td").value; if(!d) return toast("Bitte ein Datum wählen");
+      const mon=[...m.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
+      await upd(orderPath(id),{termin:new Date(d+"T08:00:00").getTime(),terminStatus:"fest",monteure:mon});
+      close(); toast(`Terminiert für ${new Date(d).toLocaleDateString("de-DE")} ✓`);
+    };
+    m.querySelector("#st") && (m.querySelector("#st").onclick=()=>{ close(); setTimeout(()=>stornoDialog(id),50); });
+  });
+}
+function stornoDialog(id){
+  modal(`<h2>Auftrag stornieren?</h2><div class="small mute">Der Auftrag bleibt sichtbar, steht aber unter „Storniert“.</div><label class="f">Grund / Hinweis (optional)</label><textarea class="i" id="sg" placeholder="z. B. Bauherr hat abgesagt"></textarea><div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Stornieren</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd(orderPath(id),{storniert:{am:Date.now(),von:myId(),quelle:"hand",grund:m.querySelector("#sg").value.trim()}}); close(); toast("Als storniert markiert"); }; });
+}
+// Fertiger Montagebericht – nur zum Ansehen
+function berichtAnsicht(id){
+  const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o);
+  const pos=Object.entries(summeMengen(o)).filter(([k])=>k!=="stunden").map(([k,v])=>`${String(v).replace(".",",")}× ${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}`);
+  const z=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
+  const fotos=Object.values(S.fotos).filter(f=>f.kat==="nachher"||f.kat==="vorher").sort((a,c)=>(a.am||0)-(c.am||0));
+  modal(`<h2>Montagebericht ${esc(o.nr)}</h2><div class="small mute" style="margin-bottom:10px">${o.abschluss?`Abgeschlossen am ${fmtDT(o.abschluss.am)}`:""}${o.berichtGesendetAm?` · an meta gesendet am ${fmtDT(o.berichtGesendetAm)}`:""}</div>
+   <dl class="kv">
+    ${z("Tätigkeit",esc(b.taetigkeit||"").replace(/\n/g,"<br>"))}
+    ${z("Positionen",pos.join(", "))}
+    ${z("Arbeitszeit",az?fmtHMin(az)+" Std.":"")}
+    ${z("Personen",[b.personen?b.personen+" vor Ort":"",b.personenMit?b.personenMit+" mitgefahren":""].filter(Boolean).join(", "))}
+    ${z("Fahrzeug",esc(fahrzeugText(o.einsatz))+(mitAnhaenger(o.einsatz)?" – Anhängerfahrt":""))}
+    ${z("Gefahrene km",esc(b.istKm||""))}
+    ${z("Geschosse",esc(b.geschosse||""))}
+    ${z("Übernachtungen",esc(b.uebernachtungen||""))}
+    ${z("Sonderleistungen",(b.sonder||[]).map(x=>`${esc(x.arbeit)} (${x.personen||1} Pers. × ${fmtStd(x.min)} Std.)`).join("<br>"))}
+    ${z("Vorleistung",vorleistungZeilen(o).map(esc).join("<br>"))}
+    ${z("Bemerkungen",esc(b.bemerkung||""))}
+    ${z("Abnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
+   </dl>
+   ${fotos.length?`<label class="f">Fotos</label><div class="thumbs">${fotos.map(f=>`<div class="t" data-z="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt=""></div>`).join("")}</div>`:""}
+   <label class="f">Montagebericht (PDF an meta, ohne Preise)</label><div id="pv"><span class="spin"></span> Vorschau wird erstellt …</div>
+   <div class="grid2" style="margin-top:12px"><button class="btn" data-close>Schließen</button><button class="btn pri" id="dl">⬇︎ PDF</button></div>`,(m)=>{
+    m.querySelectorAll("[data-z]").forEach(t=>t.onclick=()=>lightbox(t.dataset.z));
+    renderVordruck(o).then(cs=>{ const show=o.unterschrift?cs:cs.slice(0,1); m.querySelector("#pv").innerHTML=show.map(c=>`<img src="${c.toDataURL("image/jpeg",.8)}" alt="" style="width:100%;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:zoom-in" data-zz>`).join(""); m.querySelectorAll("[data-zz]").forEach(im=>im.onclick=()=>lightbox(im.src)); }).catch(()=>{ m.querySelector("#pv").textContent="Vorschau nicht möglich."; });
+    m.querySelector("#dl").onclick=async()=>{ try{ const blob=await makeVordruckPdf(o); const dl=await window.claude.use("downloads").catch(()=>null); if(dl) await dl.save({filename:`Montagebericht_${idOf(o.nr)}.pdf`,data:blob}); }catch(e){ if(e?.code!=="cancelled") toast("PDF fehlgeschlagen: "+(e.message||e)); } };
+  });
 }
 function thumbs(list, kat, canAdd){
   return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
@@ -1846,7 +1919,8 @@ const monatKey=ts=>{ const d=new Date(ts||0); return d.getFullYear()*100+d.getMo
 const monatName=k=>new Date(Math.floor(k/100),k%100,1).toLocaleDateString("de-DE",{month:"long",year:"numeric"});
 function subPosten(){
   return Object.values(S.lohn).filter(l=>l.uid===myId()).map(l=>{ const o=S.orders[l.auftragId]||{nr:l.nr,id:l.auftragId}; const c=calcLohn(l,S.preise)||{lines:[],total:0};
-    const am=o.abschluss?.am||l.am||0; return {l,o,c,am,fertig:!!o.abschluss}; }).filter(x=>x.c.total>0||x.c.lines.length).sort((a,b)=>b.am-a.am);
+    const frei=!!o.subGeprueftAm && o.berichtStatus!=="pruefung";
+    const am=o.subGeprueftAm||o.abschluss?.am||l.am||0; return {l,o,c,am,fertig:frei}; }).filter(x=>x.c.total>0||x.c.lines.length).sort((a,b)=>b.am-a.am);
 }
 function subAbrechnungText(liste,k){
   const name=S.preise?.name||nameOf(myId());
@@ -1867,14 +1941,15 @@ function viewSubAbrechnung(){
   const summe=a=>r2(a.reduce((s,x)=>s+x.c.total,0));
   let h=`<h2 style="margin:0 0 4px;font-size:20px">Meine Abrechnung</h2><div class="small mute" style="margin-bottom:12px">Preisliste: <b>${esc(S.preise.name||"für dich hinterlegt")}</b> · Preise legt JD Brüder fest. Grundlage für deine Rechnung an JD Brüder.</div>
    ${monate.length>1?`<select class="i" id="subMonat" style="margin-bottom:12px">${monate.map(m=>`<option value="${m}" ${m===k?"selected":""}>${monatName(m)}</option>`).join("")}</select>`:""}
-   <div class="sum"><div class="card"><b>${fmtEUR(summe(fertig))}</b><span>abrechenbar</span></div><div class="card"><b>${fmtEUR(summe(offen))}</b><span>noch nicht fertig</span></div><div class="card"><b>${liste.length}</b><span>Aufträge</span></div></div>`;
+   <div class="sum"><div class="card"><b>${fmtEUR(summe(fertig))}</b><span>freigegeben – Rechnung schreiben</span></div><div class="card"><b>${fmtEUR(summe(offen))}</b><span>offen / in Prüfung</span></div><div class="card"><b>${liste.length}</b><span>Aufträge</span></div></div>
+   <div class="banner info small">Ablauf: Du schreibst den Montagebericht → JD Brüder prüft ihn → nach der Freigabe kannst du deine Rechnung über die freigegebenen Aufträge schreiben.</div>`;
   if(!liste.length) h+=`<div class="empty">In ${monatName(k)} noch keine Positionen.</div>`;
   liste.forEach(x=>{ h+=`<a class="order" href="#a-${esc(x.o.id)}"><div class="row between"><span class="nr">${esc(x.o.nr||"")}</span><b>${fmtEUR(x.c.total)}</b></div>
      <div class="small mute">${esc(x.o.bauvorhaben||"")}${x.o.abschluss?` · montiert am ${new Date(x.o.abschluss.am).toLocaleDateString("de-DE")}`:""}</div>
      <div class="small" style="margin-top:6px">${x.c.lines.map(z=>`${z.menge!==""?String(z.menge).replace(".",",")+"× ":""}${esc(z.label)} <span class="mute">${fmtEUR(z.gp)}</span>`).join(" · ")}</div>
-     <div class="chips">${x.fertig?`<span class="chip ok">✓ abrechenbar</span>`:`<span class="chip warn">Montage noch nicht abgeschlossen</span>`}${x.o.berichtStatus==="pruefung"?`<span class="chip">Bericht bei JD Brüder in Prüfung</span>`:""}</div></a>`; });
+     <div class="chips">${x.fertig?`<span class="chip abh">✓ Freigegeben – Rechnung schreiben</span>${x.o.berichtStatus==="gesendet"?`<span class="chip ok">an meta gesendet</span>`:""}`:x.o.berichtStatus==="pruefung"?`<span class="chip warn">Offen – in Prüfung bei JD Brüder</span>`:`<span class="chip">Offen – Bericht noch nicht abgeschlossen</span>`}</div></a>`; });
   if(fertig.length) h+=`<div class="grid2" style="margin-top:8px"><button class="btn" id="subKopie">📋 Als Text kopieren</button><button class="btn pri" id="subPdf">📄 Als PDF</button></div>
-   <div class="small mute" style="margin-top:6px">Enthält nur abgeschlossene Aufträge aus ${monatName(k)} mit deinen Preisen.</div>`;
+   <div class="small mute" style="margin-top:6px">Enthält nur von JD Brüder freigegebene Aufträge aus ${monatName(k)} mit deinen Preisen.</div>`;
   return h;
 }
 function bindSubAbrechnung(){
@@ -1971,6 +2046,9 @@ function bindDetail(id){
   const o=S.orders[id]; if(!o) return;
   const P=orderPath(id);
   bindLohn(o); bindVordruck(o); bindEinsatz(o);
+  document.querySelectorAll("[data-fold]").forEach(d=>d.ontoggle=()=>{ S.fold[d.dataset.fold]=d.open; });
+  $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
+  $("#terminieren") && ($("#terminieren").onclick=()=>terminDialog(id));
   $("#terminSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{terminStatus:b.dataset.t}));
   const td=$("#terminDatum"); if(td) td.onchange=()=>upd(P,{termin:td.value?new Date(td.value+"T08:00:00").getTime():null, terminStatus:td.value?"fest":o.terminStatus||"zu_terminieren"});
   const kwi=$("#kwInput"); if(kwi) kwi.onchange=()=>{ const v=parseInt(kwi.value,10); if(v>0&&v<54) upd(P,{kw:v, jahr:o.jahr||NOW.jahr}); };
@@ -2004,7 +2082,10 @@ function bindDetail(id){
   $("#newRekla") && ($("#newRekla").onclick=()=>reklaDialog(id,{}));
   $("#reopen") && ($("#reopen").onclick=async()=>{ if(await confirmBox("Auftrag wieder öffnen?","Der Abschluss wird zurückgenommen.","Öffnen")) upd(P,{abschluss:null}); });
   $("#sendBericht") && ($("#sendBericht").onclick=()=>berichtDialog(id));
-  $("#subFrei") && ($("#subFrei").onclick=async()=>{ if(await confirmBox("Bericht freigeben?","Der Bericht des Subunternehmers ist geprüft und kann an meta gesendet werden.","Freigeben","ok")) upd(P,{berichtStatus:"bereit",subGeprueftAm:Date.now(),subGeprueftVon:myId()}); });
+  $("#subFrei") && ($("#subFrei").onclick=async()=>{ if(!await confirmBox("Bericht freigeben?","Der Subunternehmer bekommt die Freigabe für seine Rechnung. Danach öffnet sich der Versand des Montageberichts an meta (ohne Preise).","Freigeben","ok")) return;
+    await upd(P,{berichtStatus:"bereit",subGeprueftAm:Date.now(),subGeprueftVon:myId()});
+    S.sync?.run({subFreigabe:id}).catch(()=>{}); // Subunternehmer benachrichtigen
+    toast("Freigegeben ✓"); if(can.senden()) setTimeout(()=>berichtDialog(id),300); });
   $("#signNow") && ($("#signNow").onclick=()=>signDialog(id));
   $("#reqAbn") && ($("#reqAbn").onclick=()=>abnahmeDialog(id));
   $("#noAbn") && ($("#noAbn").onclick=async()=>{ if(await confirmBox("Nicht an Kunden senden?","Die Sichtabnahme wird nicht an das Bauvorhaben geschickt. Du kannst das später noch ändern.","Ja, nicht senden")) upd(P,{abnahmeKeinVersand:true}); });
@@ -2136,7 +2217,8 @@ async function abschluss(id,typ){
   if(o.einsatz && !o.einsatz.fertigAm) p.einsatz={fertigAm:now};
   if(o.bericht?.arbeitszeitMin==null && z.length) p.bericht={arbeitszeitMin:Math.round(z.reduce((s,x)=>s+(x.e-x.s),0)/60000)};
   await upd(orderPath(id),p);
-  toast("Montage abgeschlossen ✓");
+  if(can.sub()) S.sync?.run({subBericht:id}).catch(()=>{}); // Chefs: Bericht zu prüfen
+  toast(can.sub()?"Abgeschlossen ✓ – JD Brüder prüft jetzt deinen Bericht":"Montage abgeschlossen ✓");
 }
 function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
   const o=S.orders[id];
@@ -2172,6 +2254,7 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
       } else if(abs){
         const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=Date.now();
         await upd(orderPath(id),{zeiten:z,abschluss:{typ:"rekla",am:Date.now(),by:myId()},berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:"rekla"});
+        if(can.sub()) S.sync?.run({subBericht:id}).catch(()=>{});
       }
       close(); toast(leerfahrt?"Leerfahrt gespeichert":"Reklamation gespeichert");
     };
@@ -2377,7 +2460,7 @@ function pushDialog(){
   const ios=/iPhone|iPad/i.test(navigator.userAgent), standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
   const an=pushAktiv();
   modal(`<h2>🔔 Benachrichtigungen</h2>
-   <div class="small mute">Du bekommst eine Nachricht aufs Handy, sobald meta einen Auftrag als <b>abholbereit</b> bestätigt oder jemand eine <b>Reklamation</b> erfasst. Antippen öffnet den Auftrag.</div>
+   <div class="small mute">${can.sub()?"Du bekommst eine Nachricht aufs Handy, sobald JD Brüder deinen Bericht <b>freigegeben</b> hat und du deine Rechnung schreiben kannst.":"Du bekommst eine Nachricht aufs Handy, sobald meta einen Auftrag als <b>abholbereit</b> bestätigt, jemand eine <b>Reklamation</b> erfasst oder ein Subunternehmer einen <b>Bericht zur Prüfung</b> schickt."} Antippen öffnet den Auftrag.</div>
    ${!pushUnterstuetzt()?`<div class="banner warn" style="margin-top:10px">${ios&&!standalone?"Auf dem iPhone geht das nur aus der installierten App: In Safari auf <b>Teilen</b> → <b>Zum Home-Bildschirm</b> tippen, die App dort öffnen und hier erneut tippen.":"Dieser Browser unterstützt keine Benachrichtigungen. Bitte die App auf dem Handy öffnen (Chrome oder installierte App)."}</div>`:""}
    <div id="pst" class="small" style="margin-top:10px">${an?"✓ Auf diesem Gerät eingeschaltet.":""}</div>
    <div class="grid2" style="margin-top:12px">${an?`<button class="btn" id="pOff">Ausschalten</button><button class="btn pri" id="pTest">Test senden</button>`:`<button class="btn" data-close>Später</button><button class="btn pri" id="pOn" ${pushUnterstuetzt()?"":"disabled"}>Einschalten</button>`}</div>`,(m,close)=>{

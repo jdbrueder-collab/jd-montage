@@ -50,11 +50,13 @@ Deno.serve(async (req) => {
       });
       const body = await req.json().catch(() => ({}));
       // Benachrichtigungen: meta meldet „abholbereit“, oder Test an die eigenen Geräte (alle freigegebenen Nutzer)
-      if (body?.abholbereit || body?.pushTest || body?.reklamation) {
+      if (body?.abholbereit || body?.pushTest || body?.reklamation || body?.subBericht || body?.subFreigabe) {
         const { data: member } = await user.rpc("is_member");
         const { data: u } = await user.auth.getUser();
         if (!member || !u?.user) return json({ code: "approval_required", message: "Kein Zugriff." }, 403);
         if (body.reklamation) return json(await pushReklamation(db, String(body.reklamation)));
+        if (body.subBericht) return json(await pushSubBericht(db, String(body.subBericht)));
+        if (body.subFreigabe) return json(await pushSubFreigabe(db, String(body.subFreigabe)));
         return json(body.pushTest ? await pushTest(db, u.user.id) : await pushAbholbereit(db, String(body.abholbereit)));
       }
       const { data: owner } = await user.rpc("is_owner");
@@ -124,6 +126,32 @@ async function pushReklamation(db: any, rid: string) {
     text: `${URSACHEN_TEXT[r.ursache] || r.ursache || ""}${von ? " · " + von : ""}
 ${String(r.text || "").slice(0, 140)}`,
     url: APP_URL + "#a-" + r.auftragId,
+  });
+}
+/** Subunternehmer hat seinen Bericht abgeschlossen → Chefs: bitte prüfen */
+async function pushSubBericht(db: any, id: string) {
+  const o = await getDoc(db, "auftraege", id);
+  if (!o || o.berichtStatus !== "pruefung" || !o.abschluss?.am || Date.now() - o.abschluss.am > 15 * 60_000) return { gesendet: 0, grund: "nicht zur Prüfung" };
+  if (o.subBerichtGemeldetAm && o.subBerichtGemeldetAm >= o.abschluss.am) return { gesendet: 0, grund: "schon gemeldet" };
+  await updDoc(db, "auftraege", id, { subBerichtGemeldetAm: Date.now() });
+  const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
+  const von = rollen.info?.[o.berichtVonSub]?.firma || rollen.info?.[o.berichtVonSub]?.name || "Subunternehmer";
+  return await pushSenden(db, await chefIds(db), {
+    titel: `Bericht zu prüfen: ${o.nr}`,
+    text: `${von} hat den Montagebericht abgeschlossen${o.bauvorhaben ? " – " + o.bauvorhaben : ""}. Bitte prüfen und freigeben.`,
+    url: APP_URL + "#a-" + id,
+  });
+}
+/** Chef hat den Bericht freigegeben → Subunternehmer: Rechnung schreiben */
+async function pushSubFreigabe(db: any, id: string) {
+  const o = await getDoc(db, "auftraege", id);
+  if (!o?.subGeprueftAm || !o.berichtVonSub || Date.now() - o.subGeprueftAm > 15 * 60_000) return { gesendet: 0, grund: "keine neue Freigabe" };
+  if (o.subFreigabeGemeldetAm && o.subFreigabeGemeldetAm >= o.subGeprueftAm) return { gesendet: 0, grund: "schon gemeldet" };
+  await updDoc(db, "auftraege", id, { subFreigabeGemeldetAm: Date.now() });
+  return await pushSenden(db, new Set([o.berichtVonSub]), {
+    titel: `Freigegeben: ${o.nr}`,
+    text: `JD Brüder hat deinen Bericht${o.bauvorhaben ? " (" + o.bauvorhaben + ")" : ""} geprüft. Du kannst jetzt deine Rechnung schreiben – Betrag siehe „Abrechnung“.`,
+    url: APP_URL + "#meine",
   });
 }
 async function pushTest(db: any, uid: string) {
