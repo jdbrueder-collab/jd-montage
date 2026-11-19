@@ -363,6 +363,24 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
               z.abrechnungen++; log.push(`💶 Sichtabnahme vergütet ${a.nr}: ${a.summe.toFixed(2)} € (keine Montage-Abrechnung)`);
               st.msgs[m.id] = 1; continue;
             }
+            // Abrechnung nur für andere Aufträge (Bemerkung nennt z. B. „R-47197/R-47143“, nicht die eigene Nummer):
+            // Geld gehört zu den genannten Aufträgen, der Auftrag selbst ist dadurch NICHT abgerechnet
+            const mit = mitAbgerechnet(a.nr, a.bemerkung, orders);
+            if (mit.length && !mit.includes(id) && /\d{4,6}/.test(String(a.bemerkung || ""))) {
+              const fid = id + "~fuer"; const exF = fin[fid];
+              if (!exF || (exF.datum || 0) <= d) {
+                const doc = { nr: a.nr, auftragId: id, art: "andere", fuer: mit.map((r) => orders[r].nr || r), bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: exF?.rechnungStatus || "offen", rechnungsNr: exF?.rechnungsNr || "", quelle: "mail" };
+                await setDoc(db, "finanzen", fid, doc); fin[fid] = doc;
+              }
+              for (const rid of mit) {
+                if (orders[rid].abgerechnet) continue;
+                const p = { abgerechnet: true, abgerechnetMit: a.nr, abgerechnetAm: d };
+                await updDoc(db, "auftraege", rid, p); Object.assign(orders[rid], p); z.aktualisiert++;
+                log.push(`💶 ${orders[rid].nr} ist in der Abrechnung ${a.nr} enthalten → erledigt`);
+              }
+              z.abrechnungen++; log.push(`💶 Abrechnung ${a.nr} (für ${mit.map((r) => orders[r].nr || r).join(", ")}): ${a.summe.toFixed(2)} €`);
+              st.msgs[m.id] = 1; continue;
+            }
             if (!ex || (ex.datum || 0) <= d) {
               const doc = { nr: a.nr, bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
               await setDoc(db, "finanzen", id, doc); fin[id] = doc;
