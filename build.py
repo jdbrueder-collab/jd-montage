@@ -12,10 +12,20 @@ HEAD = """<link rel="manifest" href="manifest.webmanifest">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="claude-shim.js"></script>
+<style>
+/* Fest wie eine App: kein Zoomen, kein seitliches Verrutschen, kein Gummiband-Effekt */
+html,body{overflow-x:clip;overscroll-behavior:none;touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* ab 16px zoomt das iPhone beim Antippen von Eingabefeldern nicht mehr rein */
+input,select,textarea{font-size:16px!important}
+img,canvas,table{max-width:100%}
+</style>
+<script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
 </head>"""
 
 REPLACE = [
     ("</head>", HEAD),
+    ('content="width=device-width, initial-scale=1, viewport-fit=cover"',
+     'content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"'),
     ('"/_blob/', '"_blob/'),
     ("Diese App läuft nur, wenn sie über claude.ai geöffnet wird.", "App konnte nicht starten. Bitte Seite neu laden."),
     ("Bitte bei claude.ai angemeldet öffnen", "Bitte neu anmelden"),

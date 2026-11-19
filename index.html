@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>JD Brüder Montage</title>
 <style>
 :root{
@@ -110,6 +110,14 @@ canvas.sig{width:100%;height:200px;border:1px solid var(--line);border-radius:10
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="claude-shim.js"></script>
+<style>
+/* Fest wie eine App: kein Zoomen, kein seitliches Verrutschen, kein Gummiband-Effekt */
+html,body{overflow-x:clip;overscroll-behavior:none;touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* ab 16px zoomt das iPhone beim Antippen von Eingabefeldern nicht mehr rein */
+input,select,textarea{font-size:16px!important}
+img,canvas,table{max-width:100%}
+</style>
+<script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
 </head>
 <body>
 <header class="top">
