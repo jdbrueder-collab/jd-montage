@@ -5,7 +5,7 @@
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { createClient } from "jsr:@supabase/supabase-js@2.119.1";
 import { DOMParser } from "npm:linkedom@0.18.5";
-import { b64urlToStd, gmail, message } from "../_shared/gmail.ts";
+import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
   art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, kwAusMail, nrAusMail,
   parseAbrechnung, parseUebersicht, parseZusage, splitBV, unterlagen, vonMeta,
@@ -41,12 +41,16 @@ Deno.serve(async (req) => {
       // Nur lesen: Mails im Postfach suchen (z. B. um neue Mail-Arten wie Stornos kennenzulernen)
       const body = await req.json().catch(() => ({}));
       if (body?.suche) return json(await suche(String(body.suche), Math.min(+body.anzahl || 10, 25)));
+      if (body?.erinnerung) return json(await metaErinnerung(db, false));
     } else {
       const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
       });
       const { data: owner } = await user.rpc("is_owner");
       if (!owner) return json({ code: "approval_required", message: "Nur Admins dürfen Mails abrufen." }, 403);
+      const body = await req.json().catch(() => ({}));
+      // Admin: Erinnerung zum Testen sofort senden (an die eigene Adresse oder an alle Empfänger)
+      if (body?.erinnerung) return json(await metaErinnerung(db, true, body.an ? String(body.an) : ""));
     }
     return json(await abruf(db, quelle));
   } catch (e: any) {
@@ -54,6 +58,47 @@ Deno.serve(async (req) => {
     return json({ code: e.code || "upstream_error", message: e.message || String(e) }, e.code === "server_not_connected" || e.code === "needs_reauth" ? 409 : 502);
   }
 });
+
+// ---------- Morgendliche Erinnerung an meta ----------
+// Einstellungen in einstellungen/allgemein.metaErinnerung = { aktiv, an: "a@meta.de, b@meta.de", uhrzeit: 7, tage: "werktags" }
+const APP_URL = "https://jdbrueder-collab.github.io/jd-montage/";
+const berlin = (d = new Date()) => {
+  const t = Object.fromEntries(new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", weekday: "short", hour12: false }).formatToParts(d).map((p) => [p.type, p.value]));
+  return { datum: `${t.year}-${t.month}-${t.day}`, stunde: +t.hour, wochentag: t.weekday };
+};
+async function metaErinnerung(db: any, sofort: boolean, testAn = "") {
+  const settings = (await getDoc(db, "einstellungen", "allgemein")) || {};
+  const e = settings.metaErinnerung || {};
+  const jetzt = berlin();
+  if (!sofort) {
+    if (!e.aktiv) return { gesendet: false, grund: "ausgeschaltet" };
+    if (jetzt.stunde !== (+e.uhrzeit || 7)) return { gesendet: false, grund: "nicht die eingestellte Uhrzeit" };
+    if (/^(Sa|So)/.test(jetzt.wochentag) && (e.tage || "werktags") === "werktags") return { gesendet: false, grund: "Wochenende" };
+    if (e.zuletzt === jetzt.datum) return { gesendet: false, grund: "heute schon gesendet" };
+  }
+  const an = (testAn || e.an || "").split(/[,;\s]+/).map((x: string) => x.trim()).filter((x: string) => /^\S+@\S+\.\S+$/.test(x));
+  if (!an.length) return { gesendet: false, grund: "keine Empfänger eingetragen" };
+  const orders = await getCol(db, "auftraege");
+  const offen = Object.values(orders).filter((o: any) => !o.storniert && !o.abschluss && !o.abholbereitBestaetigt)
+    .sort((a: any, b: any) => ((a.jahr || 0) * 100 + (a.kw || 0)) - ((b.jahr || 0) * 100 + (b.kw || 0)) || String(a.nr).localeCompare(String(b.nr), "de", { numeric: true }));
+  const firma = settings.monteurName || "JD Brüder GbR";
+  const text = `Guten Morgen,
+
+bitte prüfen Sie heute in unserer Auftragsliste, welche Aufträge fertig produziert und abholbereit sind, und tippen Sie dort bei diesen Aufträgen auf „Abholbereit“ (mit Ihrem Namen bestätigen).
+
+Zur Auftragsliste: ${APP_URL}
+
+${offen.length ? `Noch offen (${offen.length}):\n${offen.map((o: any) => `- ${o.nr}${o.bauvorhaben ? " – " + o.bauvorhaben : ""}${o.kw ? ` (KW ${o.kw})` : ""}`).join("\n")}` : "Aktuell sind alle Aufträge als abholbereit gemeldet. Vielen Dank!"}
+
+Vielen Dank!
+
+Mit freundlichen Grüßen
+${firma}`;
+  const betreff = `Bitte prüfen: abholbereite Aufträge für ${firma} – ${new Date().toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })}`;
+  await gmail("messages/send", { method: "POST", body: JSON.stringify({ raw: mime({ to: an, subject: betreff, body: text }) }) });
+  if (!testAn) await updDoc(db, "einstellungen", "allgemein", { metaErinnerung: { ...e, zuletzt: jetzt.datum, zuletztAm: Date.now(), zuletztAn: an.length, zuletztOffen: offen.length } });
+  return { gesendet: true, an, offen: offen.length };
+}
 
 async function suche(q: string, anzahl: number) {
   const list = await gmail(`threads?q=${encodeURIComponent(q)}&maxResults=${anzahl}`);

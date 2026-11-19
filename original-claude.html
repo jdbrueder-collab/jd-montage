@@ -52,6 +52,7 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .seg.phasen .n{font-size:11px;font-weight:700;background:var(--line);color:var(--grey);border-radius:9px;padding:0 7px}
 .seg.phasen button.on .n{background:var(--brand);color:#fff}
 .seg.phasen button.st.on .n{background:var(--bad)}
+.metacard.fertig{border-color:#bfe3cc;background:#f6fbf8}
 .order.storno{opacity:.75}.order.storno .bv{text-decoration:line-through}
 .toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
 .toolbar input{flex:1}
@@ -316,6 +317,7 @@ function go(h){ if(location.hash==="#"+h) render(true); else location.hash=h; }
 function renderNav(){
   const r=route().v;
   const offR=Object.values(S.reklas).filter(x=>x.offen).length;
+  if(S.role==="hersteller" && !S.isOwner){ $("#nav").innerHTML=""; $("#roleChip").textContent="meta"; $("#syncBtn").classList.add("hide"); return; }
   if(S.role==="pending"){ $("#nav").innerHTML=""; $("#roleChip").textContent=""; $("#syncBtn").classList.add("hide"); return; }
   const meineR=can.sub()?Object.values(S.reklas).filter(x=>x.offen&&sichtbar(S.orders[x.auftragId]||{})).length:offR;
   const items=[["auftraege","📋","Aufträge"],["woche","🗓️","Woche"]];
@@ -338,6 +340,7 @@ function render(scrollTop){
   let html="";
   if(S.loadErr) html+=`<div class="banner bad">${esc(S.loadErr)}</div>`;
   if(S.role==="pending"){ app.innerHTML=S.rolesLoaded?viewPending():`<div class="empty"><span class="spin"></span></div>`; bindPending(); return; }
+  if(S.role==="hersteller" && !S.isOwner){ app.innerHTML=html+viewMeta(); bindMeta(); bind({v:"meta"}); if(scrollTop) window.scrollTo(0,0); return; }
   if(r.v==="detail") html+=viewDetail(r.id);
   else if(r.v==="fahrten" && can.fahrten()) html+=viewFahrten();
   else if(r.v==="woche") html+=viewWoche();
@@ -454,6 +457,60 @@ function viewListe(){
   return h;
 }
 
+/* ---------- Ansicht für meta (Rolle „Hersteller“) ---------- */
+// meta sieht nur diese Liste: Auftragsnummern, jeder Auftrag steht auf „Offen“, meta tippt nur auf „Abholbereit“
+// (mit Namensbestätigung). Kein Öffnen von Aufträgen, keine Navigation, keine Preise.
+// Für meta zählt nur die eigene Bestätigung mit Namen – sonst steht der Auftrag auf „Offen“
+const metaAbholbereit=o=>!!o.abholbereitBestaetigt;
+const fuerMeta=o=>!o.storniert && !istFertig(o);
+function metaKarte(o){
+  const fertig=metaAbholbereit(o), w=planWeek(o), ab=o.abholbereitBestaetigt;
+  return `<div class="card metacard ${fertig?"fertig":""}" style="padding:12px 14px">
+    <div class="row between" style="flex-wrap:nowrap;gap:10px"><div style="min-width:0"><div style="font-size:20px;font-weight:800;letter-spacing:.3px">${esc(o.nr)}</div>
+      <div class="small mute">${[o.bauvorhaben,o.plzOrt].filter(Boolean).map(esc).join(", ")}${w.kw?` · KW ${w.kw}`:""}</div></div>
+      ${fertig?`<span class="chip ok" style="font-size:13px;padding:6px 10px">✓ Abholbereit</span>`:`<button class="btn ok" data-mab="${esc(o.id)}" style="white-space:nowrap">Abholbereit</button>`}</div>
+    ${fertig?`<div class="small" style="margin-top:6px;color:var(--ok)">${ab?`Bestätigt von <b>${esc(ab.name)}</b> am ${fmtDT(ab.am)}`:"Abholbereit"} · <a href="#" data-mzu="${esc(o.id)}" class="mute">rückgängig</a></div>`:`<div class="small mute" style="margin-top:4px">Offen</div>`}
+  </div>`;
+}
+function viewMeta(){
+  let list=Object.values(S.orders).filter(fuerMeta);
+  const q=S.q.trim().toLowerCase();
+  if(q) list=list.filter(o=>[o.nr,o.bauvorhaben,o.plzOrt].join(" ").toLowerCase().includes(q));
+  const kw=o=>{ const w=planWeek(o); return wkKey(w.jahr,w.kw)||999999; };
+  // offene zuerst, dann abholbereite; jeweils nach KW
+  list.sort((a,b)=>(metaAbholbereit(a)-metaAbholbereit(b))||kw(a)-kw(b)||String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
+  const offen=list.filter(o=>!metaAbholbereit(o)).length;
+  return `<h2 style="margin:4px 0 2px;font-size:20px">Auftragsliste für JD Brüder</h2>
+  <div class="small mute" style="margin-bottom:10px">${offen} offen · ${list.length-offen} abholbereit</div>
+  ${list.length>8||q?`<div class="toolbar"><input class="i" id="q" placeholder="Auftragsnummer suchen …" value="${esc(S.q)}" inputmode="search"></div>`:""}
+  <div style="margin-top:10px">${list.length?list.map(metaKarte).join(""):`<div class="empty">Keine Aufträge.</div>`}</div>`;
+}
+function bindMeta(){
+  document.querySelectorAll("[data-mab]").forEach(b=>b.onclick=()=>metaAbholbereitDialog(b.dataset.mab));
+  document.querySelectorAll("[data-mzu]").forEach(a=>a.onclick=async e=>{ e.preventDefault(); const o=S.orders[a.dataset.mzu];
+    if(!await confirmBox("Zurück auf offen?",`Auftrag ${esc(o.nr)} ist doch noch nicht abholbereit?`,"Ja, zurück auf offen")) return;
+    await upd(orderPath(o.id),{prodStatus:o.prodVorMeta||"in_produktion",prodGeaendertAm:Date.now(),prodVon:myId(),abholbereitBestaetigt:null,prodVerlauf:[...(o.prodVerlauf||[]),{status:"offen",am:Date.now(),von:myId()}].slice(-20)}); });
+}
+function metaAbholbereitDialog(id){
+  const o=S.orders[id]; if(!o) return;
+  // Abholbereit: nur mit Namensbestätigung
+  modal(`<h2>Auftrag ${esc(o.nr)} abholbereit?</h2>
+   <div class="small mute">Bitte bestätige mit deinem Namen, dass der Auftrag fertig produziert ist und abgeholt werden kann. JD Brüder sieht das sofort.</div>
+   <label class="f">Dein Name (Vor- und Nachname) *</label><input class="i" id="mn" autocomplete="name" value="${esc(S.metaName||"")}" placeholder="z. B. Marion Lülsdorf">
+   <label class="row" style="margin-top:10px;gap:8px;flex-wrap:nowrap;cursor:pointer"><input type="checkbox" id="mc" style="width:22px;height:22px"><span>Ich bestätige: Auftrag ${esc(o.nr)} ist <b>fertig und abholbereit</b>.</span></label>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok" disabled>✓ Bestätigen</button></div>`,(m,close)=>{
+    const nm=m.querySelector("#mn"), mc=m.querySelector("#mc"), ok=m.querySelector("#ok");
+    const pruef=()=>{ ok.disabled=!(nm.value.trim().replace(/\s+/g,"").length>=3 && mc.checked); };
+    nm.oninput=pruef; mc.onchange=pruef; setTimeout(()=>nm.focus(),100);
+    ok.onclick=async()=>{
+      const name=nm.value.trim(); if(name.replace(/\s+/g,"").length<3||!mc.checked) return toast("Bitte Namen eintragen und bestätigen");
+      ok.disabled=true; S.metaName=name; const now=Date.now();
+      try{ await upd(orderPath(id),{prodStatus:"abholbereit",prodVorMeta:o.prodStatus==="abholbereit"?(o.prodVorMeta||"produziert"):(o.prodStatus||"offen"),prodGeaendertAm:now,prodVon:myId(),abholbereitBestaetigt:{name,am:now,von:myId()},prodVerlauf:[...(o.prodVerlauf||[]),{status:"abholbereit",name,am:now,von:myId()}].slice(-20)}); close(); toast(`Auftrag ${o.nr} ist abholbereit ✓`); }
+      catch(e){ ok.disabled=false; }
+    };
+  });
+}
+
 /* ---------- Detail ---------- */
 function viewDetail(id){
   const o=S.orders[id];
@@ -486,6 +543,7 @@ function viewDetail(id){
     <label class="f">Produktion bei meta</label>
     <div class="seg" id="prodSeg">${Object.entries(PROD).map(([k,[l]])=>`<button data-p="${k}" class="${(o.prodStatus||"offen")===k?"on":""}" ${can.produktion()?"":"disabled"}>${l}</button>`).join("")}</div>
     ${o.abholung?`<div class="small mute" style="margin-top:6px">Abholung: ${esc(o.abholung)}</div>`:""}
+    ${o.prodStatus==="abholbereit"&&o.abholbereitBestaetigt?`<div class="small" style="margin-top:6px;color:var(--ok)">✓ Von meta als abholbereit bestätigt: <b>${esc(o.abholbereitBestaetigt.name)}</b>, ${fmtDT(o.abholbereitBestaetigt.am)}</div>`:""}
     <label class="f">Monteure</label>
     <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip info">👷 ${esc(nameOf(m))}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand eingeteilt</span>`}
     ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ einteilen</button>`:""}</div>
@@ -1564,6 +1622,15 @@ function viewSetup(){
     <div class="small mute" style="margin-top:4px">Holt Wochenübersichten, Montagezusagen, Montageabrechnungen und Mails der Disposition mit Unterlagen (z. B. „Auftrag Nr. 16872“ mit Dokumente.pdf).</div>
     <div class="small mute" style="margin-top:6px">Automatischer Abruf alle 15 Minuten: Aufträge, PDFs/Unterlagen und Deckblätter von meta.${s.autoAbruf?` ${s.autoAbruf.postfach?` Postfach: <b>${esc(s.autoAbruf.postfach)}</b>.`:""} Zuletzt ${fmtDT(s.autoAbruf.am)} (${s.autoAbruf.quelle==="zeitplan"?"automatisch":"von Hand"}): ${s.autoAbruf.neu||0} neu, ${s.autoAbruf.aktualisiert||0} aktualisiert, ${s.autoAbruf.dateien||0} Unterlagen${s.autoAbruf.fehler?`, <span style="color:var(--bad)">${s.autoAbruf.fehler} Fehler</span>`:""}.`:s.letzterAbruf?` Letzter Abruf: ${fmtDT(s.letzterAbruf)}`:""}</div>
   </div>
+  ${S.isOwner?(()=>{ const e=s.metaErinnerung||{}; return `<div class="card"><h3>Morgendliche Erinnerung an meta</h3>
+    <div class="small mute" style="margin-bottom:6px">Schickt meta eine Mail: „Bitte prüfen, welche Aufträge abholbereit sind, und in der Liste anklicken“ – mit Link zur Auftragsliste und den noch offenen Auftragsnummern. Gesendet über ${esc(s.autoAbruf?.postfach||"das JD-Brüder-Gmail")}.</div>
+    <label class="row" style="gap:10px;flex-wrap:nowrap;cursor:pointer;padding:6px 0"><input type="checkbox" id="meAktiv" ${e.aktiv?"checked":""} style="width:22px;height:22px"><b>Erinnerung einschalten</b></label>
+    <label class="f">Empfänger bei meta (mehrere mit Komma trennen)</label><textarea class="i" id="meAn" style="min-height:60px" placeholder="z. B. lu@meta.de, fh@meta.de">${esc(e.an||"")}</textarea>
+    <div class="grid2"><div><label class="f">Uhrzeit</label><select class="i" id="meZeit">${[5,6,7,8,9,10].map(h=>`<option value="${h}" ${(+e.uhrzeit||7)===h?"selected":""}>${h}:00 Uhr</option>`).join("")}</select></div>
+    <div><label class="f">Tage</label><select class="i" id="meTage"><option value="werktags" ${(e.tage||"werktags")==="werktags"?"selected":""}>Mo–Fr</option><option value="taeglich" ${e.tage==="taeglich"?"selected":""}>Jeden Tag</option></select></div></div>
+    ${e.zuletztAm?`<div class="small mute" style="margin-top:6px">Zuletzt gesendet: ${fmtDT(e.zuletztAm)} an ${e.zuletztAn||0} Empfänger · ${e.zuletztOffen??"?"} offene Aufträge</div>`:""}
+    <div class="grid2" style="margin-top:10px"><button class="btn" id="meVorschau">👁 Vorschau</button><button class="btn" id="meTest">✉︎ Test an mich</button></div>
+  </div>`; })():""}
   ${S.isOwner&&Object.keys(S.anfragen).length?`<div class="card" style="border-left:5px solid var(--accent)"><h3>Neue Anmeldungen – Freigabe nötig</h3>
     ${Object.values(S.anfragen).map(a=>`<div class="person"><span class="av">${esc((a.firma||a.name||"?").slice(0,1).toUpperCase())}</span><div style="flex:1;min-width:150px"><b>${esc(a.firma||a.name||nameOf(a.id))}</b><div class="small mute">${esc(a.name||"")}${a.tel?" · "+esc(a.tel):""} · möchte als ${esc(ROLLEN[a.wunsch]||a.wunsch)} · ${fmtDT(a.am)}</div></div>
       <select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-arole="${esc(a.id)}">${Object.entries(ROLLEN).map(([k,l])=>`<option value="${k}" ${a.wunsch===k?"selected":""}>${l}</option>`).join("")}</select>
@@ -1713,6 +1780,18 @@ function bindSetup(){
     S.roles={...S.roles,[id]:role}; await setDoc("einstellungen/rollen",{map:S.roles,info:{...(S.rolesInfo||{}),[id]:{firma:a.firma||"",name:a.name||"",tel:a.tel||""}}}); try{ await S.db.doc("anfragen/"+id).delete(); }catch(e){} if(S.preise) await savePreise({}); toast("Freigegeben ✓"); });
   document.querySelectorAll("[data-ano]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Anmeldung ablehnen?","Die Person bekommt keinen Zugriff. Entferne sie danach auch aus der Freigabe in claude.ai.","Ablehnen","bad")) return; try{ await S.db.doc("anfragen/"+b.dataset.ano).delete(); }catch(e){} });
   if(S.isOwner) bindSetupLohn();
+  // Morgendliche Erinnerung an meta
+  const meSave=patch=>setDoc("einstellungen/allgemein",{...S.settings,metaErinnerung:{...(S.settings.metaErinnerung||{}),...patch}});
+  $("#meAktiv") && ($("#meAktiv").onchange=async()=>{ const an=($("#meAn").value||"").trim(); if($("#meAktiv").checked && !an){ $("#meAktiv").checked=false; return toast("Bitte zuerst Empfänger eintragen"); } await meSave({aktiv:$("#meAktiv").checked,an}); toast($("#meAktiv").checked?"Erinnerung eingeschaltet ✓":"Erinnerung ausgeschaltet"); });
+  $("#meAn") && ($("#meAn").onchange=()=>{ const v=$("#meAn").value.trim(); const bad=v.split(/[,;\s]+/).filter(x=>x&&!/^\S+@\S+\.\S+$/.test(x)); if(bad.length) toast("Bitte prüfen: "+bad.join(", ")); meSave({an:v}); });
+  $("#meZeit") && ($("#meZeit").onchange=()=>meSave({uhrzeit:+$("#meZeit").value}));
+  $("#meTage") && ($("#meTage").onchange=()=>meSave({tage:$("#meTage").value}));
+  $("#meVorschau") && ($("#meVorschau").onclick=()=>{ const offen=Object.values(S.orders).filter(o=>!o.storniert&&!o.abschluss&&!o.abholbereitBestaetigt).sort((a,b)=>((a.jahr||0)*100+(a.kw||0))-((b.jahr||0)*100+(b.kw||0))||String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
+    const firma=S.settings.monteurName||"JD Brüder GbR";
+    modal(`<h2>Vorschau der Erinnerung</h2><div class="small mute">An: ${esc(($("#meAn").value||"").trim()||"– noch keine Empfänger –")}</div><div class="letter" style="margin-top:8px">${esc(`Guten Morgen,\n\nbitte prüfen Sie heute in unserer Auftragsliste, welche Aufträge fertig produziert und abholbereit sind, und tippen Sie dort bei diesen Aufträgen auf „Abholbereit“ (mit Ihrem Namen bestätigen).\n\nZur Auftragsliste: https://jdbrueder-collab.github.io/jd-montage/\n\n${offen.length?`Noch offen (${offen.length}):\n${offen.map(o=>`- ${o.nr}${o.bauvorhaben?" – "+o.bauvorhaben:""}${o.kw?` (KW ${o.kw})`:""}`).join("\n")}`:"Aktuell sind alle Aufträge als abholbereit gemeldet. Vielen Dank!"}\n\nVielen Dank!\n\nMit freundlichen Grüßen\n${firma}`)}</div><button class="btn block" data-close style="margin-top:12px">Schließen</button>`); });
+  $("#meTest") && ($("#meTest").onclick=async()=>{ const an=S.settings.antwortEmail||S.me?.email||""; if(!S.sync) return toast("Senden ist hier nicht verfügbar");
+    if(!await confirmBox("Test-Mail senden?",`Die Erinnerung geht einmal zum Testen an <b>${esc(an)}</b> – nicht an meta.`,"Senden")) return;
+    try{ const r=await S.sync.run({erinnerung:true,an}); toast(r.gesendet?`Test-Mail an ${an} gesendet ✓`:"Nicht gesendet: "+(r.grund||"")); }catch(e){ toast("Nicht gesendet: "+mcpMsg(e)); } });
   document.querySelectorAll("[data-s]").forEach(inp=>inp.onchange=()=>setDoc("einstellungen/allgemein",{...S.settings,[inp.dataset.s]:inp.value.trim()}));
   document.querySelectorAll("[data-role]").forEach(sel=>sel.onchange=async()=>{ S.roles={...S.roles,[sel.dataset.role]:sel.value}; await setDoc("einstellungen/rollen",{map:S.roles,info:S.rolesInfo||{}}); if(S.isOwner&&S.preise) await savePreise({}); });
   document.querySelectorAll("[data-unrole]").forEach(b=>b.onclick=async()=>{ const m={...S.roles}; delete m[b.dataset.unrole]; S.roles=m; await setDoc("einstellungen/rollen",{map:m,info:S.rolesInfo||{}}); if(S.isOwner&&S.preise) await savePreise({}); });

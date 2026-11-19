@@ -3,10 +3,10 @@
 (() => {
   "use strict";
   const KEY = "jdmock-v1";
-  const ME = "u-chef", SUB = "u-zelt", MON = "u-mon";
+  const ME = "u-chef", SUB = "u-zelt", MON = "u-mon", META = "u-meta";
   const params = new URLSearchParams(location.search);
   const rolle = params.get("rolle") || "chef";
-  const myId = rolle === "sub" ? SUB : rolle === "monteur" ? MON : ME;
+  const myId = rolle === "sub" ? SUB : rolle === "monteur" ? MON : rolle === "meta" ? META : ME;
   const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
   const deepMerge = (a, b) => { const o = { ...a }; for (const k of Object.keys(b)) o[k] = isObj(b[k]) && isObj(a[k]) ? deepMerge(a[k], b[k]) : b[k]; return o; };
   const clone = v => (v == null ? v : JSON.parse(JSON.stringify(v)));
@@ -31,13 +31,16 @@
     const zelt = { name: "Zeltwald", preise: { ...preise, vorderfront: 33, trennwand: 19, aussparung: 10 }, stockSatz: 4, kmSelbst: 0.3, kmMit: 0.1 };
     const docs = {
       "einstellungen/allgemein": { firmenAdresse: "Hauptstraße 1, 56305 Puderbach", monteurName: "JD Brüder GbR", monteurNr: "286", antwortEmail: "test-antwort@example.com", berichtEmail: "test-bericht@example.com" },
-      "einstellungen/rollen": { map: { [SUB]: "sub", [MON]: "monteur" }, info: { [SUB]: { firma: "Zeltwald" } } },
+      "einstellungen/rollen": { map: { [SUB]: "sub", [MON]: "monteur", [META]: "hersteller" }, info: { [SUB]: { firma: "Zeltwald" }, [META]: { firma: "meta Trennwandanlagen" } } },
       "einstellungen/lohnpositionen": { items: lohnPos },
       "lohn/preise": { preise, stockSatz: 5, kmSelbst: 0.3, kmMit: 0.1, listen: { lz: zelt }, zuordnung: { [SUB]: "lz" }, sichtbarFuer: [], subSicht: [SUB] },
       [`lohnsicht/${SUB}`]: { name: "Zeltwald", preise: zelt.preise, stockSatz: 4, kmSelbst: 0.3, kmMit: 0.1 },
       "auftraege/17714-1": { nr: "17714/1", bauvorhaben: "Wohnquartier Rheinblick", plzOrt: "67059 Ludwigshafen", adresse: "Rheinallee 12, 67059 Ludwigshafen", kw: 47, jahr: 2026, kabinen: "9", terminStatus: "fest", termin: T, prodStatus: "abholbereit", bauleiterName: "Herr Bauer", bauleiterTel: "0621 123456", bauleiterMail: "test-kunde@example.com", zahlungspflichtiger: "Musterbau GmbH, Industriestr. 5, 67059 Ludwigshafen", geschosse: "EG, 1. OG, 2. OG", monteure: [ME, SUB], erstelltAm: T - 5 * D },
       "auftraege/17801-2": { nr: "17801/2", bauvorhaben: "Schule am Park", plzOrt: "56068 Koblenz", kw: 48, jahr: 2026, terminStatus: "zu_terminieren", prodStatus: "produziert", monteure: [ME], erstelltAm: T - 2 * D },
       "auftraege/17650-1": { nr: "17650/1", bauvorhaben: "Bürohaus Nord", plzOrt: "57610 Altenkirchen", kw: 45, jahr: 2026, terminStatus: "fest", monteure: [ME], bericht: { taetigkeit: "6 Kabinen montiert", istKm: "80", personen: "2", personenMit: "0", geschosse: "EG" }, abschluss: { typ: "ok", am: T - 10 * D, by: ME }, berichtStatus: "gesendet", berichtGesendetAm: T - 8 * D, berichtAn: "test-bericht@example.com", erstelltAm: T - 20 * D },
+      "auftraege/17722-1": { nr: "17722/1", bauvorhaben: "Kita Sonnenschein", plzOrt: "53111 Bonn", kw: 47, jahr: 2026, kabinen: "6", terminStatus: "fest", termin: T - 1 * D, prodStatus: "abholbereit", monteure: [ME], einsatz: { fahrzeug: "anhaenger", abfahrtAm: T - 5 * 3600000, ankunftAm: T - 4 * 3600000, bereit: "ja", startAm: T - 3 * 3600000, personenVorOrt: 2 }, zeiten: [{ s: T - 3 * 3600000 }], erstelltAm: T - 9 * D },
+      "auftraege/17840-1": { nr: "17840/1", bauvorhaben: "Sporthalle West", plzOrt: "50667 Köln", kw: 49, jahr: 2026, kabinen: "12", terminStatus: "zu_terminieren", prodStatus: "in_produktion", erstelltAm: T - 1 * D },
+      "auftraege/17855-1": { nr: "17855/1", bauvorhaben: "Rathaus Neuwied", plzOrt: "56564 Neuwied", kw: 48, jahr: 2026, kabinen: "4", terminStatus: "fest", termin: T + 6 * D, prodStatus: "abholbereit", erstelltAm: T - 6 * D },
       // Nutzung in anderen Aufträgen: Aussparung und Feinsteinzeug wurden oft gebraucht
       "lohnberichte/a1__u-chef": { auftragId: "a1", uid: ME, mengen: { aussparung: 4, feinsteinzeug: 6, vorderfront: 3 } },
       "lohnberichte/a2__u-chef": { auftragId: "a2", uid: ME, mengen: { aussparung: 2, feinsteinzeug: 2, vorhangschiene: 3 } },
@@ -79,7 +82,7 @@
     };
   }
   const db = { collection: colRef, doc: path => { const [c, i] = path.split("/"); return docRef(c, i); } };
-  const names = { [ME]: "Jonathan (Test)", [SUB]: "Zeltwald (Test)", [MON]: "Monteur (Test)" };
+  const names = { [ME]: "Jonathan (Test)", [SUB]: "Zeltwald (Test)", [MON]: "Monteur (Test)", [META]: "meta Disposition (Test)" };
   const user = {
     me: async () => ({ id: myId, name: names[myId], email: myId + "@example.com" }),
     isOwner: async () => rolle === "chef",
@@ -103,7 +106,8 @@
   const downloads = { async save({ filename, data }) { window.__downloads.push({ filename, size: data.size, url: URL.createObjectURL(data) }); console.log("[TEST] Download:", filename, data.size); } };
   // Simulierter Server-Abruf: legt eine Anfrage der Disposition mit Dokumente.pdf an
   const sync = {
-    async run() {
+    async run(body = {}) {
+      if (body.erinnerung) { console.log("[TEST] Erinnerung NICHT gesendet (Testumgebung) an", body.an); return { gesendet: true, an: [body.an], offen: 3 }; }
       const pdf = new Blob(["%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 595 842]/Parent 2 0 R>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF"], { type: "application/pdf" });
       const a = await assets.upload(pdf);
       store["auftraege/16872"] = { nr: "16872", kw: 33, jahr: 2026, terminStatus: "zu_terminieren", prodStatus: "offen", erstelltAm: Date.now(), quelle: "mail-dispo", anfrageAm: Date.now(), anfrageBetreff: "Auftrag Nr. 16872", bauvorhaben: "Testbau Regensburg", plzOrt: "93047 Regensburg", bauleiterName: "Frau Test", deckblattGelesenAm: Date.now() };
