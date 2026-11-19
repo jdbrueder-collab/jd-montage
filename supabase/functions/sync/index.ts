@@ -33,6 +33,9 @@ Deno.serve(async (req) => {
   const db = admin();
   let quelle = "manuell";
   try {
+    // Anmeldung neuer Leute (ohne Login): Zugang anfragen / persönlichen Code einlösen
+    const vorab = await req.clone().json().catch(() => ({}));
+    if (vorab?.zugang) return json(await zugang(db, vorab.zugang));
     // Zugriff: Zeitplan mit Geheimnis aus der Datenbank, sonst nur Admins
     const secret = req.headers.get("x-sync-secret");
     if (secret) {
@@ -72,6 +75,69 @@ Deno.serve(async (req) => {
     return json({ code: e.code || "upstream_error", message: e.message || String(e) }, e.code === "server_not_connected" || e.code === "needs_reauth" ? 409 : 502);
   }
 });
+
+// ---------- Zugang für neue Leute: Code gibt JD Brüder persönlich heraus ----------
+// Sammlung „zugang“ (nur für Admins lesbar), je E-Mail ein Eintrag: Name, Firma, Telefon, Wunsch,
+// und – sobald der Chef ihn erzeugt hat – code, rolle, codeBis. Einlösen legt den Nutzer an, trägt die Rolle ein
+// und gibt einen einmaligen Anmelde-Schlüssel zurück (es wird keine Mail verschickt).
+const MAILRX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+async function nutzerIdVon(db: any, email: string) {
+  const { data } = await db.from("profiles").select("id").ilike("email", email).limit(1);
+  return data?.[0]?.id || "";
+}
+async function istBekannt(db: any, email: string) {
+  const { data: adm } = await db.from("admin_emails").select("email").eq("email", email).limit(1);
+  if (adm?.length) return true;
+  const id = await nutzerIdVon(db, email);
+  if (!id) return false;
+  const { data: own } = await db.from("app_owner").select("id").eq("id", id).limit(1);
+  if (own?.length) return true;
+  const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
+  return !!rollen.map?.[id];
+}
+async function zugang(db: any, z: any) {
+  const email = String(z?.email || "").trim().toLowerCase();
+  if (!MAILRX.test(email) || email.length > 120) return { fehler: "Bitte eine gültige E-Mail-Adresse eingeben." };
+  const ex = await getDoc(db, "zugang", email);
+  const kurz = (v: any, n = 80) => String(v || "").trim().slice(0, n);
+  if (z.art === "pruefen") return { bekannt: await istBekannt(db, email), wartet: !!ex, hatCode: !!ex?.code };
+  if (z.art === "anfrage") {
+    if (!kurz(z.name)) return { fehler: "Bitte deinen Namen eintragen." };
+    const wunsch = ["monteur", "sub", "hersteller"].includes(z.wunsch) ? z.wunsch : "sub";
+    await setDoc(db, "zugang", email, { ...(ex || {}), email, name: kurz(z.name), firma: kurz(z.firma), tel: kurz(z.tel, 40), wunsch, am: Date.now() });
+    if (!ex && !/@example\.(com|org)$/.test(email)) {
+      try { await pushSenden(db, await chefIds(db), { titel: "Neue Anmeldung", text: `${kurz(z.name)}${kurz(z.firma) ? " (" + kurz(z.firma) + ")" : ""} möchte in die App – Code unter Setup erzeugen.`, url: "#setup" }); } catch (_) { /* Push ist optional */ }
+    }
+    return { wartet: true };
+  }
+  if (z.art === "einloesen") {
+    const code = String(z.code || "").replace(/\D/g, "");
+    if (!ex?.code) return { fehler: "Für diese Adresse gibt es noch keinen Code. JD Brüder gibt dir den Code persönlich." };
+    if ((ex.versuche || 0) >= 5) return { fehler: "Zu viele falsche Versuche. Bitte bei JD Brüder einen neuen Code holen." };
+    if (Date.now() > (ex.codeBis || 0)) return { fehler: "Der Code ist abgelaufen. Bitte bei JD Brüder einen neuen Code holen." };
+    if (code !== String(ex.code)) {
+      await setDoc(db, "zugang", email, { ...ex, versuche: (ex.versuche || 0) + 1 });
+      return { fehler: "Der Code stimmt nicht." };
+    }
+    let id = await nutzerIdVon(db, email);
+    if (!id) {
+      const { data, error } = await db.auth.admin.createUser({ email, email_confirm: true, user_metadata: { name: ex.name || "" } });
+      if (error && !/already/i.test(error.message)) throw error;
+      id = data?.user?.id || await nutzerIdVon(db, email);
+    }
+    if (!id) throw new Error("Nutzer konnte nicht angelegt werden.");
+    if (ex.name) await db.from("profiles").update({ name: ex.name }).eq("id", id);
+    const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
+    const rolle = ["chef", "monteur", "sub", "hersteller"].includes(ex.rolle) ? ex.rolle : "monteur";
+    await setDoc(db, "einstellungen", "rollen", { ...rollen, map: { ...(rollen.map || {}), [id]: rolle }, info: { ...(rollen.info || {}), [id]: { firma: ex.firma || "", name: ex.name || "", tel: ex.tel || "" } } });
+    await db.from("docs").delete().match({ col: "zugang", id: email });
+    await db.from("docs").delete().match({ col: "anfragen", id });
+    const { data: link, error: le } = await db.auth.admin.generateLink({ type: "magiclink", email });
+    if (le) throw le;
+    return { ok: true, rolle, token_hash: link.properties.hashed_token };
+  }
+  return { fehler: "Unbekannte Aktion." };
+}
 
 // ---------- Handy-Benachrichtigungen (Web-Push) ----------
 // Abos: Sammlung „push“ (je Gerät ein Eintrag mit uid und Push-Abo). Schlüssel: Secret VAPID_KEYS (JWK-Paar).

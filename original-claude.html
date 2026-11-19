@@ -335,7 +335,7 @@ const S = {
   loaded:false,loadErr:"",
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
-  profiles:{},pendingRender:false,anfragen:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
+  profiles:{},pendingRender:false,anfragen:{},zugang:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
   lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{}
 };
 
@@ -485,8 +485,10 @@ async function boot(){
   db.doc("einstellungen/rollen").onSnapshot(d=>{
     S.roles=(d.exists?d.data().map:null)||{}; S.rolesInfo=(d.exists?d.data().info:null)||{};
     S.role = S.isOwner ? "chef" : (S.roles[myId()] || "pending"); S.rolesLoaded=true;
+    if(S.isOwner && S.preise){ const chefs=Object.keys(S.roles).filter(k=>S.roles[k]==="chef").sort().join(","); if(chefs!==[...(S.preise.sichtbarFuer||[])].sort().join(",")) savePreise({}).catch(()=>{}); }
     loadProfiles(Object.keys(S.roles)); scheduleRender();
   }, ()=>{});
+  if(S.isOwner) db.collection("zugang").onSnapshot(snap=>{ const z={}; snap.docs.forEach(d=>z[d.id]={id:d.id,...d.data()}); S.zugang=z; scheduleRender(); },()=>{});
   if(S.isOwner) db.collection("anfragen").onSnapshot(snap=>{ const a={}; snap.docs.forEach(d=>a[d.id]={id:d.id,...d.data()}); S.anfragen=a; loadProfiles(Object.keys(a)); scheduleRender(); },()=>{});
   else if(myId()) db.doc("anfragen/"+myId()).onSnapshot(d=>{ S.meineAnfrage=d.exists?d.data():null; scheduleRender(); },()=>{});
   db.collection("fahrzeuge").onSnapshot(snap=>{ const a={}; snap.docs.forEach(d=>a[d.id]={id:d.id,...d.data()}); S.fahrzeuge=a; scheduleRender(); },()=>{});
@@ -2188,6 +2190,53 @@ function bindSubAbrechnung(){
 }
 
 /* ---------- Einstellungen ---------- */
+/* ---------- Zugänge: Code wird persönlich herausgegeben, Rolle legt der Chef fest ---------- */
+const ZUGANG_ROLLEN=[["monteur","Mitarbeiter"],["sub","Subunternehmer"],["chef","Chef"],["hersteller","meta (Hersteller)"]];
+const codeText=c=>String(c||"").replace(/(\d{3})(\d{3})/,"$1 $2");
+function zugangCard(){
+  const list=Object.values(S.zugang||{}).sort((a,b)=>(b.am||b.codeAm||0)-(a.am||a.codeAm||0));
+  const wartend=list.filter(z=>!z.code).length;
+  return `<div class="card" ${wartend?`style="border-left:5px solid var(--accent)"`:""}><h3>Zugänge &amp; Codes${wartend?` <span class="chip gold">${wartend} neu</span>`:""}</h3>
+    <div class="small mute" style="margin-bottom:8px">Neue Leute öffnen den App-Link und melden sich mit ihrer E-Mail an. Hier legst du fest, als was sie reinkommen, erzeugst den Code und gibst ihn <b>persönlich</b> weiter. Der Code gilt 7 Tage.</div>
+    ${list.map(z=>{ const abgel=z.code&&Date.now()>(z.codeBis||0), gesperrt=(z.versuche||0)>=5; const rolle=z.rolle||z.wunsch||"monteur";
+      return `<div class="person" style="flex-wrap:wrap"><span class="av">${esc((z.name||z.email||"?").slice(0,1).toUpperCase())}</span><div style="flex:1;min-width:170px"><b>${esc(z.name||z.email)}</b>${z.firma?` <span class="small mute">· ${esc(z.firma)}</span>`:""}
+        <div class="small mute">${esc(z.email)}${z.tel?" · "+esc(z.tel):""}${z.wunsch?" · möchte als "+esc((ZUGANG_ROLLEN.find(r=>r[0]===z.wunsch)||[,z.wunsch])[1]):""}${z.am?" · "+fmtDT(z.am):""}</div>
+        ${z.code?`<div class="small" style="margin-top:3px">${gesperrt?`<span class="chip bad">gesperrt – zu viele Fehlversuche</span>`:abgel?`<span class="chip bad">Code abgelaufen</span>`:`<span class="chip ok">🔑 ${esc(codeText(z.code))}</span> als <b>${esc((ZUGANG_ROLLEN.find(r=>r[0]===z.rolle)||[,z.rolle])[1])}</b> · gültig bis ${new Date(z.codeBis).toLocaleDateString("de-DE")}`}</div>`:`<div class="small" style="margin-top:3px;color:var(--warn)">⏳ wartet auf Code</div>`}</div>
+        <div class="row" style="gap:6px"><select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-zrole="${esc(z.id)}">${ZUGANG_ROLLEN.map(([k,l])=>`<option value="${k}" ${rolle===k?"selected":""}>${l}</option>`).join("")}</select>
+        <button class="btn sm ${z.code&&!abgel&&!gesperrt?"":"pri"}" data-zcode="${esc(z.id)}">🔑 ${z.code?"Neuer Code":"Code erzeugen"}</button>
+        <button class="btn sm ghost" data-zdel="${esc(z.id)}" title="Entfernen">✕</button></div></div>`; }).join("")||`<div class="small mute">Gerade keine offenen Anmeldungen.</div>`}
+    <div class="grid2" style="margin-top:10px"><button class="btn sm" id="zNeu">＋ Zugang für jemanden anlegen</button><button class="btn sm ghost" id="zInst">📲 Anleitung: App installieren</button></div></div>`;
+}
+async function zugangCode(email, rolle, extra={}){
+  const ex=S.zugang[email]||{};
+  const code=String(100000+crypto.getRandomValues(new Uint32Array(1))[0]%900000);
+  const doc={...ex,...extra,email,code,rolle,codeAm:Date.now(),codeBis:Date.now()+7*864e5,versuche:0,von:myId()};
+  await setDoc("zugang/"+email,doc); S.zugang={...S.zugang,[email]:{id:email,...doc}};
+  const name=doc.name||email, rl=(ZUGANG_ROLLEN.find(r=>r[0]===rolle)||[,rolle])[1];
+  modal(`<h2>Code für ${esc(name)}</h2>
+    <div style="font-size:40px;font-weight:800;letter-spacing:6px;text-align:center;margin:14px 0;font-variant-numeric:tabular-nums">${esc(codeText(code))}</div>
+    <div class="small">Bitte <b>persönlich</b> weitergeben (mündlich, SMS oder WhatsApp). ${esc(name)} öffnet den App-Link, gibt <b>${esc(email)}</b> ein und dann diesen Code.</div>
+    <div class="small mute" style="margin-top:6px">Kommt rein als <b>${esc(rl)}</b> · gültig bis ${new Date(doc.codeBis).toLocaleDateString("de-DE")} · nur einmal nutzbar</div>
+    <div class="grid2" style="margin-top:14px"><button class="btn" id="zCopy">📋 Kopieren</button><button class="btn pri" data-close>Fertig</button></div>`,(m)=>{
+      m.querySelector("#zCopy").onclick=async()=>{ const t=`Dein Zugang zur JD Brüder Montage-App:\n${location.origin+location.pathname}\nE-Mail: ${email}\nCode: ${codeText(code)} (gültig bis ${new Date(doc.codeBis).toLocaleDateString("de-DE")})`;
+        try{ await navigator.clipboard.writeText(t); toast("Kopiert ✓"); }catch(e){ toast("Kopieren ging nicht – bitte abschreiben"); } };
+    });
+  render();
+}
+function zugangNeuDialog(){
+  modal(`<h2>Zugang anlegen</h2><div class="small mute">Für jemanden, der sich noch nicht angemeldet hat. Du bekommst gleich den Code zum Weitergeben.</div>
+    <label class="f">E-Mail *</label><input class="i" id="zE" type="email" inputmode="email">
+    <label class="f">Name *</label><input class="i" id="zN">
+    <label class="f">Firma</label><input class="i" id="zF" placeholder="bei Subunternehmern">
+    <label class="f">Telefon</label><input class="i" id="zT" inputmode="tel">
+    <label class="f">Kommt rein als</label><select class="i" id="zR">${ZUGANG_ROLLEN.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
+    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="zOk">🔑 Code erzeugen</button></div>`,(m,close)=>{
+    m.querySelector("#zOk").onclick=async()=>{ const email=m.querySelector("#zE").value.trim().toLowerCase(), name=m.querySelector("#zN").value.trim();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast("Bitte eine gültige E-Mail eintragen");
+      if(!name) return toast("Bitte den Namen eintragen");
+      close(); await zugangCode(email, m.querySelector("#zR").value, {name, firma:m.querySelector("#zF").value.trim(), tel:m.querySelector("#zT").value.trim(), am:Date.now()}); };
+  });
+}
 function viewSetup(){
   const s=S.settings; const ids=Object.keys(S.roles);
   let h=`<h2 style="margin:0 0 10px;font-size:20px">Einstellungen</h2>
@@ -2214,6 +2263,7 @@ function viewSetup(){
     ${e.zuletztAm?`<div class="small mute" style="margin-top:6px">Zuletzt gesendet: ${fmtDT(e.zuletztAm)} an ${e.zuletztAn||0} Empfänger · ${e.zuletztOffen??"?"} offene Aufträge</div>`:""}
     <div class="grid2" style="margin-top:10px"><button class="btn" id="meVorschau">👁 Vorschau</button><button class="btn" id="meTest">✉︎ Test an mich</button></div>
   </div>`; })():""}
+  ${S.isOwner?zugangCard():""}
   ${S.isOwner&&Object.keys(S.anfragen).length?`<div class="card" style="border-left:5px solid var(--accent)"><h3>Neue Anmeldungen – Freigabe nötig</h3>
     ${Object.values(S.anfragen).map(a=>`<div class="person"><span class="av">${esc((a.firma||a.name||"?").slice(0,1).toUpperCase())}</span><div style="flex:1;min-width:150px"><b>${esc(a.firma||a.name||nameOf(a.id))}</b><div class="small mute">${esc(a.name||"")}${a.tel?" · "+esc(a.tel):""} · möchte als ${esc(ROLLEN[a.wunsch]||a.wunsch)} · ${fmtDT(a.am)}</div></div>
       <select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-arole="${esc(a.id)}">${Object.entries(ROLLEN).map(([k,l])=>`<option value="${k}" ${a.wunsch===k?"selected":""}>${l}</option>`).join("")}</select>
@@ -2422,6 +2472,10 @@ function bindSetupLohn(){
 function bindSetup(){
   document.querySelectorAll("[data-aok]").forEach(b=>b.onclick=async()=>{ const id=b.dataset.aok; const role=document.querySelector(`[data-arole="${id}"]`).value; const a=S.anfragen[id]||{};
     S.roles={...S.roles,[id]:role}; await setDoc("einstellungen/rollen",{map:S.roles,info:{...(S.rolesInfo||{}),[id]:{firma:a.firma||"",name:a.name||"",tel:a.tel||""}}}); try{ await S.db.doc("anfragen/"+id).delete(); }catch(e){} if(S.preise) await savePreise({}); toast("Freigegeben ✓"); });
+  document.querySelectorAll("[data-zcode]").forEach(b=>b.onclick=()=>{ const id=b.dataset.zcode; zugangCode(id, document.querySelector(`[data-zrole="${CSS.escape(id)}"]`).value); });
+  document.querySelectorAll("[data-zdel]").forEach(b=>b.onclick=async()=>{ const z=S.zugang[b.dataset.zdel]; if(!await confirmBox("Zugang entfernen?",`${esc(z?.name||b.dataset.zdel)} kann sich dann mit dem Code nicht mehr anmelden.`,"Entfernen","bad")) return; try{ await S.db.doc("zugang/"+b.dataset.zdel).delete(); }catch(e){} });
+  $("#zNeu") && ($("#zNeu").onclick=zugangNeuDialog);
+  $("#zInst") && ($("#zInst").onclick=()=>window.jdInstallHilfe?window.jdInstallHilfe(true):toast("Nur in der installierten App verfügbar"));
   document.querySelectorAll("[data-ano]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Anmeldung ablehnen?","Die Person bekommt keinen Zugriff. Entferne sie danach auch aus der Freigabe in claude.ai.","Ablehnen","bad")) return; try{ await S.db.doc("anfragen/"+b.dataset.ano).delete(); }catch(e){} });
   if(S.isOwner) bindSetupLohn();
   document.querySelectorAll("[data-fs]").forEach(i=>i.onchange=()=>{ savePreise({[i.dataset.fs]:nn(i.value)}); toast("Gespeichert"); });

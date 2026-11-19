@@ -7,45 +7,125 @@
   const sb = supabase.createClient(URL_, KEY, { auth: { persistSession: true, autoRefreshToken: true } });
   const fail = (code, message) => Object.assign(new Error(message || code), { code });
 
-  /* ---------- Anmeldung per 6-stelligem Code (klappt auch in der installierten Handy-App) ---------- */
+  /* ---------- App auf den Startbildschirm: Anleitung je Gerät ---------- */
+  let installEvent = null;
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvent = e; document.querySelectorAll("[data-jd-install]").forEach(b => b.classList.remove("hide")); });
+  const istInstalliert = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  function geraet() {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "ios";
+    if (/Android/.test(ua)) return "android";
+    return "pc";
+  }
+  function installHtml() {
+    const g = geraet();
+    const inApp = /FBAN|FBAV|Instagram|WhatsApp|GSA\/|Line\//.test(navigator.userAgent);
+    const teil = (k, titel, schritte) => `<details ${g === k ? "open" : ""} style="margin-top:8px"><summary style="cursor:pointer;font-weight:650">${titel}${g === k ? " <span class=\"small mute\">(dein Gerät)</span>" : ""}</summary>
+      <ol style="margin:6px 0 0;padding-left:20px;line-height:1.55">${schritte.map(s => `<li>${s}</li>`).join("")}</ol></details>`;
+    return `<h3 style="margin:0 0 4px">📲 App auf den Startbildschirm holen</h3>
+      <div class="small mute">Dann öffnest du die Montage-App mit einem Tipp wie jede andere App – ohne Link suchen.</div>
+      ${inApp ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ Du hast den Link in einer anderen App geöffnet (z. B. WhatsApp). Öffne ihn zuerst im Browser: oben/unten auf ⋯ bzw. ⋮ tippen → „Im Browser öffnen“.</div>` : ""}
+      <button class="btn pri block ${installEvent ? "" : "hide"}" data-jd-install style="margin-top:10px">📲 Jetzt installieren</button>
+      ${teil("ios", "iPhone / iPad", ["Link in <b>Safari</b> öffnen.", "Unten auf <b>Teilen</b> tippen (Viereck mit Pfeil nach oben ⬆️).", "Etwas nach unten scrollen → <b>„Zum Home-Bildschirm“</b>.", "Oben rechts <b>„Hinzufügen“</b> – fertig, das Symbol „JD Montage“ ist da."])}
+      ${teil("android", "Android-Handy", ["Link in <b>Chrome</b> öffnen.", "Oben rechts auf <b>⋮</b> (drei Punkte) tippen.", "<b>„App installieren“</b> oder <b>„Zum Startbildschirm hinzufügen“</b> wählen.", "<b>„Installieren“</b> bestätigen – das Symbol „JD Montage“ ist da."])}
+      ${teil("pc", "Computer (Chrome / Edge)", ["Rechts in der Adresszeile auf das <b>Installieren-Symbol</b> klicken (Bildschirm mit Pfeil).", "Oder Menü <b>⋮</b> → „Streamen, speichern und teilen“ → <b>„Seite als App installieren“</b> (Edge: ⋯ → „Apps“ → „Diese Seite als App installieren“).", "<b>„Installieren“</b> – die App liegt dann auf dem Desktop bzw. in der Taskleiste.", "Mac mit Safari: Menü <b>Ablage → „Zum Dock hinzufügen“</b>."])}`;
+  }
+  function installBinden(root) {
+    root.querySelectorAll("[data-jd-install]").forEach(b => b.onclick = async () => { if (!installEvent) return; installEvent.prompt(); try { await installEvent.userChoice; } catch (e) {} installEvent = null; b.classList.add("hide"); });
+  }
+  // Anleitung als Fenster (einmal nach der Anmeldung, und jederzeit über Setup)
+  window.jdInstallHilfe = (immer = true) => {
+    if (!immer && (istInstalliert() || (() => { try { return localStorage.getItem("jdInstallGesehen"); } catch (e) { return "1"; } })())) return;
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;inset:0;z-index:120;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px";
+    d.innerHTML = `<div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow:auto">${installHtml()}<button class="btn block" id="jdInstOk" style="margin-top:14px">Verstanden</button></div>`;
+    document.body.appendChild(d); installBinden(d);
+    d.querySelector("#jdInstOk").onclick = () => { try { localStorage.setItem("jdInstallGesehen", "1"); } catch (e) {} d.remove(); };
+  };
+
+  /* ---------- Anmeldung ----------
+     Bekannte Nutzer bekommen den Code per Mail. Neue Leute fragen den Zugang an –
+     JD Brüder legt die Rolle fest, erzeugt den Code und gibt ihn persönlich heraus. */
+  const zugangFn = async body => {
+    const { data, error } = await sb.functions.invoke("sync", { body: { zugang: body } });
+    if (error) throw new Error("Server nicht erreichbar – bitte Internet prüfen.");
+    return data || {};
+  };
+  const hEsc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   function loginScreen() {
     return new Promise(resolve => {
       const d = document.createElement("div");
-      d.style.cssText = "position:fixed;inset:0;z-index:100;background:var(--bg,#f3f4f6);display:flex;align-items:center;justify-content:center;padding:16px";
-      d.innerHTML = `<div class="card" style="max-width:400px;width:100%">
-        <h2 style="margin:0 0 6px">JD Brüder Montage</h2>
-        <p class="mute small" id="lh">Gib deine E-Mail-Adresse ein. Du bekommst einen Code zum Anmelden.</p>
-        <label class="f" for="le">E-Mail</label><input class="i" id="le" type="email" autocomplete="email" inputmode="email">
-        <div id="lc" class="hide"><label class="f" for="lt">Code aus der Mail</label><input class="i" id="lt" inputmode="numeric" autocomplete="one-time-code" maxlength="8"></div>
-        <div id="lm" class="small" style="color:var(--bad);min-height:18px;margin-top:6px" role="alert"></div>
-        <button class="btn pri block" id="lb" style="margin-top:8px">Code senden</button></div>`;
-      document.body.appendChild(d);
+      d.style.cssText = "position:fixed;inset:0;z-index:100;background:var(--bg,#f3f4f6);overflow:auto;padding:16px";
+      d.innerHTML = `<div style="max-width:420px;margin:24px auto">
+        <div class="card"><h2 style="margin:0 0 6px">JD Brüder Montage</h2>
+        <div id="lv"></div>
+        <div id="lm" class="small" style="color:var(--bad);min-height:18px;margin-top:6px" role="alert"></div></div>
+        ${istInstalliert() ? "" : `<div class="card" style="margin-top:12px">${installHtml()}</div>`}</div>`;
+      document.body.appendChild(d); installBinden(d);
       const $ = s => d.querySelector(s), msg = t => ($("#lm").textContent = t || "");
-      let sent = false;
-      const go = async () => {
-        const email = $("#le").value.trim().toLowerCase();
-        if (!/^\S+@\S+\.\S+$/.test(email)) return msg("Bitte eine gültige E-Mail-Adresse eingeben.");
-        $("#lb").disabled = true; msg("");
-        try {
-          if (!sent) {
-            const { error } = await sb.auth.signInWithOtp({ email });
-            if (error) throw error;
-            sent = true; $("#lc").classList.remove("hide"); $("#le").disabled = true;
-            $("#lh").textContent = "Wir haben dir einen Code geschickt. Schau auch im Spam-Ordner nach.";
-            $("#lb").textContent = "Anmelden"; $("#lt").focus();
-          } else {
-            const { data, error } = await sb.auth.verifyOtp({ email, token: $("#lt").value.trim(), type: "email" });
-            if (error) throw error;
-            d.remove(); resolve(data.session);
-          }
-        } catch (e) {
-          msg(/rate|seconds/i.test(e.message) ? "Bitte kurz warten und dann nochmal versuchen." : sent ? "Der Code stimmt nicht oder ist abgelaufen." : "Senden hat nicht geklappt: " + e.message);
-        }
-        $("#lb").disabled = false;
+      let email = ""; try { email = localStorage.getItem("jdLoginMail") || ""; } catch (e) {}
+      let modus = "persoenlich"; // „mail“ = Code kam per Mail
+      const knopf = (id, text) => `<button class="btn pri block" id="${id}" style="margin-top:12px">${text}</button>`;
+      const busy = async (b, fn) => { b.disabled = true; msg(""); try { await fn(); } catch (e) { msg(e.message || String(e)); } b.disabled = false; };
+      const zeigeMail = () => {
+        $("#lv").innerHTML = `<p class="mute small">Melde dich mit deiner E-Mail-Adresse an.</p>
+          <label class="f" for="le">E-Mail</label><input class="i" id="le" type="email" autocomplete="email" inputmode="email" value="${hEsc(email)}">${knopf("lb", "Weiter")}`;
+        const go = () => busy($("#lb"), async () => {
+          const e = $("#le").value.trim().toLowerCase();
+          if (!/^\S+@\S+\.\S+$/.test(e)) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
+          email = e; try { localStorage.setItem("jdLoginMail", e); } catch (x) {}
+          const r = await zugangFn({ art: "pruefen", email });
+          if (r.fehler) throw new Error(r.fehler);
+          if (r.bekannt) {
+            const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+            if (error) throw new Error(/rate|seconds/i.test(error.message) ? "Bitte kurz warten und dann nochmal versuchen." : "Senden hat nicht geklappt: " + error.message);
+            modus = "mail"; zeigeCode("Wir haben dir einen Code per Mail geschickt. Schau auch im Spam-Ordner nach.");
+          } else if (r.wartet) { modus = "persoenlich"; zeigeCode(r.hatCode ? "Gib den Code ein, den du von JD Brüder bekommen hast." : "Deine Anfrage ist bei JD Brüder. Du bekommst deinen Code persönlich – dann hier eingeben."); }
+          else zeigeAnfrage();
+        });
+        $("#lb").onclick = go; $("#le").onkeydown = e => { if (e.key === "Enter") go(); }; $("#le").focus();
       };
-      $("#lb").onclick = go;
-      d.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
-      $("#le").focus();
+      const zeigeAnfrage = () => {
+        $("#lv").innerHTML = `<p class="small" style="margin:0 0 4px"><b>${hEsc(email)}</b> ist noch nicht freigeschaltet.</p>
+          <p class="mute small">Frag deinen Zugang an. JD Brüder legt fest, was du in der App siehst, und gibt dir deinen Code persönlich.</p>
+          <label class="f">Ich bin</label><select class="i" id="aw"><option value="monteur">Mitarbeiter von JD Brüder</option><option value="sub">Subunternehmer</option><option value="hersteller">meta Trennwandanlagen</option></select>
+          <label class="f">Dein Name *</label><input class="i" id="an" autocomplete="name">
+          <label class="f">Firma</label><input class="i" id="af" placeholder="nur bei Subunternehmern">
+          <label class="f">Telefon</label><input class="i" id="at" inputmode="tel" autocomplete="tel">
+          ${knopf("ab", "Zugang anfragen")}
+          <div class="row between small" style="margin-top:10px"><a href="#" id="lx">Andere E-Mail</a><a href="#" id="lhc">Ich habe schon einen Code</a></div>`;
+        $("#ab").onclick = () => busy($("#ab"), async () => {
+          if (!$("#an").value.trim()) throw new Error("Bitte deinen Namen eintragen.");
+          const r = await zugangFn({ art: "anfrage", email, name: $("#an").value, firma: $("#af").value, tel: $("#at").value, wunsch: $("#aw").value });
+          if (r.fehler) throw new Error(r.fehler);
+          modus = "persoenlich"; zeigeCode("✓ Anfrage gesendet. JD Brüder gibt dir deinen Code persönlich – dann hier eingeben. Du kannst die Seite so lange schließen.");
+        });
+        $("#lx").onclick = e => { e.preventDefault(); zeigeMail(); };
+        $("#lhc").onclick = e => { e.preventDefault(); modus = "persoenlich"; zeigeCode("Gib den Code ein, den du von JD Brüder bekommen hast."); };
+        $("#an").focus();
+      };
+      const zeigeCode = text => {
+        $("#lv").innerHTML = `<p class="small" style="margin:0 0 4px">${text}</p><div class="small mute">${hEsc(email)}</div>
+          <label class="f" for="lt">Code</label><input class="i" id="lt" inputmode="numeric" autocomplete="one-time-code" maxlength="8" style="font-size:22px;letter-spacing:4px;text-align:center;font-weight:700">
+          ${knopf("lc", "Anmelden")}<div class="small" style="margin-top:10px"><a href="#" id="lx">Andere E-Mail</a></div>`;
+        const go = () => busy($("#lc"), async () => {
+          const code = $("#lt").value.replace(/\D/g, "");
+          if (code.length < 6) throw new Error("Bitte den 6-stelligen Code eingeben.");
+          if (modus === "mail") {
+            const { data, error } = await sb.auth.verifyOtp({ email, token: code, type: "email" });
+            if (!error) { fertig(data.session); return; }
+          }
+          const r = await zugangFn({ art: "einloesen", email, code });
+          if (r.fehler) throw new Error(modus === "mail" ? "Der Code stimmt nicht oder ist abgelaufen." : r.fehler);
+          const { data, error } = await sb.auth.verifyOtp({ token_hash: r.token_hash, type: "magiclink" });
+          if (error) throw new Error("Anmelden hat nicht geklappt: " + error.message);
+          fertig(data.session);
+        });
+        $("#lc").onclick = go; $("#lt").onkeydown = e => { if (e.key === "Enter") go(); };
+        $("#lx").onclick = e => { e.preventDefault(); zeigeMail(); }; $("#lt").focus();
+      };
+      const fertig = s => { d.remove(); resolve(s); };
+      zeigeMail();
     });
   }
 
@@ -62,6 +142,8 @@
     out.style.cssText = "background:rgba(255,255,255,.16);color:#fff";
     out.onclick = () => window.jdLogout();
     document.querySelector("header.top")?.appendChild(out);
+    // Einmal nach der Anmeldung zeigen, wie die App auf den Startbildschirm kommt
+    setTimeout(() => window.jdInstallHilfe(false), 1500);
     if ("serviceWorker" in navigator) {
       try {
         await navigator.serviceWorker.register("sw.js");
