@@ -623,6 +623,7 @@ function orderChips(o){
   else if(o.abschluss && abnahmeFaellig(o)) c.push(abnahmeChip(o));
   const rk=offeneReklas(o.id).length; if(rk) c.push(`<span class="chip bad">${rk} Reklamation offen</span>`);
   if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`);
+  if(!S.fin[o.id] && o.abgerechnetMit) c.push(`<span class="chip ok">💶 abgerechnet mit ${esc(o.abgerechnetMit)}</span>`);
   if(can.finanzen() && S.fin[o.id]){ const f=S.fin[o.id], st=f.rechnungStatus||"offen";
     c.push(`<span class="chip info">💶 ${fmtEUR(f.summe)}</span>`);
     if(st==="offen"||st==="freigegeben") c.push(`<span class="chip warn">✏️ Rechnung schreiben</span>`);

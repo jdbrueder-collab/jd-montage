@@ -8,7 +8,7 @@ import { DOMParser } from "npm:linkedom@0.18.5";
 import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
-  art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istEigenerBericht, kwAusMail, nrAusMail,
+  art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
   parseAbrechnung, parseUebersicht, parseZusage, splitBV, unterlagen, vonMeta,
 } from "../_shared/meta.js";
 
@@ -43,6 +43,8 @@ Deno.serve(async (req) => {
       const body = await req.json().catch(() => ({}));
       if (body?.suche) return json(await suche(String(body.suche), Math.min(+body.anzahl || 10, 25)));
       if (body?.nachholen) return json(await abruf(db, "nachholen", String(body.nachholen)));
+      // Unterlagen/Zusagen für vorhandene Aufträge aus älteren Mails nachladen – legt keine neuen Aufträge an
+      if (body?.ergaenzen) return json(await abruf(db, "ergaenzen", "", { abfrage: String(body.ergaenzen), nurBestehende: true }));
       if (body?.erinnerung) return json(await metaErinnerung(db, false));
     } else {
       const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -237,19 +239,19 @@ async function updDoc(db: any, col: string, id: string, patch: any) {
 }
 
 // ---------- Abruf ----------
-async function abruf(db: any, quelle: string, nachholen = "") {
+async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: string; nurBestehende?: boolean } = {}) {
   const start = Date.now();
   const log: string[] = [];
   const zeit = () => Date.now() - start > MAX_LAUFZEIT;
 
   const st = (await getDoc(db, "mails", "status")) || {};
-  st.threads = st.threads || {}; st.msgs = st.msgs || {};
+  st.threads = st.threads || {}; st.msgs = st.msgs || {}; st.erg = st.erg || {};
   if (st.lauf && Date.now() - st.lauf < SPERRE && quelle === "zeitplan") return { log: ["Läuft gerade schon – übersprungen."], uebersprungen: true };
   await updDoc(db, "mails", "status", { lauf: Date.now() });
 
   const settings = (await getDoc(db, "einstellungen", "allgemein")) || {};
   // Beim Nachholen werden die gefundenen Mails erneut ausgewertet, auch wenn sie schon gelesen wurden
-  const query = nachholen || settings.gmailQuery || DEFAULT_QUERY;
+  const query = opt.abfrage || nachholen || settings.gmailQuery || DEFAULT_QUERY;
   const orders = await getCol(db, "auftraege");
   const fin = await getCol(db, "finanzen");
   const z: any = { neu: 0, aktualisiert: 0, abrechnungen: 0, dateien: 0, gelesen: 0, fehler: 0, storniert: 0 };
@@ -276,10 +278,17 @@ async function abruf(db: any, quelle: string, nachholen = "") {
     const neu: any[] = [];
     for (const t of threads.reverse()) {
       if (zeit() || neu.length >= MAX_NACHRICHTEN) { weitere = true; break; }
-      if (!nachholen && st.threads[t.id] && t.historyId && st.threads[t.id] === t.historyId) continue;
+      if (!nachholen && !opt.nurBestehende && st.threads[t.id] && t.historyId && st.threads[t.id] === t.historyId) continue;
       const th = await gmail(`threads/${t.id}?format=full`);
       const ids = (th.messages || []).map((r: any) => r.id);
-      for (const raw of th.messages || []) if (nachholen || !st.msgs[raw.id]) neu.push(message(raw));
+      for (const raw of th.messages || []) {
+        if (opt.nurBestehende) {
+          // Ergänzen: nur Zusagen/Dispo-Mails, die hierbei noch nicht vollständig übernommen wurden
+          if (st.erg[raw.id]) continue;
+          const mm = message(raw); const t0 = art(mm);
+          if (istEigenerBericht(mm) || (vonMeta(mm) && (t0 === "zusage" || t0 === "dispo" || t0 === "abrechnung"))) neu.push(mm); else st.erg[raw.id] = 1;
+        } else if (nachholen || !st.msgs[raw.id]) neu.push(message(raw));
+      }
       offen.push({ id: t.id, historyId: th.historyId || t.historyId, ids });
     }
     neu.sort((a, b) => +new Date(a.date) - +new Date(b.date));
@@ -289,6 +298,7 @@ async function abruf(db: any, quelle: string, nachholen = "") {
     const lesen = new Set<string>(); // Aufträge, deren Unterlagen Claude lesen soll
     for (const m of neu) {
       if (zeit()) { weitere = true; break; }
+      if (opt.nurBestehende) st.erg[m.id] = 1;
       try {
         // Eigener Montagebericht an meta (auch direkt aus Gmail gesendet) → Auftrag ist erledigt
         if (istEigenerBericht(m)) {
@@ -305,6 +315,8 @@ async function abruf(db: any, quelle: string, nachholen = "") {
         if (!vonMeta(m)) { st.msgs[m.id] = 1; continue; }
         const typ = art(m);
         const d = +new Date(m.date);
+        // Ergänzen: nur Montagezusagen und Unterlagen der Disposition (ältere Übersichten würden neuere Angaben überschreiben)
+        if (opt.nurBestehende && typ !== "zusage" && typ !== "dispo" && typ !== "abrechnung") { st.msgs[m.id] = 1; continue; }
         if (typ === "uebersicht") {
           const rows = parseUebersicht(m, parseHTML);
           log.push(`📋 Wochenübersicht ${new Date(m.date).toLocaleDateString("de-DE")}: ${rows.length} Aufträge`);
@@ -328,8 +340,9 @@ async function abruf(db: any, quelle: string, nachholen = "") {
             if (zs.kabinen) data.kabinen = zs.kabinen;
             // neue Montagezusage nach einem Widerruf/Storno: Auftrag ist wieder aktiv
             if (orders[id]?.storniert && (orders[id].storniert.am || 0) < d) { data.storniert = null; data.stornoAufgehobenAm = d; }
+            if (!orders[id] && opt.nurBestehende) { st.msgs[m.id] = 1; continue; }
             if (!orders[id]) { const doc = { nr: zs.nr, ...data, terminStatus: "zu_terminieren", prodStatus: "in_produktion", erstelltAm: Date.now(), quelle: "mail" }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; z.neu++; }
-            else { await updDoc(db, "auftraege", id, data); Object.assign(orders[id], data); z.aktualisiert++; }
+            else if (!((orders[id].zusageMail?.am || 0) > d)) { await updDoc(db, "auftraege", id, data); Object.assign(orders[id], data); z.aktualisiert++; }
             const n = await anhaenge(db, m, id, log, z);
             if (n) lesen.add(id);
             log.push(`✅ Montagezusage ${zs.nr} für KW ${zs.kw}${n ? ` – ${n} Unterlage(n)` : ""}`);
@@ -338,12 +351,20 @@ async function abruf(db: any, quelle: string, nachholen = "") {
           const a = parseAbrechnung(m, parseHTML);
           if (a.nr && a.summe) {
             const id = findeAuftrag(orders, a.nr) || idOf(a.nr); const ex = fin[id];
+            if (!orders[id] && opt.nurBestehende) { st.msgs[m.id] = 1; continue; }
             if (!ex || (ex.datum || 0) <= d) {
               const doc = { nr: a.nr, bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
               await setDoc(db, "finanzen", id, doc); fin[id] = doc;
             }
             if (!orders[id]) { const bv = splitBV(a.bv); const doc = { nr: a.nr, bauvorhaben: bv.bauvorhaben, plzOrt: bv.plzOrt, terminStatus: "fest", prodStatus: "abholbereit", erstelltAm: Date.now(), quelle: "mail", abgerechnet: true, abschluss: { typ: "ok", am: d, by: null }, berichtStatus: "gesendet", berichtGesendetAm: d }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; }
             else if (!orders[id].abgerechnet) await updDoc(db, "auftraege", id, { abgerechnet: true });
+            // In der Bemerkung genannte Aufträge sind mit abgerechnet (z. B. „/1 + /2 + /3 + 5 kompett“)
+            for (const rid of mitAbgerechnet(a.nr, a.bemerkung, orders)) {
+              if (rid === id || orders[rid].abgerechnet) continue;
+              const p = { abgerechnet: true, abgerechnetMit: a.nr, abgerechnetAm: d };
+              await updDoc(db, "auftraege", rid, p); Object.assign(orders[rid], p); z.aktualisiert++;
+              log.push(`💶 ${orders[rid].nr} ist in der Abrechnung ${a.nr} enthalten → erledigt`);
+            }
             z.abrechnungen++; log.push(`💶 Abrechnung ${a.nr}: ${a.summe.toFixed(2)} €`);
           } else if (a.nr) log.push(`⚠ Abrechnung ${a.nr}: Summe nicht lesbar`);
         } else if (typ === "storno") {
@@ -370,6 +391,7 @@ async function abruf(db: any, quelle: string, nachholen = "") {
           if (!att.length) { st.msgs[m.id] = 1; continue; }
           const nr = nrAusMail(m);
           let id = nr ? findeAuftrag(orders, nr) || idOf(nr) : "";
+          if (!id && opt.nurBestehende) { st.msgs[m.id] = 1; continue; }
           if (!id) {
             // Nummer steht nur in den Unterlagen: Claude liest sie vom Deckblatt
             const res = await deckblatt(m, att, log);
@@ -381,6 +403,7 @@ async function abruf(db: any, quelle: string, nachholen = "") {
             await anhaenge(db, m, id, log, z);
           } else {
             const kw = kwAusMail(m);
+            if (!orders[id] && opt.nurBestehende) { st.msgs[m.id] = 1; continue; }
             if (!orders[id]) {
               const doc: any = { nr, terminStatus: "zu_terminieren", prodStatus: "offen", erstelltAm: Date.now(), quelle: "mail-dispo", anfrageAm: d, anfrageBetreff: cleanSubject(m.subject) };
               if (kw) Object.assign(doc, kw);
@@ -393,11 +416,17 @@ async function abruf(db: any, quelle: string, nachholen = "") {
         }
         st.msgs[m.id] = 1;
       } catch (e: any) {
+        // Dateigrenze erreicht: Mail NICHT abhaken, im nächsten Lauf weiter (schon gespeicherte Anhänge werden erkannt)
+        // … ebenso, wenn Google das Minuten-Kontingent für Gmail erreicht hat
+        if (e.voll || /quota exceeded|rate ?limit|too many requests/i.test(String(e.message || e))) {
+          if (!e.voll) log.push(`⏳ Gmail-Kontingent erreicht – „${m.subject}“ kommt im nächsten Lauf`);
+          delete st.msgs[m.id]; delete st.erg[m.id]; weitere = true; break;
+        }
         z.fehler++; log.push(`⚠ Fehler bei „${m.subject}“: ${e.message || e}`);
         if (e.code === "server_not_connected" || e.code === "needs_reauth") throw e;
       }
       verlaeufeAbhaken();
-      await updDoc(db, "mails", "status", { threads: st.threads, msgs: st.msgs, lauf: Date.now() });
+      await updDoc(db, "mails", "status", { threads: st.threads, msgs: st.msgs, erg: st.erg, lauf: Date.now() });
     }
 
     // 4. Deckblatt lesen: neue Unterlagen → leere Felder im Auftrag füllen
@@ -411,7 +440,7 @@ async function abruf(db: any, quelle: string, nachholen = "") {
   } finally {
     verlaeufeAbhaken();
     const ergebnis = { am: Date.now(), quelle, postfach, ...z, weitere };
-    await updDoc(db, "mails", "status", { threads: st.threads, msgs: st.msgs, lauf: null, letzterLauf: ergebnis });
+    await updDoc(db, "mails", "status", { threads: st.threads, msgs: st.msgs, erg: st.erg, lauf: null, letzterLauf: ergebnis });
     await updDoc(db, "einstellungen", "allgemein", { letzterAbruf: Date.now(), autoAbruf: ergebnis });
   }
   log.push(`\nFertig: ${z.neu} neu, ${z.aktualisiert} aktualisiert, ${z.abrechnungen} Abrechnungen, ${z.dateien} Unterlagen gespeichert, ${z.gelesen} Deckblätter gelesen.${weitere ? " Weitere Mails folgen beim nächsten Abruf." : ""}`);
@@ -435,7 +464,7 @@ async function anhaenge(db: any, m: any, auftragId: string, log: string[], z: an
   const have = new Set((vorhanden || []).map((r: any) => r.data?.mailAtt).filter(Boolean));
   let n = 0;
   for (const a of att) {
-    if (z.dateien >= MAX_DATEIEN) break;
+    if (z.dateien >= MAX_DATEIEN) { const e: any = new Error("Dateigrenze für diesen Lauf erreicht"); e.voll = true; throw e; }
     const key = (a.filename || "") + "|" + m.id;
     if (have.has(key)) continue;
     const { bytes } = await laden(m, a);

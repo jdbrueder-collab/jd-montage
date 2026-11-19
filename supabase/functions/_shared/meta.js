@@ -167,3 +167,15 @@ Handschriftliche Werte mit lesen. Nichts erfinden.
 Zusätzlich: "unsicher": Liste der Schlüssel, die du NICHT sicher lesen konntest (unleserlich, abgeschnitten, mehrdeutig) oder die im Dokument fehlen, aber wichtig wären – besonders "bauleiterTel" und "adresse". Beispiel: "unsicher":["bauleiterTel"].`;
 // Welche Deckblatt-Felder in den Auftrag übernommen werden (nur wenn dort noch leer)
 export const DECK_FELDER = ["vorgang", "berater", "adresse", "bauleiterName", "bauleiterTel", "bauleiterMail", "oeffnungszeiten", "geschosse", "aufzug", "montageHinweise", "kaufmHinweise", "technHinweise", "aufbau", "kabinen", "zahlungspflichtiger"];
+
+/** Abrechnung für mehrere Aufträge: In der Bemerkung stehen die mit abgerechneten Aufträge,
+ *  z. B. „/1 + /2 + /3 + 5 kompett“ (Teilaufträge derselben Nummer) oder „R-47197/R-47143“. */
+export function mitAbgerechnet(nr, bem, orders) {
+  const out = new Set(); const b = String(bem || ""); const base = String(nr || "").split("/")[0];
+  for (const m of b.matchAll(new RegExp(NR.source, "g"))) { const id = findeAuftrag(orders, normNr(m[1])); if (id) out.add(id); }
+  // Liste von mindestens zwei Teilnummern, verbunden mit + , & oder „und“
+  if (/(^|[\s(])\/?\d{1,2}\s*(\+|,|&|und)\s*\/?\d{1,2}(?!\d)/i.test(b)) {
+    for (const m of b.matchAll(/(?:^|[\s+,&(])\/?(\d{1,2})(?!\d)/g)) { const id = idOf(`${base}/${+m[1]}`); if (orders[id]) out.add(id); }
+  }
+  return [...out];
+}
