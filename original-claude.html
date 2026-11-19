@@ -376,6 +376,10 @@ const can = {
   senden:()=>!!S.mcp && (S.isOwner||S.role==="chef"||S.role==="monteur"),
   setup:()=>S.isOwner||S.role==="chef"
 };
+// Testaufträge: alle Mails gehen an die Test-Adresse statt an meta / den Kunden
+const istTest=o=>!!o?.test||/^TEST/i.test(String(o?.nr||""));
+const testAn=()=>S.settings.testEmail||"jd.brueder.meta@gmail.com";
+const testHinweis=o=>istTest(o)?`<div class="banner warn small">🧪 <b>Testauftrag</b> – die Mail geht an ${esc(testAn())}, nicht an meta oder den Kunden.</div>`:"";
 function myId(){ return S.me?.id || null; }
 async function loadProfiles(ids){
   if(!S.user) return;
@@ -1422,7 +1426,7 @@ function nmbDialog(id){
    <div class="banner info small">Vorläufiges Schreiben mit den Auftragsdaten. Sobald die PDF-Vorlage da ist, wird sie hier automatisch verwendet.</div>
    <label class="f">Was ist nicht fertig?</label><textarea class="i" id="gr" placeholder="z. B. Fliesen fehlen, Wände nicht verputzt …">${esc(n.grund||"")}</textarea>
    <label class="f">Vorschau</label><div class="letter" id="pv"></div>
-   <label class="f">An (E-Mail aus dem Auftrag)</label><input class="i" id="to" type="email" value="${esc(n.an||o.bauleiterMail||"")}" placeholder="E-Mail des Kunden">
+   <label class="f">An (E-Mail aus dem Auftrag)</label><input class="i" id="to" type="email" value="${esc(istTest(o)?testAn():(n.an||o.bauleiterMail||""))}" placeholder="E-Mail des Kunden">${testHinweis(o)}
    ${o.bauleiterMail?"":`<div class="small" style="color:var(--bad)">Im Auftrag ist keine E-Mail-Adresse hinterlegt – bitte eintragen.</div>`}
    <label class="f">Betreff</label><input class="i" id="sj" value="${esc(nmbBetreff(o))}">
    <label class="row" style="margin-top:8px;gap:8px;flex-wrap:nowrap"><input type="checkbox" id="wf" ${vorher.length?"checked":"disabled"} style="width:20px;height:20px">${vorher.length} Vorher-Foto(s) anhängen</label>
@@ -1446,7 +1450,7 @@ function nmbDialog(id){
         st.innerHTML=`<span class="spin"></span> wird gesendet …`;
         await S.mcp.callTool(GM,"send_message",{to:[toV],subject:sj,body:text+"\n\n(Das Schreiben liegt zusätzlich als PDF bei.)",attachments:atts});
         await upd(orderPath(id),{einsatz:{nmb:{schreibenAm:Date.now(),an:toV,grund:gr.value.trim()}}});
-        if(!o.bauleiterMail) await upd(orderPath(id),{bauleiterMail:toV});
+        if(!o.bauleiterMail && !istTest(o)) await upd(orderPath(id),{bauleiterMail:toV});
         close(); toast("Schreiben gesendet ✓ – jetzt den Kunden anrufen",3500);
       }catch(e){
         btn.disabled=false;
@@ -1745,7 +1749,7 @@ function abnahmeDialog(id){
   modal(`<h2>Sichtabnahme an Kunden senden</h2>
    <div class="small mute">Bitte prüfen, ob alles richtig ausgefüllt ist. Ändern kannst du die Angaben in der Karte „Montagebericht &amp; Sichtabnahme“.</div>
    <div id="pv" style="margin-top:8px;min-height:60px"><span class="spin"></span> Vorschau wird erstellt …</div>
-   <label class="f">An (Bauleiter)</label><input class="i" id="to" value="${esc(o.bauleiterMail||"")}" placeholder="E-Mail des Bauleiters">
+   <label class="f">An (Bauleiter)</label><input class="i" id="to" value="${esc(istTest(o)?testAn():(o.bauleiterMail||""))}" placeholder="E-Mail des Bauleiters">${testHinweis(o)}
    ${o.bauleiterMail?"":`<div class="small" style="color:var(--bad)">Keine Bauleiter-Mail im Auftrag – bitte eintragen (steht auf dem Aufmaß-Deckblatt).</div>`}
    <label class="f">Betreff</label><input class="i" id="sj" value="${esc(`Zustandsfeststellung / Sichtabnahme – Auftrag ${o.nr} ${o.bauvorhaben||""}`.trim())}">
    <label class="f">Text</label><textarea class="i" id="bd" style="min-height:300px">${esc(abnahmeMailText(o,frist))}</textarea>
@@ -1763,7 +1767,7 @@ function abnahmeDialog(id){
         const pdf=await makeAbnahmePdf(o); const b64=await blobToB64(pdf);
         st.innerHTML=`<span class="spin"></span> wird gesendet …`;
         await S.mcp.callTool(GM,"send_message",{to:[toV],subject:m.querySelector("#sj").value.trim(),body:m.querySelector("#bd").value,attachments:[{content:b64,filename:`Sichtabnahme_${idOf(o.nr)}.pdf`,mimeType:"application/pdf"}]});
-        if(!o.bauleiterMail) await upd(orderPath(id),{bauleiterMail:toV});
+        if(!o.bauleiterMail && !istTest(o)) await upd(orderPath(id),{bauleiterMail:toV});
         await upd(orderPath(id),{abnahmeAnfrage:{am:Date.now(),an:toV,frist}});
         close(); toast("Sichtabnahme gesendet ✓");
       }catch(e){ btn.disabled=false; st.textContent=(e.code==="server_unavailable"||e.code==="upstream_error")?"Unklar, ob die Mail raus ist – bitte im Gmail-Postausgang nachsehen.":"Nicht gesendet: "+(e.code?mcpMsg(e):(e.message||e)); }
@@ -2184,6 +2188,7 @@ function viewSetup(){
     <div class="grid2"><div><label class="f">Monteur auf dem Vordruck</label><input class="i" data-s="monteurName" value="${esc(s.monteurName||"JD Brüder GbR")}"></div><div><label class="f">Monteursnummer</label><input class="i" data-s="monteurNr" value="${esc(s.monteurNr||"286")}"></div></div>
     <label class="f">Unsere Antwort-Adresse (für unterschriebene Sichtabnahmen)</label><input class="i" data-s="antwortEmail" value="${esc(s.antwortEmail||"jd.brueder.meta@gmail.com")}">
     <label class="f">Montageberichte gehen an</label><input class="i" data-s="berichtEmail" value="${esc(s.berichtEmail||"Montagebericht@meta.de")}">
+    <label class="f">Mails von Testaufträgen gehen an</label><input class="i" data-s="testEmail" value="${esc(s.testEmail||"jd.brueder.meta@gmail.com")}">
     <label class="f">Gmail-Suche für Aufträge</label><input class="i" data-s="gmailQuery" value="${esc(s.gmailQuery||DEFAULT_QUERY)}">
     <div class="small mute" style="margin-top:4px">Holt Wochenübersichten, Montagezusagen, Montageabrechnungen und Mails der Disposition mit Unterlagen (z. B. „Auftrag Nr. 16872“ mit Dokumente.pdf).</div>
     <div class="small mute" style="margin-top:6px">Automatischer Abruf alle 15 Minuten: Aufträge, PDFs/Unterlagen und Deckblätter von meta.${s.autoAbruf?` ${s.autoAbruf.postfach?` Postfach: <b>${esc(s.autoAbruf.postfach)}</b>.`:""} Zuletzt ${fmtDT(s.autoAbruf.am)} (${s.autoAbruf.quelle==="zeitplan"?"automatisch":"von Hand"}): ${s.autoAbruf.neu||0} neu, ${s.autoAbruf.aktualisiert||0} aktualisiert, ${s.autoAbruf.dateien||0} Unterlagen${s.autoAbruf.fehler?`, <span style="color:var(--bad)">${s.autoAbruf.fehler} Fehler</span>`:""}.`:s.letzterAbruf?` Letzter Abruf: ${fmtDT(s.letzterAbruf)}`:""}</div>
@@ -2771,8 +2776,8 @@ function berichtDialog(id){
   if((typ==="rekla"||typ==="leerfahrt") && rk) (rk.fotos||[]).forEach(a=>cands.push({assetId:a,label:"Reklamation",def:true}));
   if(o.unterschrift) cands.push({assetId:o.unterschrift.assetId,label:"Unterschrift",def:true,png:true});
   const subject=`${o.nr} ${o.bauvorhaben||""}`.trim()+(typ==="leerfahrt"?" – Leerfahrt":typ==="rekla"?" – Reklamation":"");
-  const to=S.settings.berichtEmail||"Montagebericht@meta.de";
-  modal(`<h2>Bericht abschicken</h2>
+  const to=istTest(o)?testAn():(S.settings.berichtEmail||"Montagebericht@meta.de");
+  modal(`<h2>Bericht abschicken</h2>${testHinweis(o)}
    <label class="f">PDF-Vorschau Montagebericht</label>
    <div id="pv" style="min-height:60px"><span class="spin"></span> Vorschau wird erstellt …</div>
    <div class="small mute">Stimmt etwas nicht? Schließen und im Montagebericht oder unter „Montagebericht-PDF“ korrigieren.</div>
