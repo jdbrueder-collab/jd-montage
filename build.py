@@ -2,7 +2,7 @@
 from pathlib import Path
 
 here = Path(__file__).parent
-html = (here / "original-claude.html").read_text()
+html = (here / "original-claude.html").read_text(encoding="utf-8")
 
 HEAD = """<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -41,5 +41,5 @@ for old, new in REPLACE:
     assert old in html, f"nicht gefunden: {old}"
     html = html.replace(old, new)
 assert "/_blob/" not in html.replace('"_blob/', "")
-(here / "index.html").write_text(html)
+(here / "index.html").write_text(html, encoding="utf-8")
 print("index.html gebaut")

@@ -3,3 +3,4 @@ google-client.json
 supabase/.temp/
 .gmail-secrets.env
 migration/
+.claude/

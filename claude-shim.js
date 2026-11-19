@@ -78,6 +78,12 @@
   const loading = {};    // col -> Promise
   const subs = new Set(); // { col, fn }
   const clone = v => (v == null ? v : JSON.parse(JSON.stringify(v)));
+  const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+  const deepMerge = (a, b) => {
+    const out = { ...a };
+    for (const k of Object.keys(b)) out[k] = isObj(b[k]) && isObj(a[k]) ? deepMerge(a[k], b[k]) : b[k];
+    return out;
+  };
   const docSnap = (id, data) => ({ id, exists: data !== undefined, data: () => clone(data) });
   const notify = col => subs.forEach(s => s.col === col && s.fn());
 
@@ -133,9 +139,14 @@
       },
       async update(patch) {
         await ready;
-        const { error } = await sb.rpc("doc_update", { p_col: col, p_id: id, p_patch: patch });
+        // Unterobjekte (z. B. bericht, vordruck, einsatz) zusammenführen statt ersetzen,
+        // sonst gehen beim Ändern eines Feldes alle anderen Felder darin verloren.
+        const cur = (await loadCol(col).catch(() => null))?.get(id) || {};
+        const full = {};
+        for (const k of Object.keys(patch)) full[k] = isObj(patch[k]) && isObj(cur[k]) ? deepMerge(cur[k], patch[k]) : patch[k];
+        const { error } = await sb.rpc("doc_update", { p_col: col, p_id: id, p_patch: full });
         if (error) throw fail("write_failed", error.message);
-        local(col, id, { ...(cache[col]?.get(id) || {}), ...clone(patch) });
+        local(col, id, { ...(cache[col]?.get(id) || {}), ...clone(full) });
       },
       async delete() {
         await ready;
@@ -211,6 +222,8 @@
     return data;
   }
   const mcp = { callTool: (_server, tool, args) => callFn("gmail", { tool, args }) };
+  // Mail-Abruf auf dem Server (läuft sonst automatisch alle 15 Minuten)
+  const sync = { run: (body = {}) => callFn("sync", body) };
   const sample = {
     limits: async () => ({ images: true }),
     async json(prompt, opts = {}) {
@@ -280,7 +293,7 @@
     }
   };
 
-  const services = { db, user, assets, mcp, sample, downloads };
+  const services = { db, user, assets, mcp, sample, downloads, sync };
   window.claude = {
     async use(name) {
       await ready;

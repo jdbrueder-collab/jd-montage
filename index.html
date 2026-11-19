@@ -48,6 +48,11 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .seg{display:flex;background:var(--greybg);border-radius:11px;padding:3px;gap:3px;flex-wrap:wrap}
 .seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:8px 6px;font-weight:650;font-size:13px;cursor:pointer;color:var(--grey);min-height:38px}
 .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg.phasen button{display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.15;min-width:70px}
+.seg.phasen .n{font-size:11px;font-weight:700;background:var(--line);color:var(--grey);border-radius:9px;padding:0 7px}
+.seg.phasen button.on .n{background:var(--brand);color:#fff}
+.seg.phasen button.st.on .n{background:var(--bad)}
+.order.storno{opacity:.75}.order.storno .bv{text-decoration:line-through}
 .toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
 .toolbar input{flex:1}
 .kw{margin:18px 2px 8px;display:flex;align-items:baseline;gap:8px}
@@ -68,6 +73,8 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
 .thumbs .t{position:relative;aspect-ratio:1;border-radius:9px;overflow:hidden;background:var(--greybg);border:1px solid var(--line);cursor:zoom-in}
 .thumbs .t img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbs .t.pdf{display:flex;flex-direction:column;align-items:center;justify-content:center;text-decoration:none;color:var(--ink);cursor:pointer;padding:4px;text-align:center}
+.thumbs .t.pdf span{font-size:30px}.thumbs .t.pdf small{font-size:10.5px;word-break:break-all;line-height:1.2;max-height:2.4em;overflow:hidden}
 .thumbs .t .x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:7px;width:24px;height:24px;cursor:pointer;font-size:13px}
 .thumbs .add{display:flex;align-items:center;justify-content:center;flex-direction:column;border:2px dashed var(--line);border-radius:9px;aspect-ratio:1;color:var(--mute);font-size:12px;cursor:pointer;text-align:center;padding:4px}
 .thumbs .add span{font-size:22px}
@@ -82,6 +89,16 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .steps{display:flex;gap:4px;margin:6px 0 12px}
 .steps div{flex:1;height:6px;border-radius:3px;background:var(--line)}
 .steps div.on{background:var(--ok)}
+.steps div.cur{background:var(--accent)}
+.q{font-size:18px;font-weight:750;margin:4px 0 10px}
+.choice{display:grid;gap:8px}
+.choice .btn{min-height:56px;font-size:16px;justify-content:flex-start;padding-left:16px}
+.choice .btn.on{background:var(--brand);color:#fff}
+.miss{margin:8px 0 0;padding:0;list-style:none}
+.miss li{color:var(--bad);font-size:13.5px;padding:2px 0}
+.miss li.soft{color:var(--warn)}
+.sonder{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)}
+.letter{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px;font-size:13px;line-height:1.5;white-space:pre-wrap;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .person{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .person:last-child{border-bottom:0}
 .av{width:30px;height:30px;border-radius:50%;background:var(--brand2);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none}
@@ -147,11 +164,14 @@ const wkKey = (j,k) => (j||0)*100+(k||0);
 function mondayOf(jahr,kw){ const s=new Date(Date.UTC(jahr,0,4)); const d=(s.getUTCDay()||7); s.setUTCDate(s.getUTCDate()-d+1+(kw-1)*7); return new Date(s.getUTCFullYear(),s.getUTCMonth(),s.getUTCDate()); }
 
 const URSACHEN = {
-  selbst:"Selbstverschulden",
+  selbst:"Selbst verursacht",
   baustelle:"Baustelle nicht montagefertig",
-  teile:"Fehlerhafte/fehlende Teile vom Hersteller",
+  teile:"Fehlerhafte Teile",
   sonst:"Sonstiges"
 };
+const FAHRZEUGE = {auto:"Auto", anhaenger:"Auto mit Anhänger", zwei:"Zwei Autos mit Anhänger"};
+const LEERFAHRT_NMB = "Leerfahrt – Baustelle nicht montagefertig";
+const SONDER_VORLAGEN = ["Abdeckrohr wegen Wandvorbau ausgeklemmt","Füße geklebt und gebohrt","Spiegel abgemacht und Rohr neu angeklebt"];
 const PROD = {offen:["Produktion offen",""], in_produktion:["In Produktion","warn"], produziert:["Produziert","info"], abholbereit:["Abholbereit","ok"]};
 const RECHNUNG = {offen:["Freigabe nötig","warn"], freigegeben:["Freigegeben – in Lexware anlegen","info"], erstellt:["Erstellt – Versand freigeben","info"], versendet:["Versendet","ok"], bezahlt:["Bezahlt","ok"]};
 const ROLLEN = {chef:"Chef", monteur:"Monteur", sub:"Subunternehmer", hersteller:"meta (Hersteller)"};
@@ -164,7 +184,7 @@ const S = {
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
   profiles:{},pendingRender:false,anfragen:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
-  lohnPos:[],preise:null,lohn:{},lohnFor:{}
+  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{}
 };
 
 function toast(msg,ms=2600){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms); }
@@ -183,7 +203,7 @@ function modal(html, onMount, onClose){
 }
 function confirmBox(title, text, okLabel="Ja", cls="pri"){
   return new Promise(res=>{
-    modal(`<h2>${esc(title)}</h2><p class="mute">${text}</p><div class="grid2" style="margin-top:14px"><button class="btn" data-no>Abbrechen</button><button class="btn ${cls}" data-yes>${esc(okLabel)}</button></div>`,(m,close)=>{
+    modal(`<h2>${esc(title)}</h2><div class="mute">${text}</div><div class="grid2" style="margin-top:14px"><button class="btn" data-no>Abbrechen</button><button class="btn ${cls}" data-yes>${esc(okLabel)}</button></div>`,(m,close)=>{
       m.querySelector("[data-no]").onclick=()=>{close();res(false)};
       m.querySelector("[data-yes]").onclick=()=>{close();res(true)};
     });
@@ -202,6 +222,7 @@ const can = {
   produktion:()=>S.isOwner||S.role==="chef"||S.role==="hersteller",
   reklaErledigen:()=>S.isOwner||S.role==="chef"||S.role==="hersteller",
   mails:()=>S.isOwner && !!S.mcp,
+  senden:()=>!!S.mcp && (S.isOwner||S.role==="chef"||S.role==="monteur"),
   setup:()=>S.isOwner||S.role==="chef"
 };
 function myId(){ return S.me?.id || null; }
@@ -237,6 +258,14 @@ function totalMs(o){ return (o.zeiten||[]).reduce((s,z)=>s+((z.e||Date.now())-z.
 function running(o){ const z=(o.zeiten||[]); return z.length && !z[z.length-1].e; }
 function offeneReklas(id){ return Object.values(S.reklas).filter(r=>r.auftragId===id && r.offen); }
 function istFertig(o){ return !!o.abschluss; }
+// Bereiche der Startansicht: nicht verplant → verplant & in Arbeit → erledigt; stornierte extra
+const PHASEN=[["offen","Nicht verplant"],["arbeit","Verplant & in Arbeit"],["erledigt","Erledigt"],["storniert","Storniert"]];
+function phase(o){
+  if(o.storniert) return "storniert";
+  if(istFertig(o)) return "erledigt";
+  if(o.terminStatus==="fest" || o.einsatz || (o.zeiten||[]).length) return "arbeit";
+  return "offen";
+}
 
 /* ============ Boot ============ */
 async function boot(){
@@ -245,8 +274,8 @@ async function boot(){
   setInterval(tick, 1000);
   const claude = window.claude;
   if(!claude || !claude.use){ S.loadErr="App konnte nicht starten. Bitte Seite neu laden."; render(); return; }
-  const [db,user,mcp,sample,assets] = await Promise.all(["db","user","mcp","sample","assets"].map(n=>claude.use(n).catch(()=>null)));
-  Object.assign(S,{db,user,mcp,sample,assets});
+  const [db,user,mcp,sample,assets,sync] = await Promise.all(["db","user","mcp","sample","assets","sync"].map(n=>claude.use(n).catch(()=>null)));
+  Object.assign(S,{db,user,mcp,sample,assets,sync});
   if(!db){ S.loadErr="Daten sind gerade nicht erreichbar. Bitte neu anmelden."; render(); return; }
   if(user){
     try{ S.isOwner = !!(await user.isOwner()); }catch(e){}
@@ -288,7 +317,7 @@ async function maybeStoreOwner(){
     try{ await setDoc("einstellungen/allgemein",{...S.settings, ownerId:myId()}); }catch(e){}
   }
 }
-function editing(){ const a=document.activeElement; return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest("#app"); }
+function editing(){ const a=document.activeElement; return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && !/^(checkbox|radio|file|button)$/i.test(a.type||"") && a.closest("#app"); }
 let rq=false;
 function scheduleRender(){ if(editing()){ S.pendingRender=true; return; } if(rq) return; rq=true; requestAnimationFrame(()=>{ rq=false; render(); }); }
 
@@ -358,6 +387,7 @@ function bindPending(){
 /* ---------- Liste ---------- */
 function orderChips(o){
   const c=[];
+  if(o.storniert){ c.push(`<span class="chip bad">❌ Storniert${o.storniert.am?" am "+new Date(o.storniert.am).toLocaleDateString("de-DE"):""}</span>`); if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`); return c.join(""); }
   if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o)) c.push(`<span class="chip gold">NEU</span>`);
   if(o.abschluss){
     const t=o.abschluss.typ;
@@ -370,8 +400,11 @@ function orderChips(o){
     if(o.terminStatus==="fest") c.push(`<span class="chip ok">Fest: ${esc(o.termin?fmtDate(o.termin):"terminiert")}</span>`);
     else c.push(`<span class="chip warn">Muss terminiert werden</span>`);
     const p=PROD[o.prodStatus||"offen"]; if(o.prodStatus && o.prodStatus!=="offen") c.push(`<span class="chip ${p[1]}">${p[0]}</span>`);
+    if(o.quelle==="mail-dispo"&&!o.zusage) c.push(`<span class="chip gold">📨 Anfrage von meta</span>`);
     if(o.versand) c.push(`<span class="chip ${/nicht/i.test(o.versand)?"":"ok"}">${esc(o.versand)}</span>`);
-    if((o.leerfahrten||[]).length) c.push(`<span class="chip bad">${o.leerfahrten.length}× Leerfahrt</span>`);
+    if((o.leerfahrten||[]).length) c.push(`<span class="chip bad">${o.leerfahrten.length>1?o.leerfahrten.length+"× ":""}${esc(o.leerfahrten[o.leerfahrten.length-1].status||"Leerfahrt")}</span>`);
+    if(o.einsatz?.bereit==="nein"&&!o.einsatz?.nmb?.weiter) c.push(`<span class="chip bad">⛔ Nicht montagebereit – Freigabe offen</span>`);
+    else if(o.einsatz?.fahrzeug&&!o.einsatz?.startAm&&!running(o)) c.push(`<span class="chip info">🚐 unterwegs / vor Ort</span>`);
   }
   if(o.abschluss && !o.abgerechnet) c.push(abnahmeChip(o));
   else if(o.abschluss && abnahmeFaellig(o)) c.push(abnahmeChip(o));
@@ -381,8 +414,8 @@ function orderChips(o){
   return c.join("");
 }
 function orderCard(o){
-  const hl = !istFertig(o) && o.terminStatus!=="fest" && (o.prodStatus==="abholbereit"||o.prodStatus==="produziert");
-  return `<a class="order ${istFertig(o)?"done":""} ${hl?"hl":""}" href="#a-${esc(o.id)}">
+  const hl = !istFertig(o) && !o.storniert && o.terminStatus!=="fest" && (o.prodStatus==="abholbereit"||o.prodStatus==="produziert");
+  return `<a class="order ${istFertig(o)?"done":""} ${hl?"hl":""} ${o.storniert?"storno":""}" href="#a-${esc(o.id)}">
     <div class="row between"><span class="nr">${esc(o.nr)}</span><span class="small mute">${o.kabinen?esc(o.kabinen)+" Kabinen":""}</span></div>
     <div class="bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
     <div class="small mute">${esc(o.plzOrt||o.adresse||"")}</div>
@@ -397,16 +430,20 @@ function viewListe(){
   let list=Object.values(S.orders).filter(sichtbar);
   const q=S.q.trim().toLowerCase();
   if(q) list=list.filter(o=>[o.nr,o.bauvorhaben,o.plzOrt,o.adresse,o.vorgang].join(" ").toLowerCase().includes(q));
-  if(S.filter==="offen") list=list.filter(o=>!istFertig(o)||offeneReklas(o.id).length||o.berichtStatus==="bereit"||o.berichtStatus==="pruefung"||abnahmeFaellig(o));
-  if(S.filter==="fertig") list=list.filter(istFertig);
-  if(S.filter==="meine") list=list.filter(o=>(o.monteure||[]).includes(myId()));
+  if(S.nurMeine) list=list.filter(o=>(o.monteure||[]).includes(myId()));
+  const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
+  const suche=!!q && PHASEN.some(([k])=>k===S.filter);
+  if(PHASEN.some(([k])=>k===S.filter) && !suche) list=list.filter(o=>phase(o)===S.filter);
   if(S.filter==="pruefung") list=list.filter(o=>o.berichtStatus==="pruefung");
   if(S.filter==="abnahme") list=list.filter(o=>istFertig(o)&&abnahmeStatus(o)!=="ok"&&abnahmeStatus(o)!=="verzicht");
   const groups={};
   list.forEach(o=>{ const w=planWeek(o); const k=w.kw?wkKey(w.jahr,w.kw):0; (groups[k]=groups[k]||{w,items:[]}).items.push(o); });
-  const keys=Object.keys(groups).map(Number).sort((a,b)=>S.filter==="fertig"?b-a:a-b);
+  const keys=Object.keys(groups).map(Number).sort((a,b)=>S.filter==="erledigt"||S.filter==="storniert"?b-a:a-b);
   let h=`<div class="toolbar"><input class="i" id="q" placeholder="Nummer, Bauvorhaben, Ort suchen …" value="${esc(S.q)}"></div>
-  <div class="seg" id="flt">${[["offen","Offen"],["meine","Meine"],["fertig","Erledigt"],["alle","Alle"]].map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}</button>`).join("")}</div>`;
+  <div class="seg phasen" id="flt">${PHASEN.map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""} ${k==="storniert"?"st":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
+  <label class="row small" style="margin-top:8px;gap:6px;cursor:pointer;width:max-content"><input type="checkbox" id="nurMeine" ${S.nurMeine?"checked":""} style="width:18px;height:18px"> Nur meine Aufträge</label>
+  ${suche?`<div class="banner info small" style="margin-top:8px">Suche in allen Bereichen.</div>`:""}
+  ${S.filter==="storniert"&&!suche?`<div class="small mute" style="margin-top:8px">Aufträge, die reingekommen sind, aber von meta wieder storniert wurden.</div>`:""}`;
   if(can.planen()){
     h+=`<div class="row" style="margin-top:10px"><button class="btn sm ghost" id="newOrder">＋ Auftrag von Hand anlegen</button></div>`;
   }
@@ -417,15 +454,15 @@ function viewListe(){
   const pruef=Object.values(S.orders).filter(o=>o.berichtStatus==="pruefung");
   if(can.planen() && pruef.length && S.filter!=="pruefung") h+=`<div class="banner warn" style="margin-top:10px;cursor:pointer" id="pruefBanner">📥 <b>${pruef.length} Bericht${pruef.length>1?"e":""} von Subunternehmern</b> zu prüfen. <u>Anzeigen</u></div>`;
   if(S.filter==="pruefung") h+=`<div class="banner warn" style="margin-top:10px">Berichte von Subunternehmern zur Prüfung · <a href="#" id="abnBack">alle anzeigen</a></div>`;
-  const faellig=Object.values(S.orders).filter(o=>sichtbar(o)&&abnahmeFaellig(o));
-  if(can.planen() && faellig.length && S.filter!=="abnahme") h+=`<div class="banner bad" style="margin-top:10px;cursor:pointer" id="abnBanner">⏰ <b>${faellig.length} Sichtabnahme${faellig.length>1?"n":""}</b> seit über einer Woche offen – Kunden informieren. <u>Anzeigen</u></div>`;
+  const faellig=Object.values(S.orders).filter(o=>sichtbar(o)&&meinAuftrag(o)&&abnahmeFaellig(o));
+  if(faellig.length && S.filter!=="abnahme") h+=`<div class="banner bad" style="margin-top:10px;cursor:pointer" id="abnBanner">⏰ <b>${faellig.length} Abnahme${faellig.length>1?"n":""}</b> seit über einer Woche offen${faellig.some(o=>o.berichtGesendetAm)?" (Bericht schon verschickt)":""} – bitte beim Kunden nachhaken. <u>Anzeigen</u></div>`;
   if(S.filter==="abnahme") h+=`<div class="banner warn" style="margin-top:10px">Aufträge mit offener Sichtabnahme · <a href="#" id="abnBack">alle anzeigen</a></div>`;
   if(!list.length) h+=`<div class="empty">Keine Aufträge in dieser Ansicht.</div>`;
   const nowK=wkKey(NOW.jahr,NOW.kw);
   keys.forEach(k=>{
     const g=groups[k]; g.items.sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
     const label = k? `KW ${g.w.kw}/${g.w.jahr}` : "Ohne KW";
-    const tag = k===nowK?`<span class="now">diese Woche</span>`:(k && k<nowK && S.filter!=="fertig"?`<span class="now" style="color:var(--bad)">vergangen</span>`:"");
+    const tag = k===nowK?`<span class="now">diese Woche</span>`:(k && k<nowK && (S.filter==="offen"||S.filter==="arbeit")?`<span class="now" style="color:var(--bad)">vergangen</span>`:"");
     let range=""; if(k){ const m=mondayOf(g.w.jahr,g.w.kw); const f=new Date(m); f.setDate(f.getDate()+4); range=`${m.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${f.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`; }
     h+=`<div class="kw"><b>${label}</b><span class="small mute">${range} · ${g.items.length} Auftr.</span>${tag}</div>`;
     h+=g.items.map(orderCard).join("");
@@ -447,6 +484,7 @@ function viewDetail(id){
   const reklas=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,b)=>b.am-a.am);
   const w=planWeek(o);
   let h=`<button class="back" data-back>← Alle Aufträge</button>`;
+  if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
   // Kopf
   h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
@@ -467,6 +505,7 @@ function viewDetail(id){
     <label class="f">Monteure</label>
     <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip info">👷 ${esc(nameOf(m))}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand eingeteilt</span>`}
     ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ einteilen</button>`:""}</div>
+    ${can.planen()&&!o.storniert?`<button class="btn sm ghost" id="stornoSetzen" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}
   </div>`;
 
   // Baustelle
@@ -499,44 +538,18 @@ function viewDetail(id){
    ${can.mails()&&o.zusageMail?.att?.length?`<button class="btn sm ghost" id="mailUnterlagen">✉︎ Unterlagen aus Mail holen</button>`:""}
    </div></div>`;
 
-  // Einsatz / Bericht
+  // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Abnahme → Versand
   if(can.einsatz()){
-    const r=running(o), b=o.bericht||{};
-    h+=`<div class="card"><h3>Einsatz &amp; Montagebericht</h3>
-      ${istFertig(o)?"":`<button class="btn pri block" id="speak" style="margin-bottom:8px">🎤 Bericht einsprechen</button>`}
-      <button class="btn ghost block" id="fahrtAdd" style="margin-bottom:12px">🚗 Fahrt ins Fahrtenbuch eintragen${(()=>{ const k=Object.values(S.fahrten).filter(f=>f.auftragId===o.id).reduce((a,f)=>a+nn(f.km),0); return k?` · bisher ${k} km`:""; })()}</button>
-      ${istFertig(o)?`<div class="banner ${o.abschluss.typ==="ok"?"ok":"warn"}">Abgeschlossen am ${fmtDT(o.abschluss.am)} von ${esc(nameOf(o.abschluss.by))}${o.abschluss.typ==="rekla"?" – mit Reklamation":""}. ${can.planen()?`<button class="btn sm ghost" id="reopen" style="margin-left:6px">Wieder öffnen</button>`:""}</div>`:""}
-      <div class="row between"><div><div class="small mute">Arbeitszeit gesamt</div><div class="timer" data-timer="${esc(id)}">${fmtDur(totalMs(o))}</div></div>
-      ${istFertig(o)?"":`<button class="btn ${r?"bad":"ok"}" id="timerBtn" style="min-width:140px">${r?"■ Stopp":"▶ Start"}</button>`}</div>
-      ${(o.zeiten||[]).length?`<div class="small mute" style="margin-top:6px">${o.zeiten.map((z,i)=>`${fmtDT(z.s)} – ${z.e?new Date(z.e).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"läuft"} (${fmtHM((z.e||Date.now())-z.s)})${can.planen()?` <a href="#" data-delz="${i}">löschen</a>`:""}`).join("<br>")}</div>`:""}
-      <div class="grid3" style="margin-top:6px">
-        <div><label class="f">Soll-km (Karte)</label><input class="i" data-b="sollKm" data-top="1" inputmode="decimal" value="${esc(o.sollKm??"")}" ${can.planen()?"":"disabled"} placeholder="–"></div>
-        <div><label class="f">Gefahrene km</label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}" placeholder="0"></div>
-        <div><label class="f">Personen</label><input class="i" data-b="personen" inputmode="numeric" value="${esc(b.personen??"")}" placeholder="2"></div>
-      </div>
-      ${route?`<div class="small" style="margin-top:4px"><a href="${esc(route)}" target="_blank" rel="noopener">Strecke Betrieb → Baustelle in Google Maps ansehen ↗</a>${o.sollKm&&b.istKm?` · Abweichung: <b>${(Number(String(b.istKm).replace(",","."))-Number(String(o.sollKm).replace(",","."))).toFixed(0)} km</b>`:""}</div>`:(can.setup()?`<div class="small mute" style="margin-top:4px">Tipp: Firmenadresse in den Einstellungen hinterlegen, dann gibt's hier den Routen-Link.</div>`:"")}
-      <div class="grid2">
-        <div><label class="f">Übernachtung (Hotel)</label><select class="i" data-b="hotel"><option value="nein" ${b.hotel!=="ja"?"selected":""}>Nein</option><option value="ja" ${b.hotel==="ja"?"selected":""}>Ja</option></select></div>
-        <div><label class="f">Nächte / Zimmer-Personen</label><input class="i" data-b="hotelInfo" value="${esc(b.hotelInfo??"")}" placeholder="z. B. 1 Nacht, 2 Pers." ${b.hotel==="ja"?"":"disabled"}></div>
-      </div>
-      <label class="f">Was wurde gemacht?</label>
-      <textarea class="i" data-b="taetigkeit" placeholder="z. B. 9 Kabinen in EG, 1. und 2. OG montiert, Passschnitte vor Ort …">${esc(b.taetigkeit??"")}</textarea>
-      <label class="f">Fotos vorher</label>${thumbs(fk("vorher"),"vorher",true)}
-      <label class="f">Fotos nachher</label>${thumbs(fk("nachher"),"nachher",true)}
-      <label class="f">Weitere Fotos (z. B. Papierbericht)</label>${thumbs(fk("vordruck"),"vordruck",true)}
-      <label class="f">Abnahme / Unterschrift</label>
-      ${o.unterschrift?`<div class="row"><img src="_blob/${esc(o.unterschrift.assetId)}" alt="Unterschrift" style="height:70px;border:1px solid var(--line);border-radius:8px;background:#fff"><div class="small">${esc(o.unterschrift.name||"")}<br><span class="mute">${fmtDT(o.unterschrift.am)}</span></div></div>`:""}
-      <button class="btn sm ghost" id="sign" style="margin-top:6px">✍️ ${o.unterschrift?"Neu unterschreiben lassen":"Unterschrift auf dem Handy"}</button>
-      ${istFertig(o)?"":`<div style="margin-top:16px;display:grid;gap:8px">
-        <button class="btn ok block" id="finOk">✓ Montage fertig – alles gut</button>
-        <button class="btn warn block" id="finRekla">⚠ Montage fertig – mit Reklamation</button>
-        <button class="btn ghost block" id="finLeer" style="color:var(--bad)">✕ Leerfahrt – Baustelle nicht montagefertig</button></div>`}
-    </div>`;
+    h+=einsatzCard(o,fk);
+    const st=schritt(o);
+    if(st==="bericht"||st==="fertig"){
+      h+=berichtCard(o,fk);
+      if(S.lohnPos.length) h+=lohnCard(o);
+      h+=abnahmeTeil(o,fk);
+      h+=abschlussCard(o,fk);
+      h+=vordruckCard(o);
+    }
   }
-
-  // Akkord-Montagebericht je Mitarbeiter
-  if(can.einsatz() && S.lohnPos.length) h+=lohnCard(o);
-  if(can.einsatz()) h+=vordruckCard(o);
 
   // Bericht-Versand
   if(o.berichtStatus==="pruefung"){
@@ -547,8 +560,9 @@ function viewDetail(id){
     h+=`<div class="card"><h3>Bericht</h3><div class="banner ok">Von JD Brüder geprüft${o.berichtStatus==="gesendet"?" und an meta übermittelt":""} ✓</div></div>`;
   } else if(o.berichtStatus){
     h+=`<div class="card"><h3>Bericht an meta</h3>
-     ${o.berichtStatus==="gesendet"?`<div class="banner ok">Gesendet am ${fmtDT(o.berichtGesendetAm)} an ${esc(o.berichtAn||"")}</div>`:`<div class="banner warn">Bericht ist fertig und wartet auf Versand${can.mails()?"":" durch den Chef"}.</div>`}
-     ${can.mails()?`<button class="btn pri block" id="sendBericht">✉︎ ${o.berichtStatus==="gesendet"?"Erneut senden":"Bericht an meta senden"}</button>`:""}
+     ${o.berichtStatus==="gesendet"?`<div class="banner ok">Gesendet am ${fmtDT(o.berichtGesendetAm)} an ${esc(o.berichtAn||"")}</div>`:`<div class="banner warn">Bericht ist fertig und wartet auf Versand${can.senden()?"":" durch den Chef"}.</div>`}
+     ${o.berichtStatus!=="gesendet"&&!abnahmeOk(o)&&o.berichtTyp!=="leerfahrt"?`<div class="small mute" style="margin-bottom:8px">Die Abnahme steht noch aus – der Bericht kann trotzdem schon verschickt werden. Eine Woche nach dem Versand erinnert die App, falls dann noch keine Abnahme vorliegt.</div>`:""}
+     ${can.senden()?`<button class="btn pri block" id="sendBericht">✉︎ ${o.berichtStatus==="gesendet"?"Erneut senden":"Bericht abschicken"}</button>`:""}
      ${S.isOwner&&!S.mcp?`<div class="small mute">Gmail ist noch nicht eingerichtet.</div>`:""}</div>`;
   }
   if(istFertig(o) && (can.einsatz()||can.produktion())) h+=abnahmeCard(o);
@@ -564,7 +578,7 @@ function viewDetail(id){
   return h;
 }
 function thumbs(list, kat, canAdd){
-  return `<div class="thumbs">${list.map(f=>`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>`:""}</div>`).join("")}
+  return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
   ${canAdd&&S.assets?`<label class="add"><span>＋</span>Foto<input type="file" accept="image/*,application/pdf" multiple hidden data-upload="${kat}"></label>`:""}</div>
   ${canAdd&&!S.assets?`<div class="small mute">Fotos hochladen ist für dich gerade nicht freigeschaltet (Zugriff als „Bearbeiter“ nötig).</div>`:""}`;
 }
@@ -598,6 +612,339 @@ function finanzCard(o,f){
    ${actions}</div>`;
 }
 
+/* ---------- Einsatz-Ablauf ---------- */
+const SCHRITTE=[["fahrzeug","Abfahrt"],["ankunft","Ankunft"],["vorher","Vorher-Fotos"],["nmb","Montagebereit"],["start","Montagestart"],["montage","Montage"],["bericht","Montagebericht"],["fertig","Abgeschlossen"]];
+const LEISTUNG={wc:"WC-Trennwände",schraenke:"Schränke",sonst:"Sonstiges"};
+const leer=v=>v===undefined||v===null||String(v).trim()==="";
+function schritt(o){
+  if(istFertig(o)) return "fertig";
+  const e=o.einsatz;
+  if(!e){ if(running(o)) return "montage"; if((o.zeiten||[]).length) return "bericht"; return "fahrzeug"; }
+  if(!e.fahrzeug) return "fahrzeug";
+  if(!e.ankunftAm) return "ankunft";
+  if(!e.bereit) return "vorher";
+  if(e.bereit==="nein" && !e.nmb?.weiter) return "nmb";
+  if(!e.startAm) return "start";
+  if(!e.fertigAm) return "montage";
+  return "bericht";
+}
+// "6:30", "6h30", "6 Std 30" → Minuten; "6,5" oder "6" → Stunden; "90 min" → Minuten
+function parseMin(v){
+  v=String(v??"").trim(); if(!v) return null;
+  const m=v.match(/^(\d+)\s*(?::|h|std\.?)\s*(\d{1,2})\s*(?:min\.?)?$/i); if(m) return (+m[1])*60+(+m[2]);
+  const mm=v.match(/^(\d+)\s*min\.?$/i); if(mm) return +mm[1];
+  const x=parseFloat(v.replace(",",".")); return isNaN(x)?null:Math.round(x*60);
+}
+const fmtHMin=min=>`${Math.floor(min/60)}:${String(Math.round(min%60)).padStart(2,"0")}`;
+const fmtStd=min=>String(Math.round((nn(min)/60)*100)/100).replace(".",",");
+function arbeitszeitMin(o){ const b=o.bericht||{}; if(b.arbeitszeitMin!=null&&b.arbeitszeitMin!=="") return nn(b.arbeitszeitMin); const ms=totalMs(o); return ms?Math.round(ms/60000):null; }
+function zeitenListe(o){
+  return (o.zeiten||[]).length?`<div class="small mute" style="margin-top:6px">${o.zeiten.map((z,i)=>`${fmtDT(z.s)} – ${z.e?new Date(z.e).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"läuft"} (${fmtHM((z.e||Date.now())-z.s)})${can.planen()?` <a href="#" data-delz="${i}">löschen</a>`:""}`).join("<br>")}</div>`:"";
+}
+function stepBackPatch(o){
+  const st=schritt(o), e=o.einsatz||{};
+  if(!o.einsatz||istFertig(o)) return null;
+  if(st==="ankunft") return {einsatz:{fahrzeug:null,abfahrtAm:null}};
+  if(st==="vorher") return {einsatz:{ankunftAm:null}};
+  if(st==="nmb") return {einsatz:{bereit:null}};
+  if(st==="start") return e.bereit==="nein"?{einsatz:{nmb:{weiter:false}}}:{einsatz:{bereit:null}};
+  if(st==="bericht") return {einsatz:{fertigAm:null}};
+  return null;
+}
+function einsatzCard(o,fk){
+  const st=schritt(o), e=o.einsatz||{}, id=o.id, b=o.bericht||{};
+  const idx=SCHRITTE.findIndex(s=>s[0]===st);
+  let h=`<div class="card" id="einsatzCard"><div class="row between"><h3 style="margin:0">Einsatz</h3>${e.fahrzeug?`<span class="chip">🚐 ${esc(FAHRZEUGE[e.fahrzeug]||e.fahrzeug)}</span>`:""}</div>
+   <div class="steps" style="margin-top:10px">${SCHRITTE.map((s,i)=>`<div class="${i<idx||st==="fertig"?"on":i===idx?"cur":""}"></div>`).join("")}</div>
+   <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
+  if(st==="fahrzeug"){
+    h+=`<div class="q">Womit wird gefahren?</div><div class="choice">${Object.entries(FAHRZEUGE).map(([k,l])=>`<button class="btn ${e.fahrzeug===k?"on":""}" data-fz="${k}">🚐 ${l}</button>`).join("")}</div>`;
+  } else if(st==="ankunft"){
+    h+=`<div class="q">Auf der Baustelle angekommen?</div>
+     <div class="small mute" style="margin-bottom:10px">Abfahrt ${fmtDT(e.abfahrtAm)} · ${esc(adresseOf(o))}</div>
+     <button class="btn ok block" id="ankunft" style="min-height:56px;font-size:16px">✓ Ja, wir sind angekommen</button>`;
+  } else if(st==="vorher"){
+    const n=fk("vorher").length, frei=n||!S.assets, w=S.bereitWahl[id];
+    h+=`<div class="q">Vorher-Fotos machen</div>
+     <div class="banner info small">Bitte fotografiert die Baustelle, bevor ihr anfangt. So ist festgehalten, wie ihr sie vorgefunden habt.</div>
+     ${thumbs(fk("vorher"),"vorher",true)}
+     <div class="q" style="margin-top:16px">Baustelle montagebereit?</div>
+     ${frei?"":`<div class="small" style="color:var(--bad);margin-bottom:6px">Bitte zuerst mindestens ein Vorher-Foto hinzufügen.</div>`}
+     <div class="grid2"><button class="btn ${w==="ja"?"ok":""}" id="bereitJa" ${frei?"":"disabled"} style="min-height:52px">✓ Ja</button><button class="btn" id="bereitNein" ${frei?"":"disabled"} style="min-height:52px">✕ Nein</button></div>
+     ${w==="ja"?`<button class="btn pri block" id="bereitWeiter" style="margin-top:10px;min-height:52px">Weiter → Montagestart</button>`:""}`;
+  } else if(st==="nmb"){
+    h+=nmbTeil(o);
+  } else if(st==="start"){
+    const pv=e.personenVorOrt||b.personen||(o.monteure||[]).length||"";
+    h+=`<div class="q">Montage beginnen?</div>
+     <label class="f">Wie viele Personen sind vor Ort?</label>
+     <div class="row" style="flex-wrap:nowrap"><button class="btn" data-pv="-1" style="width:56px">−</button><input class="i" id="pvo" inputmode="numeric" value="${esc(pv)}" style="text-align:center;font-weight:700"><button class="btn" data-pv="1" style="width:56px">＋</button></div>
+     <div class="grid2" style="margin-top:12px"><button class="btn" id="startNein" style="min-height:52px">Nein, noch nicht</button><button class="btn ok" id="startJa" style="min-height:52px">▶ Ja, beginnen</button></div>`;
+  } else if(st==="montage"){
+    const r=running(o);
+    h+=`<div class="row between"><div><div class="small mute">Arbeitszeit${e.personenVorOrt?` · ${esc(e.personenVorOrt)} Pers. vor Ort`:""}</div><div class="timer" data-timer="${esc(id)}">${fmtDur(totalMs(o))}</div></div>
+       <button class="btn ${r?"":"ok"}" id="timerBtn" style="min-width:120px">${r?"⏸ Pause":"▶ Weiter"}</button></div>
+     ${zeitenListe(o)}
+     <button class="btn ok block" id="montageFertig" style="margin-top:14px;min-height:56px;font-size:16px">■ Timer stoppen – Montage abgeschlossen</button>`;
+  } else {
+    h+=`${istFertig(o)?`<div class="banner ${o.abschluss.typ==="ok"?"ok":"warn"}">Abgeschlossen am ${fmtDT(o.abschluss.am)} von ${esc(nameOf(o.abschluss.by))}${o.abschluss.typ==="rekla"?" – mit Reklamation":""}. ${can.planen()?`<button class="btn sm ghost" id="reopen" style="margin-left:6px">Wieder öffnen</button>`:""}</div>`:`<div class="banner ok">✓ Montage beendet${e.fertigAm?" am "+fmtDT(e.fertigAm):""}. Jetzt den Montagebericht ausfüllen.</div>`}
+     <div class="row between"><div><div class="small mute">Gemessene Arbeitszeit</div><div class="timer" style="font-size:26px">${fmtDur(totalMs(o))}</div></div>${istFertig(o)?"":`<button class="btn pri" id="toBericht">📝 Montagebericht</button>`}</div>
+     ${zeitenListe(o)}`;
+  }
+  return h+`</div>`;
+}
+function nmbTeil(o){
+  const n=o.einsatz?.nmb||{}; const tel=(o.bauleiterTel||"").replace(/[^\d+]/g,"");
+  const ok=n.freigabeMail&&n.freigabeTel;
+  return `<div class="banner warn"><b>Baustelle nicht montagebereit.</b> Weiter geht es erst, wenn der Kunde per E-Mail <u>und</u> telefonisch freigegeben hat.</div>
+   <div class="q" style="font-size:16px">1. Schreiben an den Kunden</div>
+   ${n.schreibenAm?`<div class="small" style="margin-bottom:6px">✓ Gesendet am ${fmtDT(n.schreibenAm)} an ${esc(n.an||"")}</div>`:`<div class="small mute" style="margin-bottom:6px">Das Schreiben wird automatisch mit den Auftragsdaten ausgefüllt. Du siehst es vor dem Versand.</div>`}
+   <button class="btn ${n.schreibenAm?"ghost":"pri"} block" id="nmbBrief">📄 ${n.schreibenAm?"Schreiben ansehen / erneut senden":"Schreiben ansehen &amp; senden"}</button>
+   ${n.schreibenAm?`<div class="q" style="font-size:16px;margin-top:16px">2. Kunden kontaktieren</div>
+     ${tel?`<a class="btn ok block" href="tel:${esc(tel)}" id="nmbTel">📞 Kunden kontaktieren</a>`:`<div class="btn block" style="opacity:.6">📞 Keine Telefonnummer im Auftrag</div>`}
+     ${o.bauleiterName||o.bauleiterTel?`<div class="small mute" style="margin-top:4px">${esc(o.bauleiterName||"")}${o.bauleiterTel?" · "+esc(o.bauleiterTel):""}${n.kontaktiertAm?` · zuletzt angerufen ${fmtDT(n.kontaktiertAm)}`:""}</div>`:""}`:""}
+   <div class="q" style="font-size:16px;margin-top:16px">${n.schreibenAm?"3":"2"}. Freigabe</div>
+   <label class="row" style="flex-wrap:nowrap;gap:10px;padding:8px 0;cursor:pointer"><input type="checkbox" data-nmb="freigabeMail" ${n.freigabeMail?"checked":""} style="width:24px;height:24px"><span>Freigabe liegt <b>per E-Mail</b> vor</span></label>
+   <label class="row" style="flex-wrap:nowrap;gap:10px;padding:8px 0;cursor:pointer"><input type="checkbox" data-nmb="freigabeTel" ${n.freigabeTel?"checked":""} style="width:24px;height:24px"><span>Freigabe wurde <b>telefonisch bestätigt</b></span></label>
+   <button class="btn pri block" id="nmbWeiter" ${ok?"":"disabled"} style="margin-top:8px;min-height:52px">Weiter → Montagestart</button>
+   ${ok?"":`<div class="small mute" style="margin-top:4px">„Weiter“ geht erst, wenn beide Freigaben abgehakt sind.</div>`}
+   <button class="btn ghost block" id="nmbLeer" style="margin-top:14px;color:var(--bad)">✕ Ohne Freigabe beenden – ${LEERFAHRT_NMB}</button>`;
+}
+function sonderVorschlaege(){
+  const cnt={}; SONDER_VORLAGEN.forEach(t=>cnt[t]=0);
+  Object.values(S.orders).forEach(x=>(x.bericht?.sonder||[]).forEach(s=>{ const t=(s.arbeit||"").trim(); if(t) cnt[t]=(cnt[t]||0)+1; }));
+  return Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b,"de"));
+}
+function berichtCard(o,fk){
+  const b=o.bericht||{}, e=o.einsatz||{}, fertig=istFertig(o), az=arbeitszeitMin(o);
+  const gem=totalMs(o)?Math.round(totalMs(o)/60000):null;
+  const route=S.settings.firmenAdresse?`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(S.settings.firmenAdresse)}&destination=${encodeURIComponent(adresseOf(o))}`:"";
+  const fahrtKm=Object.values(S.fahrten).filter(f=>f.auftragId===o.id).reduce((a,f)=>a+nn(f.km),0);
+  const sv=sonderVorschlaege();
+  return `<div class="card" id="berichtCard"><h3>Montagebericht</h3>
+   ${fertig?"":`<div class="grid2" style="margin-bottom:8px"><button class="btn pri" id="speak">🎤 Montagebericht einsprechen</button><button class="btn" id="manuell">✏️ Manuell ausfüllen</button></div>
+   <div class="small mute" style="margin-bottom:4px">Beim Einsprechen trägt die App alles in die passenden Felder ein. Prüfe danach die Angaben und ergänze oder korrigiere sie.</div>`}
+   <label class="f">Was wurde gemacht? (Tätigkeit)</label>
+   <textarea class="i" data-b="taetigkeit" id="fTaet" placeholder="z. B. 9 Kabinen in EG, 1. und 2. OG montiert, Passschnitte vor Ort …">${esc(b.taetigkeit??"")}</textarea>
+   <div class="grid3">
+     <div><label class="f">Arbeitszeit (Std:Min)</label><input class="i" id="fAz" value="${az!=null?fmtHMin(az):""}" placeholder="z. B. 6:30"></div>
+     <div><label class="f">Personen vor Ort</label><input class="i" data-b="personen" inputmode="numeric" value="${esc(b.personen??e.personenVorOrt??"")}"></div>
+     <div><label class="f">Mitgefahrene Personen</label><input class="i" data-b="personenMit" inputmode="numeric" value="${esc(b.personenMit??"")}"></div>
+     <div><label class="f">Selbst gefahrene km</label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}"></div>
+     <div><label class="f">Geschosse (Material getragen)</label><input class="i" data-b="geschosse" value="${esc(b.geschosse??"")}" placeholder="z. B. EG, 1. OG"></div>
+     <div><label class="f">Übernachtungen</label><input class="i" data-b="uebernachtungen" inputmode="numeric" value="${esc(b.uebernachtungen??(b.hotel==="ja"?(b.hotelInfo||"1"):""))}" placeholder="0"></div>
+   </div>
+   ${gem!=null&&az!=null&&az!==gem?`<div class="small mute" style="margin-top:4px">Gemessen: ${fmtHMin(gem)} Std. · <a href="#" id="azReset">übernehmen</a></div>`:""}
+   ${route&&can.planen()?`<div class="small" style="margin-top:4px"><a href="${esc(route)}" target="_blank" rel="noopener">Strecke Betrieb → Baustelle ansehen ↗</a>${o.sollKm?` · Soll: ${esc(o.sollKm)} km`:""}</div>`:""}
+   <label class="f" style="margin-top:16px">Sonderleistungen</label>
+   ${(b.sonder||[]).map((s,i)=>`<div class="sonder"><div style="flex:1;min-width:0"><b>${esc(s.arbeit)}</b><div class="small mute">${esc(s.personen||1)} Pers. · ${fmtStd(s.min)} Std.</div></div><button class="btn sm ghost" data-sdel="${i}" title="Entfernen">✕</button></div>`).join("")||`<div class="small mute">Noch keine Sonderleistungen.</div>`}
+   <div style="margin-top:8px;background:var(--greybg);border-radius:10px;padding:10px">
+     <input class="i" id="sArb" list="sonderListe" placeholder="Ausgeführte Arbeit – auswählen oder eintippen">
+     <datalist id="sonderListe">${sv.map(t=>`<option value="${esc(t)}">`).join("")}</datalist>
+     <div class="row" style="margin-top:6px;gap:5px">${sv.slice(0,6).map(t=>`<button class="chip" data-spick="${esc(t)}" style="border:0;cursor:pointer;white-space:normal;text-align:left">${esc(t)}</button>`).join("")}</div>
+     <div class="grid3" style="margin-top:6px"><input class="i" id="sPers" inputmode="numeric" placeholder="Personen"><input class="i" id="sDauer" placeholder="Dauer, z. B. 1:30"><button class="btn" id="sAdd">＋ Hinzufügen</button></div>
+   </div>
+   <label class="f">Weitere Bemerkungen</label>
+   <textarea class="i" data-b="bemerkung" placeholder="Alles, was sonst noch in den Bericht gehört …">${esc(b.bemerkung??"")}</textarea>
+   <label class="f">Fotos</label>${thumbs(fk("nachher"),"nachher",true)}
+   <button class="btn ghost block" id="fahrtAdd" style="margin-top:12px">🚗 Fahrt ins Fahrtenbuch eintragen${fahrtKm?` · bisher ${fahrtKm} km`:""}</button>
+  </div>`;
+}
+function abnahmeTeil(o,fk){
+  const art=o.bericht?.abnahmeArt||(o.unterschrift?"handy":o.abnahmePapier?"papier":"");
+  let h=`<div class="card" id="abnahmeTeil"><h3>Abnahme</h3>
+   <div class="seg" id="abnArt"><button data-aa="papier" class="${art==="papier"?"on":""}">📄 Papierbericht</button><button data-aa="handy" class="${art==="handy"?"on":""}">✍️ Unterschrift am Handy</button></div>`;
+  if(art==="papier") h+=`<label class="f">Foto vom unterschriebenen Papierbericht</label>${thumbs(fk("vordruck"),"vordruck",true)}
+    <label class="row" style="flex-wrap:nowrap;gap:10px;padding:10px 0 0;cursor:pointer"><input type="checkbox" id="abnPapier" ${o.abnahmePapier?"checked":""} style="width:24px;height:24px"><span>Der Papierbericht ist unterschrieben</span></label>`;
+  if(art==="handy"){
+    const v=vd(o);
+    if(o.unterschrift) h+=`<div class="row" style="margin-top:10px;flex-wrap:nowrap"><img src="_blob/${esc(o.unterschrift.assetId)}" alt="Unterschrift" style="height:70px;max-width:50%;border:1px solid var(--line);border-radius:8px;background:#fff"><div class="small">${esc(o.unterschrift.name||"")}<br><span class="mute">${fmtDT(o.unterschrift.am)}<br>${esc(v.leistung==="sonst"?(v.leistungSonst||"Sonstiges"):LEISTUNG[v.leistung]||"")} · ${v.maengelJa==="ja"?"Mängel":"Keine Mängel"}</span></div></div>
+       <div class="grid2" style="margin-top:8px"><button class="btn sm" id="sign">Neu unterschreiben lassen</button><button class="btn sm ghost" id="sigDel" style="color:var(--bad)">Unterschrift löschen</button></div>`;
+    else h+=`<button class="btn pri block" id="sign" style="margin-top:10px">✍️ Abnahme am Handy starten</button>`;
+    if(fk("abnahme").length) h+=`<label class="f">Fotos zur Abnahme</label>${thumbs(fk("abnahme"),"abnahme",true)}`;
+  }
+  h+=`<div class="small ${abnahmeOk(o)?"":"mute"}" style="margin-top:10px">${abnahmeOk(o)?"✓ Abnahme liegt vor":"Abnahme steht noch aus – der Bericht kann trotzdem verschickt werden."}</div></div>`;
+  return h;
+}
+function fehlendeAngaben(o,fk){
+  const b=o.bericht||{}, r=[];
+  if(leer(b.taetigkeit)) r.push({t:"Tätigkeit fehlt"});
+  if(!arbeitszeitMin(o)) r.push({t:"Arbeitszeit fehlt"});
+  if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen"});
+  if(leer(b.personenMit)) r.push({t:"Mitgefahrene Personen fehlen"});
+  if(leer(b.istKm)) r.push({t:"Kilometer fehlen"});
+  if(leer(b.geschosse)) r.push({t:"Geschosse fehlen"});
+  if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Positionen fehlen"});
+  if(fk && !fk("vorher").length) r.push({t:"Vorher-Fotos fehlen",soft:true});
+  if(!abnahmeOk(o)) r.push({t:"Abnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true});
+  return r;
+}
+const missList=f=>`<ul class="miss">${f.map(x=>`<li class="${x.soft?"soft":""}">• ${esc(x.t)}</li>`).join("")}</ul>`;
+function abschlussCard(o,fk){
+  if(istFertig(o)) return "";
+  const f=fehlendeAngaben(o,fk);
+  return `<div class="card"><h3>Montageabschluss</h3>
+   ${f.length?`<div class="small"><b>Noch offen:</b></div>${missList(f)}`:`<div class="banner ok small" style="margin:0">Alle Angaben vollständig ✓</div>`}
+   <div style="display:grid;gap:8px;margin-top:12px">
+    <button class="btn ok block" id="finOk">✓ Montage fertig – alles gut</button>
+    <button class="btn warn block" id="finRekla">⚠ Montage mit Reklamation</button></div></div>`;
+}
+function bindEinsatz(o){
+  const id=o.id, P=orderPath(id), e=o.einsatz||{};
+  document.querySelectorAll("[data-fz]").forEach(b=>b.onclick=()=>upd(P,{einsatz:{fahrzeug:b.dataset.fz,abfahrtAm:Date.now(),von:myId()}}));
+  $("#ankunft") && ($("#ankunft").onclick=()=>{ upd(P,{einsatz:{ankunftAm:Date.now()}}); toast("Bitte jetzt Vorher-Fotos machen 📷",3500); });
+  $("#bereitJa") && ($("#bereitJa").onclick=()=>{ S.bereitWahl[id]="ja"; render(); });
+  $("#bereitWeiter") && ($("#bereitWeiter").onclick=()=>{ delete S.bereitWahl[id]; upd(P,{einsatz:{bereit:"ja"}}); });
+  $("#bereitNein") && ($("#bereitNein").onclick=async()=>{ if(!await confirmBox("Baustelle nicht montagebereit?","Dann wird zuerst ein Schreiben an den Kunden vorbereitet. Weiter geht es erst mit Freigabe per E-Mail und Telefon.","Ja, nicht montagebereit","warn")) return; delete S.bereitWahl[id]; upd(P,{einsatz:{bereit:"nein",nmb:{am:Date.now()}}}); });
+  $("#nmbBrief") && ($("#nmbBrief").onclick=()=>nmbDialog(id));
+  $("#nmbTel") && ($("#nmbTel").onclick=()=>{ upd(P,{einsatz:{nmb:{kontaktiertAm:Date.now()}}}); });
+  document.querySelectorAll("[data-nmb]").forEach(c=>c.onchange=()=>upd(P,{einsatz:{nmb:{[c.dataset.nmb]:c.checked,[c.dataset.nmb+"Am"]:c.checked?Date.now():null}}}));
+  $("#nmbWeiter") && ($("#nmbWeiter").onclick=()=>{ const n=e.nmb||{}; if(!(n.freigabeMail&&n.freigabeTel)) return toast("Bitte erst beide Freigaben abhaken"); upd(P,{einsatz:{nmb:{weiter:true}}}); });
+  $("#nmbLeer") && ($("#nmbLeer").onclick=()=>leerfahrtDialog(id));
+  document.querySelectorAll("[data-pv]").forEach(b=>b.onclick=()=>{ const i=$("#pvo"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.pv)); });
+  $("#startNein") && ($("#startNein").onclick=()=>toast("Okay – tippe auf „Ja, beginnen“, sobald ihr loslegt."));
+  $("#startJa") && ($("#startJa").onclick=async()=>{
+    const pv=parseInt($("#pvo").value,10); if(!(pv>0)) return toast("Bitte die Anzahl der Personen vor Ort eintragen");
+    const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(!running(o)) z.push({s:now,by:myId()});
+    await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv},bericht:{personen:String(pv)}}); toast("Montage läuft ⏱");
+  });
+  $("#montageFertig") && ($("#montageFertig").onclick=async()=>{
+    if(!await confirmBox("Montage abgeschlossen?","Der Timer wird gestoppt und die gemessene Zeit als Arbeitszeit in den Bericht übernommen.","Ja, abgeschlossen","ok")) return;
+    const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
+    const min=Math.round(z.reduce((s,x)=>s+(x.e-x.s),0)/60000);
+    await upd(P,{zeiten:z,einsatz:{fertigAm:now},bericht:{arbeitszeitMin:min}});
+    setTimeout(()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}),300);
+  });
+  $("#toBericht") && ($("#toBericht").onclick=()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}));
+  $("#stepBack") && ($("#stepBack").onclick=async ev=>{ ev.preventDefault(); const p=stepBackPatch(o); if(!p) return; if(!await confirmBox("Einen Schritt zurück?","Die Angabe aus dem letzten Schritt wird zurückgenommen.","Zurück")) return; delete S.bereitWahl[id]; upd(P,p); });
+  // Bericht
+  $("#manuell") && ($("#manuell").onclick=()=>{ const t=$("#fTaet"); t.scrollIntoView({behavior:"smooth",block:"center"}); setTimeout(()=>t.focus(),350); });
+  const az=$("#fAz"); if(az) az.onchange=()=>{ const v=az.value.trim(); if(!v) return upd(P,{bericht:{arbeitszeitMin:null}}); const m=parseMin(v); if(m==null) return toast("Arbeitszeit bitte als Std:Min eingeben, z. B. 6:30"); upd(P,{bericht:{arbeitszeitMin:m}}); };
+  $("#azReset") && ($("#azReset").onclick=ev=>{ ev.preventDefault(); upd(P,{bericht:{arbeitszeitMin:Math.round(totalMs(o)/60000)}}); });
+  document.querySelectorAll("[data-spick]").forEach(c=>c.onclick=()=>{ $("#sArb").value=c.dataset.spick; $("#sPers").focus(); });
+  $("#sAdd") && ($("#sAdd").onclick=()=>{
+    const arbeit=$("#sArb").value.trim(), pers=parseInt($("#sPers").value,10), min=parseMin($("#sDauer").value);
+    if(!arbeit) return toast("Bitte die ausgeführte Arbeit eintragen");
+    if(!(pers>0)) return toast("Bitte die Anzahl der Personen eintragen");
+    if(!min) return toast("Bitte die Dauer eintragen, z. B. 1:30 oder 1,5");
+    upd(P,{bericht:{sonder:[...(o.bericht?.sonder||[]),{arbeit,personen:pers,min}]}}); toast("Sonderleistung hinzugefügt");
+  });
+  document.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Sonderleistung entfernen?","","Entfernen","bad")) return; upd(P,{bericht:{sonder:(o.bericht?.sonder||[]).filter((_,i)=>i!==Number(b.dataset.sdel))}}); });
+  // Abnahme
+  document.querySelectorAll("#abnArt [data-aa]").forEach(b=>b.onclick=()=>upd(P,{bericht:{abnahmeArt:b.dataset.aa}}));
+  $("#abnPapier") && ($("#abnPapier").onchange=()=>upd(P,{abnahmePapier:$("#abnPapier").checked?{am:Date.now(),von:myId()}:null}));
+  $("#sigDel") && ($("#sigDel").onclick=async()=>{ if(!await confirmBox("Unterschrift löschen?","Danach kann eine neue Unterschrift erfasst werden.","Löschen","bad")) return; const a=o.unterschrift?.assetId; await upd(P,{unterschrift:null}); if(a&&S.assets){ try{ await S.assets.delete(a); }catch(err){} } toast("Unterschrift gelöscht"); });
+}
+
+/* ---------- Leerfahrt / Schreiben „nicht montagebereit“ ---------- */
+function leerfahrtDialog(id){
+  const o=S.orders[id], e=o.einsatz||{}, b=o.bericht||{};
+  const vorher=Object.values(S.fotos).filter(f=>f.kat==="vorher");
+  modal(`<h2>${LEERFAHRT_NMB}</h2>
+   <div class="banner warn small">Der Einsatz wird ohne Freigabe beendet und als „${LEERFAHRT_NMB}“ gespeichert. Der Auftrag geht zurück auf „muss terminiert werden“.</div>
+   <label class="f">Was war nicht fertig? *</label><textarea class="i" id="t" placeholder="z. B. Fliesen noch nicht verlegt, Räume nicht zugänglich …">${esc(e.nmb?.grund||"")}</textarea>
+   <div class="grid3"><div><label class="f">Selbst gefahrene km</label><input class="i" id="km" inputmode="decimal" value="${esc(b.istKm||o.sollKm||"")}"></div><div><label class="f">Personen vor Ort</label><input class="i" id="pp" inputmode="numeric" value="${esc(b.personen||e.personenVorOrt||(o.monteure||[]).length||"")}"></div><div><label class="f">Mitgefahren</label><input class="i" id="pm" inputmode="numeric" value="${esc(b.personenMit||"")}"></div></div>
+   <div class="small mute" style="margin-top:6px">${e.abfahrtAm?"Abfahrt "+fmtDT(e.abfahrtAm)+" · ":""}${vorher.length} Vorher-Foto(s) werden als Nachweis gespeichert.${e.nmb?.schreibenAm?" Schreiben an den Kunden wurde am "+fmtDT(e.nmb.schreibenAm)+" gesendet.":""}</div>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Leerfahrt speichern</button></div>`,(m,close)=>{
+    m.querySelector("#ok").onclick=async()=>{
+      const text=m.querySelector("#t").value.trim(); if(!text) return toast("Bitte kurz beschreiben, was nicht fertig war");
+      const btn=m.querySelector("#ok"); btn.disabled=true;
+      try{
+        const now=Date.now(), rid=id+"_"+now.toString(36);
+        await setDoc("reklamationen/"+rid,{auftragId:id,ursache:"baustelle",text,fotos:vorher.map(f=>f.assetId),offen:true,am:now,von:myId(),leerfahrt:true});
+        const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
+        const ms=z.reduce((s,x)=>s+(x.e-x.s),0)||(e.abfahrtAm?now-e.abfahrtAm:0);
+        const lf=[...(o.leerfahrten||[]),{am:now,status:LEERFAHRT_NMB,km:m.querySelector("#km").value.trim(),personen:m.querySelector("#pp").value.trim(),personenMit:m.querySelector("#pm").value.trim(),fahrzeug:e.fahrzeug||"",minuten:Math.round(ms/60000),grund:text,schreibenAm:e.nmb?.schreibenAm||null,schreibenAn:e.nmb?.an||"",von:myId()}];
+        await upd(orderPath(id),{leerfahrten:lf,einsatz:null,zeiten:[],terminStatus:"zu_terminieren",berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:"leerfahrt"});
+        for(const f of vorher){ try{ await S.db.doc("fotos/"+f.id).update({kat:"leerfahrt"}); }catch(err){} }
+        close(); toast("Gespeichert als „"+LEERFAHRT_NMB+"“",3500);
+      }catch(err){ btn.disabled=false; }
+    };
+  });
+}
+const nmbBetreff=o=>`Baustelle nicht montagebereit – Auftrag ${o.nr}${o.bauvorhaben?" – "+o.bauvorhaben:""}`;
+function anredeOf(o){
+  const bn=(o.bauleiterName||"").trim(); const frau=/^Frau\b/i.test(bn), herr=/^Herrn?\b/i.test(bn), nach=bn.split(/\s+/).pop();
+  return (frau||herr)&&nach?`Sehr geehrte${frau?"":"r"} ${frau?"Frau":"Herr"} ${nach},`:"Sehr geehrte Damen und Herren,";
+}
+// Vorläufiges Schreiben. Wird durch die PDF-Vorlage ersetzt, sobald sie vorliegt.
+function nmbBriefText(o,grund){
+  const s=S.settings, firma=s.monteurName||"JD Brüder GbR", an=s.antwortEmail||"jd.brueder.meta@gmail.com";
+  const t=new Date(o.einsatz?.ankunftAm||Date.now());
+  const v=vd(o); const leistung=v.leistung==="schraenke"?"Schränke":v.leistung==="sonst"?(v.leistungSonst||"Anlagen"):"WC-Trennwände";
+  return `${anredeOf(o)}
+
+wir sind am ${t.toLocaleDateString("de-DE")} um ${t.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr zur vereinbarten Montage der ${leistung} für das Bauvorhaben ${[o.bauvorhaben,adresseOf(o)].filter(Boolean).join(", ")} (Auftrag ${o.nr}) auf der Baustelle eingetroffen.
+
+Leider ist die Baustelle nicht montagebereit. Die Montage kann deshalb im Moment nicht durchgeführt werden.${grund?`
+
+Festgestellt: ${grund}`:""}
+
+Damit wir mit der Montage beginnen können, benötigen wir Ihre Freigabe – bitte per E-Mail an ${an} und zusätzlich telefonisch.
+
+Fotos vom Zustand der Baustelle bei unserer Ankunft liegen bei.
+
+Liegt keine Freigabe vor, müssen wir den Einsatz abbrechen und einen neuen Termin mit Ihnen vereinbaren.
+
+Mit freundlichen Grüßen
+${firma}`;
+}
+async function makeBriefPdf(o,betreff,text){
+  const jsPDF=await loadJsPDF(); const pdf=new jsPDF({unit:"mm",format:"a4"});
+  const s=S.settings, firma=s.monteurName||"JD Brüder GbR";
+  pdf.setTextColor(13,42,107); pdf.setFont("helvetica","bold"); pdf.setFontSize(16); pdf.text(firma,20,22);
+  pdf.setFont("helvetica","normal"); pdf.setFontSize(9); pdf.setTextColor(90,90,90); pdf.text([s.firmenAdresse,s.antwortEmail||"jd.brueder.meta@gmail.com"].filter(Boolean).join(" · "),20,28);
+  pdf.setTextColor(0,0,0); pdf.setFontSize(10.5);
+  const empf=[...String(o.zahlungspflichtiger||"").split(",").map(x=>x.trim()).filter(Boolean).slice(0,3), o.bauleiterName?"z. Hd. "+o.bauleiterName:""].filter(Boolean);
+  if(empf.length) pdf.text(empf,20,48);
+  pdf.text(new Date().toLocaleDateString("de-DE"),190,48,{align:"right"});
+  pdf.setFont("helvetica","bold"); pdf.setFontSize(11.5); const bt=pdf.splitTextToSize(betreff,170); pdf.text(bt,20,78);
+  pdf.setFont("helvetica","normal"); pdf.setFontSize(10.5);
+  let y=78+bt.length*6+6;
+  for(const l of pdf.splitTextToSize(text,170)){ if(y>280){ pdf.addPage(); y=20; } pdf.text(l,20,y); y+=5.4; }
+  return pdf.output("blob");
+}
+function nmbDialog(id){
+  const o=S.orders[id], n=o.einsatz?.nmb||{};
+  const vorher=Object.values(S.fotos).filter(f=>f.kat==="vorher");
+  modal(`<h2>Schreiben: Baustelle nicht montagebereit</h2>
+   <div class="banner info small">Vorläufiges Schreiben mit den Auftragsdaten. Sobald die PDF-Vorlage da ist, wird sie hier automatisch verwendet.</div>
+   <label class="f">Was ist nicht fertig?</label><textarea class="i" id="gr" placeholder="z. B. Fliesen fehlen, Wände nicht verputzt …">${esc(n.grund||"")}</textarea>
+   <label class="f">Vorschau</label><div class="letter" id="pv"></div>
+   <label class="f">An (E-Mail aus dem Auftrag)</label><input class="i" id="to" type="email" value="${esc(n.an||o.bauleiterMail||"")}" placeholder="E-Mail des Kunden">
+   ${o.bauleiterMail?"":`<div class="small" style="color:var(--bad)">Im Auftrag ist keine E-Mail-Adresse hinterlegt – bitte eintragen.</div>`}
+   <label class="f">Betreff</label><input class="i" id="sj" value="${esc(nmbBetreff(o))}">
+   <label class="row" style="margin-top:8px;gap:8px;flex-wrap:nowrap"><input type="checkbox" id="wf" ${vorher.length?"checked":"disabled"} style="width:20px;height:20px">${vorher.length} Vorher-Foto(s) anhängen</label>
+   <div id="st" class="small mute" style="margin-top:8px"></div>
+   <div class="grid3" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn" id="pdf">⬇︎ PDF</button><button class="btn pri" id="ok">✉︎ Senden</button></div>`,(m,close)=>{
+    const gr=m.querySelector("#gr"), st=m.querySelector("#st");
+    const brief=()=>nmbBriefText(o,gr.value.trim());
+    const show=()=>{ m.querySelector("#pv").textContent=brief(); }; show();
+    gr.oninput=show; gr.onchange=()=>upd(orderPath(id),{einsatz:{nmb:{grund:gr.value.trim()}}});
+    m.querySelector("#pdf").onclick=async()=>{ try{ const blob=await makeBriefPdf(o,m.querySelector("#sj").value.trim(),brief()); const dl=await window.claude.use("downloads").catch(()=>null); if(dl) await dl.save({filename:`Baustelle_nicht_montagebereit_${idOf(o.nr)}.pdf`,data:blob}); }catch(e){ if(e?.code!=="cancelled") toast("PDF fehlgeschlagen: "+(e.message||e)); } };
+    m.querySelector("#ok").onclick=async()=>{
+      const toV=m.querySelector("#to").value.trim(), sj=m.querySelector("#sj").value.trim();
+      if(!/^\S+@\S+\.\S+$/.test(toV)) return toast("Bitte eine gültige E-Mail-Adresse eintragen");
+      if(!S.mcp) return toast("E-Mail-Versand ist hier nicht verfügbar – lade das PDF herunter und schick es selbst.");
+      if(!await confirmBox("Schreiben senden?",`An ${esc(toV)} – Betreff „${esc(sj)}“`,"Senden","pri")) return;
+      const btn=m.querySelector("#ok"); btn.disabled=true; st.innerHTML=`<span class="spin"></span> PDF wird erstellt …`;
+      try{
+        const text=brief(); const pdf=await makeBriefPdf(o,sj,text); const b64=await blobToB64(pdf);
+        const atts=[{content:b64,filename:`Baustelle_nicht_montagebereit_${idOf(o.nr)}.pdf`,mimeType:"application/pdf"}]; let size=b64.length;
+        if(m.querySelector("#wf").checked) for(const f of vorher.slice(0,6)){ try{ const raw=await (await fetch("_blob/"+f.assetId)).blob(); const bb=await blobToB64(await shrink(raw,1280,.72)); if(size+bb.length>850000) break; size+=bb.length; atts.push({content:bb,filename:`${idOf(o.nr)}_Vorher_${atts.length}.jpg`,mimeType:"image/jpeg"}); }catch(e){} }
+        st.innerHTML=`<span class="spin"></span> wird gesendet …`;
+        await S.mcp.callTool(GM,"send_message",{to:[toV],subject:sj,body:text+"\n\n(Das Schreiben liegt zusätzlich als PDF bei.)",attachments:atts});
+        await upd(orderPath(id),{einsatz:{nmb:{schreibenAm:Date.now(),an:toV,grund:gr.value.trim()}}});
+        if(!o.bauleiterMail) await upd(orderPath(id),{bauleiterMail:toV});
+        close(); toast("Schreiben gesendet ✓ – jetzt den Kunden anrufen",3500);
+      }catch(e){
+        btn.disabled=false;
+        st.textContent=e.code==="approval_required"?"Du darfst noch keine Mails über die App senden. Lade das PDF herunter und schick es selbst, oder frag den Chef.":(e.code==="server_unavailable"||e.code==="upstream_error")?"Unklar, ob die Mail raus ist – bitte im Gmail-Postausgang nachsehen.":"Nicht gesendet: "+(e.code?mcpMsg(e):(e.message||e));
+      }
+    };
+  });
+}
+
 /* ---------- Akkord / Montagebericht Mitarbeiter ---------- */
 const nn = v => { const x=parseFloat(String(v??"").replace(",",".")); return isNaN(x)?0:x; };
 const r2 = x => Math.round(x*100)/100;
@@ -615,6 +962,11 @@ function calcLohn(d,P){
   const km=r2(nn(d.kmMit)*nn(P.kmMit)); if(km) lines.push({label:"km mitgefahren",menge:nn(d.kmMit),ep:nn(P.kmMit),gp:km});
   return {lines,total:r2(lines.reduce((s,l)=>s+l.gp,0))};
 }
+function posNutzung(ohneAuftrag){
+  const n={};
+  Object.values(S.lohn).forEach(l=>{ if(l.auftragId===ohneAuftrag) return; Object.entries(l.mengen||{}).forEach(([k,v])=>{ if(nn(v)) n[k]=(n[k]||0)+1; }); });
+  return n;
+}
 function lohnPersonen(o){
   const ids=new Set(o.monteure||[]);
   Object.values(S.lohn).forEach(l=>{ if(l.auftragId===o.id) ids.add(l.uid); });
@@ -626,24 +978,27 @@ function lohnCard(o){
   const darfAndere=can.planen();
   let uid=S.lohnFor[o.id]; if(!uid || (!darfAndere && uid!==myId())) uid=myId();
   const d=S.lohn[lohnDocId(o.id,uid)]||{};
-  const P=can.preise()?preisFuer(uid):null;
+  // Chefs sehen die Liste der Person; Subunternehmer (z. B. Zeltwald) sehen ihre eigene hinterlegte Liste
+  const P=can.preise()?preisFuer(uid):(uid===myId()&&S.preise?S.preise:null);
   const editable=uid===myId()||darfAndere;
   const tage=[...new Set((o.zeiten||[]).map(z=>new Date(z.s).toLocaleDateString("de-DE")))].join(", ");
   const posRow=p=>{ const q=d.mengen?.[p.k]??""; const ep=P?nn(P.preise?.[p.k]):null;
     return `<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap"><div style="flex:1;min-width:0">${esc(p.label)}<div class="small mute">${esc(p.einheit||"")}${P?" · "+fmtEUR(ep):""}</div></div>
     <input class="i" style="width:74px;min-height:38px;text-align:right" inputmode="decimal" data-lq="${esc(p.k)}" value="${esc(q)}" ${editable?"":"disabled"} placeholder="0">
     ${P?`<div style="width:78px;text-align:right" class="small">${q?fmtEUR(r2(nn(q)*ep)):""}</div>`:""}</div>`; };
-  const haeufig=S.lohnPos.filter(p=>p.haeufig), rest=S.lohnPos.filter(p=>!p.haeufig);
-  const restMitWert=rest.filter(p=>nn(d.mengen?.[p.k]));
+  // Sortierung nach tatsächlicher Nutzung in anderen Aufträgen (stabil, solange man hier tippt)
+  const nutz=posNutzung(o.id);
+  const sortiert=[...S.lohnPos].sort((a,b)=>(nutz[b.k]||0)-(nutz[a.k]||0)||(b.haeufig?1:0)-(a.haeufig?1:0)||String(a.label).localeCompare(String(b.label),"de"));
   const c=calcLohn(d,P);
   const anz=Object.values(d.mengen||{}).filter(v=>nn(v)).length;
-  return `<div class="card"><details id="lohnDet" ${S.lohnOpen[o.id]?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionen ergänzen</b><div class="small mute">Akkordliste${anz?` · ${anz} Position${anz>1?"en":""} eingetragen`:""}${c?` · ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
+  const offen=S.lohnOpen[o.id]??true;
+  return `<div class="card"><details id="lohnDet" ${offen?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionsergänzung</b><div class="small mute">${anz?`${anz} Position${anz>1?"en":""} eingetragen`:"Mengen der montierten Positionen eintragen"}${c?` · Montagebetrag ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
    <div class="small mute" style="margin-bottom:6px">${esc(nameOf(uid))} · Auftrag ${esc(o.nr)} · ${esc(adresseOf(o))}${d.am?` · zuletzt ${fmtDT(d.am)}`:""}</div>
    <label class="f">Datum</label><input class="i" data-lf="datum" value="${esc(d.datum??tage)}" placeholder="z. B. 16.–17.11.2026" ${editable?"":"disabled"}>
-   <label class="f">Positionen (Menge eintragen)</label>
-   ${haeufig.map(posRow).join("")}${restMitWert.map(posRow).join("")}
-   <details style="margin-top:6px"><summary class="small" style="cursor:pointer;color:var(--brand2);padding:6px 0">Weitere Positionen (${rest.length-restMitWert.length})</summary>${rest.filter(p=>!nn(d.mengen?.[p.k])).map(posRow).join("")}</details>
+   <label class="f">Positionen (Menge eintragen) – häufig genutzte stehen oben</label>
+   ${sortiert.length>10?`<input class="i" id="posQ" placeholder="🔎 Position suchen, z. B. Aussparung" style="margin-bottom:6px">`:""}
+   <div id="posListe">${sortiert.map(posRow).join("")}</div>
    <label class="f">Etagengeld</label>
    <div class="grid3"><div><div class="small mute">Stockwerke</div><input class="i" data-lf="stockwerke" inputmode="decimal" value="${esc(d.stockwerke??"")}" ${editable?"":"disabled"}></div>
    <div><div class="small mute">Anzahl</div><input class="i" data-lf="etagenAnzahl" inputmode="decimal" value="${esc(d.etagenAnzahl??"")}" ${editable?"":"disabled"}></div>
@@ -651,7 +1006,8 @@ function lohnCard(o){
    <label class="f">Kilometer</label>
    <div class="grid2"><div><div class="small mute">selbst gefahren</div><input class="i" data-lf="kmSelbst" inputmode="decimal" value="${esc(d.kmSelbst??"")}" ${editable?"":"disabled"}></div>
    <div><div class="small mute">mitgefahren</div><input class="i" data-lf="kmMit" inputmode="decimal" value="${esc(d.kmMit??"")}" ${editable?"":"disabled"}></div></div>
-   ${c?`<div class="row between" style="margin-top:12px;padding-top:10px;border-top:2px solid var(--ink)"><b>Gesamt</b><span class="big">${fmtEUR(c.total)}</span></div>`:""}
+   ${c?`<div class="row between" style="margin-top:12px;padding-top:10px;border-top:2px solid var(--ink)"><b>Montagebetrag gesamt</b><span class="big">${fmtEUR(c.total)}</span></div>`:""}
+   ${!P&&can.sub()?`<div class="small mute" style="margin-top:8px">Für dich ist noch keine Preisliste hinterlegt.</div>`:""}
    ${S.isOwner&&!S.preise?`<div class="small mute" style="margin-top:8px">Noch keine Preisliste hinterlegt (Einstellungen).</div>`:""}
   </div></details></div>`;
 }
@@ -666,6 +1022,7 @@ async function saveLohn(o,uid,patch){
 function bindLohn(o){
   document.querySelectorAll("#lohnWho [data-lw]").forEach(b=>b.onclick=()=>{ S.lohnFor[o.id]=b.dataset.lw; render(); });
   const det=$("#lohnDet"); if(det) det.ontoggle=()=>{ S.lohnOpen[o.id]=det.open; };
+  const pq=$("#posQ"); if(pq) pq.oninput=()=>{ const q=pq.value.trim().toLowerCase(); document.querySelectorAll("#posListe [data-lq]").forEach(i=>{ const row=i.closest(".row"); row.style.display=!q||row.textContent.toLowerCase().includes(q)?"":"none"; }); };
   let uid=S.lohnFor[o.id]; if(!uid||(!can.planen()&&uid!==myId())) uid=myId();
   if(!uid) return;
   const path="lohnberichte/"+lohnDocId(o.id,uid);
@@ -679,8 +1036,8 @@ async function sprachDialog(id){
   const o=S.orders[id];
   const dict=await window.claude.use("dictation").catch(()=>null);
   const uns=[];
-  modal(`<h2>🎤 Bericht einsprechen</h2>
-   <div class="small mute">Erzähl einfach, was ihr gemacht habt – z. B. „Wir waren zu dritt, haben 9 Kabinen in EG, 1. und 2. OG montiert, 6 Trennwände, 3 Seitenwände, 6 Passschnitte, 390 Kilometer gefahren, eine Nacht im Hotel.“ Claude trägt das danach in die richtigen Felder ein.</div>
+  modal(`<h2>🎤 Montagebericht einsprechen</h2>
+   <div class="small mute">Erzähl einfach, was ihr gemacht habt – z. B. „Wir waren zu dritt vor Ort, einer ist mitgefahren. 9 Kabinen in EG, 1. und 2. OG montiert, Material in drei Geschosse getragen, 6 Trennwände, 2 Aussparungen, 390 Kilometer selbst gefahren, eine Übernachtung. Sonderleistung: Füße geklebt und gebohrt, zwei Mann eine Stunde.“ Claude trägt das danach in die richtigen Felder ein.</div>
    ${dict?`<button class="btn ok block" id="mic" style="margin-top:12px;min-height:64px;font-size:18px">🎤 Aufnahme starten</button>`:`<div class="banner info small" style="margin-top:10px">Tipp: Tippe ins Feld und nutze das 🎤 Mikrofon deiner Handy-Tastatur.</div>`}
    <div id="pt" class="small mute" style="min-height:20px;margin-top:8px;font-style:italic"></div>
    <textarea class="i" id="tx" style="min-height:160px" placeholder="Hier erscheint, was du sagst (du kannst auch tippen) …"></textarea>
@@ -716,43 +1073,62 @@ async function sprachDialog(id){
 }
 function sprachPrompt(o,text){
   const pos=S.lohnPos.map(p=>`${p.k} = ${p.label}${p.einheit?" ("+p.einheit+")":""}`).join("\n");
-  return `Ein Monteur der Firma JD Brüder hat eine Notiz zu seinem Montageeinsatz eingesprochen (Spracherkennung, kann Fehler enthalten).
+  return `Ein Monteur der Firma JD Brüder hat seinen Montagebericht eingesprochen (Spracherkennung, kann Fehler enthalten).
 Auftrag ${o.nr}, Bauvorhaben ${o.bauvorhaben||""}, ${adresseOf(o)}.
 
 Notiz:
 """${text}"""
 
 Ziehe daraus NUR Angaben, die wirklich genannt werden. Antworte NUR mit JSON in diesem Format (Felder weglassen, die nicht genannt sind):
-{"taetigkeit":"sauberer, kurzer Satz/Stichpunkte was gemacht wurde, auf Deutsch","istKm":Zahl gefahrene Kilometer,"personen":Zahl Personen,"hotel":"ja" oder "nein","hotelInfo":"z.B. 1 Nacht, 2 Zimmer","mengen":{"<schlüssel>":Zahl},"stockwerke":Zahl Stockwerke,"etagenAnzahl":Zahl,"kmSelbst":Zahl selbst gefahrene km,"kmMit":Zahl mitgefahrene km,"reklamation":"falls ein Problem/Schaden/fehlende Teile/Baustelle nicht fertig erwähnt wird: kurze Beschreibung, sonst weglassen"}
+{"taetigkeit":"sauberer, kurzer Satz/Stichpunkte, was gemacht wurde, auf Deutsch",
+"personenVorOrt":Zahl Personen, die vor Ort gearbeitet haben,
+"personenMit":Zahl Personen, die mitgefahren sind,
+"istKm":Zahl selbst gefahrene Kilometer,
+"geschosse":"Geschosse, in die Material getragen wurde, z.B. EG, 1. OG, 2. OG",
+"uebernachtungen":Zahl Übernachtungen,
+"arbeitszeit":"Arbeitszeit als Std:Min, nur wenn ausdrücklich genannt",
+"mengen":{"<schlüssel>":Zahl},
+"sonder":[{"arbeit":"Sonderleistung/Zusatzarbeit, kurz","personen":Zahl,"stunden":Zahl Stunden (Dezimal)}],
+"bemerkung":"weitere Bemerkungen, die in keines der Felder passen",
+"reklamation":"falls ein Problem/Schaden/fehlende Teile/Baustelle nicht fertig erwähnt wird: kurze Beschreibung, sonst weglassen"}
 
-Für "mengen" nur diese Schlüssel verwenden (Zahl = Anzahl, die DIESER Monteur gemacht hat):
+Für "mengen" nur diese Schlüssel verwenden (Zahl = montierte Anzahl):
 ${pos}
 
-Hinweise: "Kabinen" zählen als Vorderfront. Wenn nur gesagt wird "wir haben X km gefahren", setze istKm und kmSelbst auf X.`;
+Hinweise: "Kabinen" zählen als Vorderfront. Sonderleistungen sind Zusatzarbeiten außerhalb der Positionen, z. B. "Abdeckrohr wegen Wandvorbau ausgeklemmt", "Füße geklebt und gebohrt", "Spiegel abgemacht und Rohr neu angeklebt" – jeweils mit Personen und Dauer, wenn genannt. "eine Nacht im Hotel" bedeutet uebernachtungen = 1.`;
 }
 function zeigeVorschlag(m,o,r,text,close){
   r=r||{}; const rows=[]; const lbl=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k;
-  const B={taetigkeit:"Was wurde gemacht",istKm:"Gefahrene km",personen:"Personen",hotel:"Übernachtung",hotelInfo:"Hotel-Info"};
-  Object.keys(B).forEach(k=>{ if(r[k]!==undefined&&r[k]!==null&&r[k]!=="") rows.push({t:"b",k,label:B[k],v:String(r[k])}); });
+  if(r.personenVorOrt!=null&&r.personen==null) r.personen=r.personenVorOrt;
+  const B={taetigkeit:"Was wurde gemacht",personen:"Personen vor Ort",personenMit:"Mitgefahrene Personen",istKm:"Selbst gefahrene km",geschosse:"Geschosse (Material getragen)",uebernachtungen:"Übernachtungen",arbeitszeit:"Arbeitszeit",bemerkung:"Weitere Bemerkungen"};
+  Object.keys(B).forEach(k=>{ if(!leer(r[k])) rows.push({t:"b",k,label:B[k],v:String(r[k])}); });
   Object.entries(r.mengen||{}).forEach(([k,v])=>{ if(nn(v)&&S.lohnPos.some(p=>p.k===k)) rows.push({t:"m",k,label:lbl(k),v:String(v)}); });
-  [["stockwerke","Stockwerke (Etagengeld)"],["etagenAnzahl","Anzahl (Etagengeld)"],["kmSelbst","km selbst gefahren"],["kmMit","km mitgefahren"]].forEach(([k,l])=>{ if(r[k]!==undefined&&r[k]!==""&&r[k]!==null) rows.push({t:"l",k,label:l,v:String(r[k])}); });
+  (Array.isArray(r.sonder)?r.sonder:[]).forEach(s=>{ if(!leer(s?.arbeit)) rows.push({t:"s",label:"Sonderleistung",v:`${s.arbeit} – ${s.personen||1} Pers. × ${String(s.stunden??"?").replace(".",",")} Std.`,s}); });
   const res=m.querySelector("#res");
   if(!rows.length && !r.reklamation){ res.innerHTML=`<div class="banner warn" style="margin-top:10px">Ich habe nichts Eindeutiges gefunden. Sag es nochmal etwas genauer.</div>`; return; }
-  res.innerHTML=`<div class="card" style="margin-top:12px;background:var(--okbg);border-color:#bfe3cc"><b>Das trage ich ein:</b>
-   ${rows.map((x,i)=>`<label class="row" style="flex-wrap:nowrap;padding:6px 0;border-bottom:1px solid #d6ecdd;align-items:flex-start"><input type="checkbox" checked data-ri="${i}" style="width:20px;height:20px;margin-top:2px"><div style="flex:1"><div class="small mute">${esc(x.label)}${x.t==="m"?" · Mitarbeiter-Bericht":""}</div><div>${esc(x.v)}</div></div></label>`).join("")}
-   ${r.reklamation?`<div class="banner warn small" style="margin:8px 0 0">⚠ Problem erwähnt: „${esc(r.reklamation)}“ – bitte über „Montage fertig – mit Reklamation“ (mit Fotos) erfassen.</div>`:""}</div>`;
+  res.innerHTML=`<div class="card" style="margin-top:12px;background:var(--okbg);border-color:#bfe3cc"><b>Das trage ich ein:</b> <span class="small mute">(Haken entfernen, was nicht stimmt – danach kannst du alles im Bericht korrigieren)</span>
+   ${rows.map((x,i)=>`<label class="row" style="flex-wrap:nowrap;padding:6px 0;border-bottom:1px solid #d6ecdd;align-items:flex-start"><input type="checkbox" checked data-ri="${i}" style="width:20px;height:20px;margin-top:2px"><div style="flex:1"><div class="small mute">${esc(x.label)}${x.t==="m"?" · Positionsergänzung":""}</div><div>${esc(x.v)}</div></div></label>`).join("")}
+   ${r.reklamation?`<div class="banner warn small" style="margin:8px 0 0">⚠ Problem erwähnt: „${esc(r.reklamation)}“ – bitte beim Abschluss über „Montage mit Reklamation“ (mit Fotos) erfassen.</div>`:""}</div>`;
   const btns=m.querySelector("#btns"); btns.innerHTML=`<button class="btn" data-close2>Abbrechen</button><button class="btn ok" id="apply">✓ Übernehmen</button>`;
   btns.querySelector("[data-close2]").onclick=close;
   btns.querySelector("#apply").onclick=async()=>{
     const sel=[...res.querySelectorAll("[data-ri]:checked")].map(c=>rows[+c.dataset.ri]);
-    const b={}, l={mengen:{}};
-    sel.forEach(x=>{ if(x.t==="b"){ if(x.k==="taetigkeit"){ const alt=o.bericht?.taetigkeit; b.taetigkeit=alt&&!alt.includes(x.v)?alt+"\n"+x.v:x.v; } else b[x.k]=x.k==="hotel"?(/ja/i.test(x.v)?"ja":"nein"):x.v; }
-      else if(x.t==="m") l.mengen[x.k]=x.v; else l[x.k]=x.v; });
-    if(b.personen && !sel.some(x=>x.k==="personen"&&x.t==="l")) l.personen=b.personen;
+    const b={}, l={mengen:{}}, cur=(S.orders[o.id]||o).bericht||{}; const sonder=[];
+    sel.forEach(x=>{
+      if(x.t==="b"){
+        if(x.k==="taetigkeit"||x.k==="bemerkung"){ const alt=cur[x.k]; b[x.k]=alt&&!alt.includes(x.v)?alt+"\n"+x.v:x.v; }
+        else if(x.k==="arbeitszeit"){ const mn=parseMin(x.v); if(mn) b.arbeitszeitMin=mn; }
+        else b[x.k]=x.v;
+      } else if(x.t==="m") l.mengen[x.k]=x.v;
+      else if(x.t==="s"){ const mn=Math.round(nn(x.s.stunden)*60); sonder.push({arbeit:String(x.s.arbeit).trim(),personen:parseInt(x.s.personen,10)||1,min:mn||0}); }
+    });
+    if(sonder.length) b.sonder=[...(cur.sonder||[]),...sonder];
+    if(b.personen) l.personen=b.personen;
+    if(b.istKm && !S.lohn[lohnDocId(o.id,myId())]?.kmSelbst) l.kmSelbst=b.istKm;
     try{
       if(Object.keys(b).length) await upd(orderPath(o.id),{bericht:b});
       if(myId() && (Object.keys(l.mengen).length||Object.keys(l).length>1)) await saveLohn(o,myId(),l);
-      close(); toast("Eingetragen ✓ – bitte kurz prüfen");
+      close(); toast("Eingetragen ✓ – bitte kurz prüfen und ergänzen",3500);
     }catch(e){}
   };
 }
@@ -766,12 +1142,15 @@ function abnahmeStatus(o){
   if(o.abnahmeKeinVersand) return "verzicht";
   return "offen";
 }
-function abnahmeFaellig(o){ // Erinnerung an uns: Kunde informieren
+function abnahmeFaellig(o){ // Erinnerung an die zuständige Person
+  if(abnahmeOk(o)) return false; // aktueller Status zuerst: nachgereichte Abnahme beendet die Erinnerung
   const st=abnahmeStatus(o);
-  if(st==="offen") return !!(o.abschluss && Date.now()-o.abschluss.am>7*TAG);
   if(st==="versendet") return Date.now()>o.abnahmeAnfrage.frist;
+  if(o.abschluss && o.berichtGesendetAm && Date.now()-o.berichtGesendetAm>7*TAG && st!=="verzicht") return true; // eine Woche nach Berichtsversand (nicht bei Leerfahrten)
+  if(st==="offen") return !!(o.abschluss && Date.now()-o.abschluss.am>7*TAG);
   return false;
 }
+function meinAuftrag(o){ return can.planen() || (o.monteure||[]).includes(myId()) || o.abschluss?.by===myId(); }
 const ABN={ok:["Sichtabnahme erfolgt","ok","🟢"],versendet:["Sichtabnahme versendet – wartet","warn","🟡"],offen:["Sichtabnahme noch nicht erfolgt","bad","🔴"],verzicht:["Sichtabnahme: nicht angefordert",""," ⚪"]};
 function abnahmeChip(o){ const st=abnahmeStatus(o); const [l,c]=ABN[st]; return `<span class="chip ${c}">${l}</span>`+(abnahmeFaellig(o)?`<span class="chip bad">⏰ Kunde informieren</span>`:""); }
 function abnahmeCard(o){
@@ -782,7 +1161,8 @@ function abnahmeCard(o){
   if(st==="ok") h+=`<div class="small mute" style="margin-top:4px">${o.unterschrift?`Unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?`Unterschriebene Abnahme hochgeladen am ${fmtDT(o.abnahmeDatei.am)} – <a href="_blob/${esc(o.abnahmeDatei.assetId)}" target="_blank" rel="noopener">ansehen</a>`:"Auf Papier erledigt"}</div>`;
   if(st==="versendet") h+=`<div class="small" style="margin-top:4px">Gesendet am ${fmtDT(a.am)} an ${esc(a.an)} · Frist bis <b>${new Date(a.frist).toLocaleDateString("de-DE")}</b></div>`;
   if(st==="verzicht") h+=`<div class="small mute" style="margin-top:4px">Ihr habt entschieden, die Sichtabnahme nicht an den Kunden zu schicken.</div>`;
-  if(abnahmeFaellig(o)) h+=`<div class="banner bad" style="margin:10px 0 0">⏰ ${st==="offen"?`Seit ${tage} Tagen keine Abnahme. Bitte den Kunden informieren: Sichtabnahme prüfen und entscheiden, ob sie an das Bauvorhaben geschickt wird.`:"Frist abgelaufen – beim Kunden nachhaken oder erneut senden."}</div>`;
+  if(abnahmeFaellig(o) && o.berichtGesendetAm && st!=="versendet") h+=`<div class="banner bad" style="margin:10px 0 0">⏰ Der Bericht ging am ${fmtDT(o.berichtGesendetAm)} raus – seitdem liegt keine Abnahme vor. Bitte beim Kunden nachhaken oder die Sichtabnahme anfordern.</div>`;
+  else if(abnahmeFaellig(o)) h+=`<div class="banner bad" style="margin:10px 0 0">⏰ ${st==="offen"?`Seit ${tage} Tagen keine Abnahme. Bitte den Kunden informieren: Sichtabnahme prüfen und entscheiden, ob sie an das Bauvorhaben geschickt wird.`:"Frist abgelaufen – beim Kunden nachhaken oder erneut senden."}</div>`;
   if(st!=="ok"){
     h+=`<div style="display:grid;gap:8px;margin-top:12px">
      ${can.einsatz()?`<button class="btn block" id="signNow">✍️ Jetzt am Handy unterschreiben lassen</button>`:""}
@@ -864,23 +1244,35 @@ function summeMengen(o){
   Object.values(S.lohn).filter(l=>l.auftragId===o.id).forEach(l=>Object.entries(l.mengen||{}).forEach(([k,v])=>{ const q=nn(v); if(q) tot[k]=(tot[k]||0)+q; }));
   return tot;
 }
+const fmtZahl=v=>String(v).replace(".",",");
 function vdDefaults(o){
   const b=o.bericht||{};
   const rk=Object.values(S.reklas).filter(r=>r.auftragId===o.id).sort((a,c)=>c.am-a.am)[0];
-  const ms=(o.monteure||[]).slice(0,4);
   const d={datum:tageText(o),art:"fertigmontage",ok:(o.abschluss&&o.abschluss.typ!=="ok")?"nein":"ja"};
   d.m1=S.settings.monteurName||"JD Brüder GbR"; d.n1=S.settings.monteurNr||"286"; d.p1="100";
-  let bem=b.taetigkeit||"";
-  if(rk && rk.ursache!=="teile") bem+=(bem?"\n":"")+`Reklamation (${URSACHEN[rk.ursache]}): ${rk.text}`;
-  d.bemerkungen=bem;
-  d.fertigung=(rk&&rk.ursache==="teile")?rk.text:"";
+  // Bemerkungen: alle übrigen Berichtseinträge – Positionen mit Mengen, Tätigkeiten, Sonderleistungen, weitere Bemerkungen
   const tot=summeMengen(o); const lbl=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k;
-  const parts=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${String(v).replace(".",",")}× ${lbl(k)}`);
-  if(o.geschosse) parts.push(`Geschosse: ${o.geschosse}`);
-  if(b.istKm) parts.push(`${b.istKm} km`);
-  d.abrechnung=parts.join(", ");
-  if(tot.stunden){ d.s1n=b.personen||"1"; d.s1h=String(tot.stunden).replace(".",","); d.s1f="Zusatzarbeiten"; }
-  d.uebern=b.hotel==="ja"?(b.hotelInfo||"1"):"";
+  const sonder=(b.sonder||[]).filter(s=>s&&s.arbeit);
+  const bem=[];
+  const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${lbl(k)}`);
+  if(pos.length) bem.push("Montiert: "+pos.join(", "));
+  if(b.taetigkeit) bem.push(b.taetigkeit);
+  sonder.forEach(s=>bem.push(`Sonderleistung: ${s.arbeit} (${s.personen||1} Pers. × ${fmtStd(s.min)} Std.)`));
+  const az=arbeitszeitMin(o);
+  if(az) bem.push(`Arbeitszeit: ${fmtHMin(az)} Std.${leer(b.personen)?"":`, ${b.personen} Pers. vor Ort`}${leer(b.personenMit)?"":`, ${b.personenMit} Pers. mitgefahren`}`);
+  if(rk && rk.ursache!=="teile" && !rk.leerfahrt) bem.push(`Reklamation (${URSACHEN[rk.ursache]||rk.ursache}): ${rk.text}`);
+  if(b.bemerkung) bem.push(b.bemerkung);
+  d.bemerkungen=bem.join("\n");
+  d.fertigung=(rk&&rk.ursache==="teile")?rk.text:"";
+  // Montage-Abrechnung ganz unten: ausschließlich gefahrene km und Geschosse
+  const ab=[];
+  if(!leer(b.istKm)) ab.push(`${fmtZahl(b.istKm)} km`);
+  const g=leer(b.geschosse)?"":b.geschosse; if(g) ab.push(`Geschosse: ${g}`);
+  d.abrechnung=ab.join(", ");
+  // Stunden-Bereich: Sonderleistungen mit Personen und Dauer
+  sonder.slice(0,4).forEach((s,i)=>{ d[`s${i+1}n`]=String(s.personen||1); d[`s${i+1}h`]=fmtStd(s.min); d[`s${i+1}f`]=s.arbeit; });
+  if(!sonder.length && tot.stunden){ d.s1n=b.personen||"1"; d.s1h=fmtZahl(tot.stunden); d.s1f="Zusatzarbeiten"; }
+  d.uebern=!leer(b.uebernachtungen)?(String(b.uebernachtungen).trim()==="0"?"":String(b.uebernachtungen)):(b.hotel==="ja"?(b.hotelInfo||"1"):"");
   d.leistung="wc"; d.leistungSonst="";
   d.fertigAm=o.abschluss?new Date(o.abschluss.am).toLocaleDateString("de-DE"):tageText(o).split("–").pop();
   const offen=Object.values(S.reklas).filter(r=>r.auftragId===o.id && !r.leerfahrt);
@@ -895,16 +1287,16 @@ function vordruckCard(o){
   const v=vd(o); const ed=can.einsatz();
   const inp=(k,ph="",st="")=>`<input class="i" data-vd="${k}" value="${esc(v[k]??"")}" placeholder="${esc(ph)}" style="${st}" ${ed?"":"disabled"}>`;
   const ta=(k,ph)=>`<textarea class="i" data-vd="${k}" placeholder="${esc(ph)}" ${ed?"":"disabled"}>${esc(v[k]??"")}</textarea>`;
-  return `<div class="card"><h3>Montagebericht &amp; Abnahme (meta-Vordruck)</h3>
-   <div class="small mute" style="margin-bottom:6px">Wird automatisch aus dem Auftrag, der Zeiterfassung und den Mitarbeiter-Berichten ausgefüllt. Du kannst alles überschreiben. Preise stehen hier nie drin.</div>
+  return `<div class="card"><h3>Montagebericht-PDF (meta-Vordruck)</h3>
+   <div class="small mute" style="margin-bottom:6px">Wird automatisch aus dem Auftrag und dem Montagebericht ausgefüllt: oben die Kopfdaten, unter Bemerkungen Positionen, Tätigkeiten, Sonderleistungen und weitere Bemerkungen, ganz unten nur km und Geschosse. Du kannst alles überschreiben. Preise stehen hier nie drin.</div>
    <div class="grid2"><div><label class="f">Datum</label>${inp("datum")}</div><div><label class="f">Montage ok</label><select class="i" data-vd="ok" ${ed?"":"disabled"}><option value="ja" ${v.ok==="ja"?"selected":""}>ja</option><option value="nein" ${v.ok==="nein"?"selected":""}>nein</option></select></div></div>
    <label class="f">Art</label><div class="seg" id="vdArt">${Object.entries(ARTEN).map(([k,l])=>`<button data-art="${k}" class="${v.art===k?"on":""}" ${ed?"":"disabled"}>${l}</button>`).join("")}</div>
    <label class="f">Monteur / Monteursnummer / Anteil %</label>
    ${[1,2,3,4].map(i=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px">${inp("m"+i,"Monteur "+i,"flex:1")}${inp("n"+i,"Nr.","width:64px")}${inp("p"+i,"%","width:64px")}</div>`).join("")}
    <label class="f">Bemerkungen</label>${ta("bemerkungen","Was wurde gemacht …")}
    <label class="f">Fertigung (fehlende/falsche Teile)</label>${ta("fertigung","")}
-   ${can.planen()?`<label class="f">Montageabrechnung (Mengen)</label>${ta("abrechnung","z. B. 9× Vorderfront, 6× Trennwand …")}`:""}
-   <label class="f">Stunden (Personen × Std. für …)</label>
+   <label class="f">Montage-Abrechnung (nur gefahrene km und Geschosse)</label>${ta("abrechnung","z. B. 390 km, Geschosse: EG, 1. OG")}
+   <label class="f">Stunden (Sonderleistungen: Personen × Std. für …)</label>
    ${[1,2,3,4].map(i=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px">${inp("s"+i+"n","Pers.","width:64px")}<span>×</span>${inp("s"+i+"h","Std.","width:70px")}${inp("s"+i+"f","für …","flex:1")}</div>`).join("")}
    <label class="f">Übernachtungen</label>${inp("uebern","z. B. 2")}
    <h3 style="margin-top:16px">Abnahmebescheinigung</h3>
@@ -980,7 +1372,7 @@ async function makeVordruckPdf(o,q=.72){
   const pdf=new jsPDF({unit:"mm",format:f(c1),compress:true});
   pdf.addImage(c1.toDataURL("image/jpeg",q),"JPEG",0,0,...f(c1));
   if(o.unterschrift){ pdf.addPage(f(c2)); pdf.addImage(c2.toDataURL("image/jpeg",q),"JPEG",0,0,...f(c2)); }
-  else if(/^image/.test(o.abnahmeDatei.typ||"")){ try{ const im=await loadImg("_blob/"+o.abnahmeDatei.assetId); const c=document.createElement("canvas"); const sc=Math.min(1,1400/im.width); c.width=im.width*sc; c.height=im.height*sc; c.getContext("2d").drawImage(im,0,0,c.width,c.height); pdf.addPage(f(c)); pdf.addImage(c.toDataURL("image/jpeg",q),"JPEG",0,0,...f(c)); }catch(e){} }
+  else if(o.abnahmeDatei && /^image/.test(o.abnahmeDatei.typ||"")){ try{ const im=await loadImg("_blob/"+o.abnahmeDatei.assetId); const c=document.createElement("canvas"); const sc=Math.min(1,1400/im.width); c.width=im.width*sc; c.height=im.height*sc; c.getContext("2d").drawImage(im,0,0,c.width,c.height); pdf.addPage(f(c)); pdf.addImage(c.toDataURL("image/jpeg",q),"JPEG",0,0,...f(c)); }catch(e){} }
   return pdf.output("blob");
 }
 
@@ -1185,8 +1577,8 @@ function viewSetup(){
     <label class="f">Unsere Antwort-Adresse (für unterschriebene Abnahmen)</label><input class="i" data-s="antwortEmail" value="${esc(s.antwortEmail||"jd.brueder.meta@gmail.com")}">
     <label class="f">Montageberichte gehen an</label><input class="i" data-s="berichtEmail" value="${esc(s.berichtEmail||"Montagebericht@meta.de")}">
     <label class="f">Gmail-Suche für Aufträge</label><input class="i" data-s="gmailQuery" value="${esc(s.gmailQuery||DEFAULT_QUERY)}">
-    <div class="small mute" style="margin-top:4px">Holt Wochenübersichten, Montagezusagen und Montageabrechnungen von meta.</div>
-    ${s.letzterAbruf?`<div class="small mute" style="margin-top:6px">Letzter Mail-Abruf: ${fmtDT(s.letzterAbruf)}</div>`:""}
+    <div class="small mute" style="margin-top:4px">Holt Wochenübersichten, Montagezusagen, Montageabrechnungen und Mails der Disposition mit Unterlagen (z. B. „Auftrag Nr. 16872“ mit Dokumente.pdf).</div>
+    <div class="small mute" style="margin-top:6px">Automatischer Abruf alle 15 Minuten: Aufträge, PDFs/Unterlagen und Deckblätter von meta.${s.autoAbruf?` ${s.autoAbruf.postfach?` Postfach: <b>${esc(s.autoAbruf.postfach)}</b>.`:""} Zuletzt ${fmtDT(s.autoAbruf.am)} (${s.autoAbruf.quelle==="zeitplan"?"automatisch":"von Hand"}): ${s.autoAbruf.neu||0} neu, ${s.autoAbruf.aktualisiert||0} aktualisiert, ${s.autoAbruf.dateien||0} Unterlagen${s.autoAbruf.fehler?`, <span style="color:var(--bad)">${s.autoAbruf.fehler} Fehler</span>`:""}.`:s.letzterAbruf?` Letzter Abruf: ${fmtDT(s.letzterAbruf)}`:""}</div>
   </div>
   ${S.isOwner&&Object.keys(S.anfragen).length?`<div class="card" style="border-left:5px solid var(--accent)"><h3>Neue Anmeldungen – Freigabe nötig</h3>
     ${Object.values(S.anfragen).map(a=>`<div class="person"><span class="av">${esc((a.firma||a.name||"?").slice(0,1).toUpperCase())}</span><div style="flex:1;min-width:150px"><b>${esc(a.firma||a.name||nameOf(a.id))}</b><div class="small mute">${esc(a.name||"")}${a.tel?" · "+esc(a.tel):""} · möchte als ${esc(ROLLEN[a.wunsch]||a.wunsch)} · ${fmtDT(a.am)}</div></div>
@@ -1225,6 +1617,7 @@ function bind(r){
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto]")) return; lightbox(t.dataset.zoom); });
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); },250); }; }
   app.querySelectorAll("#flt [data-f]").forEach(b=>b.onclick=()=>{ S.filter=b.dataset.f; render(); });
+  $("#nurMeine") && ($("#nurMeine").onchange=()=>{ S.nurMeine=$("#nurMeine").checked; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
   const no=$("#newOrder"); if(no) no.onclick=newOrderDialog;
   $("#abnBanner") && ($("#abnBanner").onclick=()=>{ S.filter="abnahme"; render(); });
@@ -1240,7 +1633,7 @@ function bind(r){
 function bindDetail(id){
   const o=S.orders[id]; if(!o) return;
   const P=orderPath(id);
-  bindLohn(o); bindVordruck(o);
+  bindLohn(o); bindVordruck(o); bindEinsatz(o);
   $("#terminSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{terminStatus:b.dataset.t}));
   const td=$("#terminDatum"); if(td) td.onchange=()=>upd(P,{termin:td.value?new Date(td.value+"T08:00:00").getTime():null, terminStatus:td.value?"fest":o.terminStatus||"zu_terminieren"});
   const kwi=$("#kwInput"); if(kwi) kwi.onchange=()=>{ const v=parseInt(kwi.value,10); if(v>0&&v<54) upd(P,{kw:v, jahr:o.jahr||NOW.jahr}); };
@@ -1248,10 +1641,12 @@ function bindDetail(id){
   document.querySelectorAll("[data-rm-m]").forEach(b=>b.onclick=()=>upd(P,{monteure:(o.monteure||[]).filter(x=>x!==b.dataset.rmM)}));
   const am=$("#addMonteur"); if(am) am.onclick=()=>pickPerson(id);
   const eb=$("#editBau"); if(eb) eb.onclick=()=>editBauDialog(id);
+  $("#stornoSetzen") && ($("#stornoSetzen").onclick=()=>modal(`<h2>Auftrag stornieren?</h2><div class="small mute">Der Auftrag bleibt sichtbar, steht aber unter „Storniert“.</div><label class="f">Grund / Hinweis (optional)</label><textarea class="i" id="sg" placeholder="z. B. Bauherr hat abgesagt"></textarea><div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Stornieren</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd(P,{storniert:{am:Date.now(),von:myId(),quelle:"hand",grund:m.querySelector("#sg").value.trim()}}); close(); toast("Als storniert markiert"); }; }));
+  $("#stornoAuf") && ($("#stornoAuf").onclick=async()=>{ if(await confirmBox("Storno aufheben?","Der Auftrag kommt wieder in die normale Liste.","Aufheben")) upd(P,{storniert:null,stornoAufgehobenAm:Date.now()}); });
   const tb=$("#timerBtn"); if(tb) tb.onclick=async()=>{
     const z=[...(o.zeiten||[])].map(x=>({...x}));
     if(running(o)) z[z.length-1].e=Date.now(); else z.push({s:Date.now(),by:myId()});
-    const war=running(o); await upd(P,{zeiten:z}); toast(war?"Zeit gestoppt":"Zeit läuft ⏱");
+    const war=running(o); await upd(P,{zeiten:z}); toast(war?"Pause – Zeit angehalten":"Zeit läuft weiter ⏱");
   };
   document.querySelectorAll("[data-delz]").forEach(a=>a.onclick=async e=>{ e.preventDefault(); if(!await confirmBox("Zeiteintrag löschen?","Dieser Zeitblock wird entfernt.","Löschen","bad")) return; const z=(o.zeiten||[]).filter((_,i)=>i!==Number(a.dataset.delz)); upd(P,{zeiten:z}); });
   document.querySelectorAll("[data-b]").forEach(inp=>{
@@ -1261,7 +1656,7 @@ function bindDetail(id){
     inp.onchange=save; if(inp.tagName==="TEXTAREA") inp.onblur=save;
   });
   document.querySelectorAll("[data-upload]").forEach(inp=>inp.onchange=()=>uploadFotos(id, inp.dataset.upload, [...inp.files]));
-  document.querySelectorAll("[data-delfoto]").forEach(b=>b.onclick=async e=>{ e.stopPropagation(); if(!await confirmBox("Foto löschen?","Das Foto wird aus dem Auftrag entfernt.","Löschen","bad")) return; const f=S.fotos[b.dataset.delfoto]; await S.db.doc("fotos/"+f.id).delete(); if(S.assets && can.planen()){ try{ await S.assets.delete(f.assetId); }catch(e){} } });
+  document.querySelectorAll("[data-delfoto]").forEach(b=>b.onclick=async e=>{ e.stopPropagation(); e.preventDefault(); if(!await confirmBox("Foto löschen?","Das Foto wird aus dem Auftrag entfernt.","Löschen","bad")) return; const f=S.fotos[b.dataset.delfoto]; await S.db.doc("fotos/"+f.id).delete(); if(S.assets && can.planen()){ try{ await S.assets.delete(f.assetId); }catch(e){} } });
   const sg=$("#sign"); if(sg) sg.onclick=()=>signDialog(id);
   $("#speak") && ($("#speak").onclick=()=>sprachDialog(id));
   $("#fahrtAdd") && ($("#fahrtAdd").onclick=()=>fahrtDialog(id));
@@ -1305,7 +1700,14 @@ async function savePreise(patch){
   // freigegebene Mitarbeiter bekommen eine Kopie
   const copy={preise:next.preise,stockSatz:next.stockSatz,kmSelbst:next.kmSelbst,kmMit:next.kmMit,listen:next.listen||{},zuordnung:next.zuordnung||{}};
   for(const id of (next.sichtbarFuer||[])) await setDoc("lohnsicht/"+id,copy);
-  for(const id of alt) if(!chefs.includes(id)){ try{ await S.db.doc("lohnsicht/"+id).delete(); }catch(e){} }
+  // Subunternehmer mit eigener Preisliste (z. B. Zeltwald) sehen nur ihre eigene Liste – keine anderen Preise
+  const subs=Object.keys(S.roles).filter(k=>S.roles[k]==="sub");
+  const mitListe=new Set();
+  for(const id of subs){ const L=next.listen?.[next.zuordnung?.[id]]; if(!L) continue; mitListe.add(id);
+    await setDoc("lohnsicht/"+id,{name:L.name||"",preise:L.preise||{},stockSatz:L.stockSatz,kmSelbst:L.kmSelbst,kmMit:L.kmMit}); }
+  for(const id of (cur.subSicht||[])) if(!mitListe.has(id) && !chefs.includes(id)){ try{ await S.db.doc("lohnsicht/"+id).delete(); }catch(e){} }
+  if(String(cur.subSicht||[])!==String([...mitListe])){ next.subSicht=[...mitListe]; S.preise=next; await setDoc("lohn/preise",next); }
+  for(const id of alt) if(!chefs.includes(id)&&!mitListe.has(id)){ try{ await S.db.doc("lohnsicht/"+id).delete(); }catch(e){} }
 }
 function bindSetupLohn(){
   const lid=S.plSel&&S.preise?.listen?.[S.plSel]?S.plSel:"std";
@@ -1374,21 +1776,25 @@ async function pickPerson(id){
 }
 async function abschluss(id,typ){
   const o=S.orders[id];
-  const fehlt=[]; if(!o.unterschrift) fehlt.push("Unterschrift Abnahme"); if(!(o.bericht?.taetigkeit)) fehlt.push("Tätigkeit"); if(!totalMs(o)) fehlt.push("Arbeitszeit"); if(!(o.bericht?.istKm)) fehlt.push("Kilometer");
-  const ok=await confirmBox("Montage abschließen?", (fehlt.length?`<span style="color:var(--bad)">Noch leer: ${fehlt.join(", ")}.</span><br>`:"")+"Danach ist der Bericht bereit für den Versand an meta.","Abschließen","ok");
+  const fk=k=>Object.values(S.fotos).filter(x=>x.kat===k);
+  const f=fehlendeAngaben(o,fk), hart=f.filter(x=>!x.soft);
+  const ok=await confirmBox("Montage abschließen?", (f.length?`<b>Bitte prüfen:</b>${missList(f)}${hart.length?`<div style="margin-top:6px">Du kannst die fehlenden Angaben auch danach noch ergänzen.</div>`:""}`:"")+`<div style="margin-top:8px">Danach ist der Bericht bereit für den Versand.</div>`, hart.length?"Trotzdem abschließen":"Abschließen", hart.length?"warn":"ok");
   if(!ok) return;
-  const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=Date.now();
-  await upd(orderPath(id),{zeiten:z,abschluss:{typ,am:Date.now(),by:myId()},berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:typ});
+  const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
+  const p={zeiten:z,abschluss:{typ,am:now,by:myId()},berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:typ};
+  if(o.einsatz && !o.einsatz.fertigAm) p.einsatz={fertigAm:now};
+  if(o.bericht?.arbeitszeitMin==null && z.length) p.bericht={arbeitszeitMin:Math.round(z.reduce((s,x)=>s+(x.e-x.s),0)/60000)};
+  await upd(orderPath(id),p);
   toast("Montage abgeschlossen ✓");
 }
 function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
   const o=S.orders[id];
   let fotos=[];
-  modal(`<h2>${leerfahrt?"Leerfahrt – Baustelle nicht montagefertig":abs?"Fertig mit Reklamation":"Reklamation erfassen"}</h2>
+  modal(`<h2>${leerfahrt?LEERFAHRT_NMB:abs?"Montage mit Reklamation":"Reklamation erfassen"}</h2>
    ${leerfahrt?`<div class="banner warn small">Die Fahrt wird als Leerfahrt mit Zeit und Kilometern gespeichert, der Auftrag geht zurück auf „muss terminiert werden“.</div>`:""}
-   <label class="f">Ursache *</label>
+   <label class="f">Grund *</label>
    <select class="i" id="u" ${leerfahrt?"disabled":""}>${Object.entries(URSACHEN).map(([k,l])=>`<option value="${k}" ${leerfahrt&&k==="baustelle"?"selected":""}>${l}</option>`).join("")}</select>
-   <label class="f">Was ist passiert? Warum? *</label><textarea class="i" id="t" placeholder="${leerfahrt?"z. B. Fliesen noch nicht verlegt, Räume nicht zugänglich …":"z. B. Trennwand beschädigt geliefert, 2 Türen fehlen …"}"></textarea>
+   <label class="f">Beschreibung – was ist passiert? *</label><textarea class="i" id="t" placeholder="${leerfahrt?"z. B. Fliesen noch nicht verlegt, Räume nicht zugänglich …":"z. B. Trennwand beschädigt geliefert, 2 Türen fehlen …"}"></textarea>
    ${leerfahrt?`<div class="grid2"><div><label class="f">Gefahrene km</label><input class="i" id="km" inputmode="decimal" value="${esc(o.bericht?.istKm||o.sollKm||"")}"></div><div><label class="f">Personen</label><input class="i" id="pp" inputmode="numeric" value="${esc(o.bericht?.personen||"")}"></div></div>
    <div class="small mute" style="margin-top:4px">Zeit laut Stoppuhr: ${fmtHM(totalMs(o))}</div>`:""}
    <label class="f">Fotos * (mind. 1)</label><div class="thumbs" id="rf"></div>
@@ -1420,34 +1826,57 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
   });
 }
 function signDialog(id){
-  const v0=vd(S.orders[id]);
-  modal(`<h2>Sichtabnahme / Unterschrift</h2>
-   <label class="f">Bauleistung</label><div class="seg" id="lst">${[["wc","WC-Trennwände"],["schraenke","Schränke"],["sonst","Sonstiges"]].map(([k,l])=>`<button data-l="${k}" class="${v0.leistung===k?"on":""}">${l}</button>`).join("")}</div>
+  const o=S.orders[id], v0=vd(o);
+  modal(`<h2>Abnahme am Handy</h2>
+   <label class="f">1. Was wird abgenommen?</label><div class="seg" id="lst">${Object.entries(LEISTUNG).map(([k,l])=>`<button data-l="${k}" class="${v0.leistung===k?"on":""}">${l}</button>`).join("")}</div>
    <input class="i" id="lso" placeholder="Was genau?" value="${esc(v0.leistungSonst||"")}" style="margin-top:6px;${v0.leistung==="sonst"?"":"display:none"}">
-   <label class="f">Wurden Mängel festgestellt?</label><div class="seg" id="mgl"><button data-m="nein" class="${v0.maengelJa!=="ja"?"on":""}">Nein, keine Mängel</button><button data-m="ja" class="${v0.maengelJa==="ja"?"on":""}">Ja, Mängel</button></div>
+   <label class="f">2. Mängel</label><div class="seg" id="mgl"><button data-m="nein" class="${v0.maengelJa!=="ja"?"on":""}">Keine Mängel</button><button data-m="ja" class="${v0.maengelJa==="ja"?"on":""}">Mängel</button></div>
    <textarea class="i" id="mtx" placeholder="Welche Mängel? *" style="margin-top:6px;${v0.maengelJa==="ja"?"":"display:none"}">${esc(v0.maengel||"")}</textarea>
-   <label class="f">Name (Bauleiter / Kunde) in Druckbuchstaben</label><input class="i" id="sn" value="${esc(S.orders[id].bauleiterName||"")}">
-   <label class="f">Hier unterschreiben</label><canvas class="sig" id="cv"></canvas>
-   <div class="grid3" style="margin-top:12px"><button class="btn" data-close>Abbrechen</button><button class="btn ghost" id="clr">Löschen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
-    let L=v0.leistung, MJ=v0.maengelJa==="ja"?"ja":"nein";
+   <label class="f">3. Name der unterschreibenden Person (Druckbuchstaben)</label><input class="i" id="sn" value="${esc(o.unterschrift?.name||o.bauleiterName||"")}">
+   <label class="f">Unterschrift</label><canvas class="sig" id="cv"></canvas>
+   <div class="row between" style="margin-top:4px"><span class="small mute" id="sh">Mit dem Finger unterschreiben</span><button class="btn sm ghost" id="clr">↺ Löschen</button></div>
+   <label class="f">4. Fotos (bei Bedarf)</label><div class="thumbs" id="af"></div>
+   <label class="btn sm ghost" style="margin-top:6px">＋ Fotos hinzufügen<input type="file" accept="image/*" multiple hidden id="afi"></label>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    let L=v0.leistung, MJ=v0.maengelJa==="ja"?"ja":"nein"; const fotos=[];
     m.querySelectorAll("#lst [data-l]").forEach(b=>b.onclick=()=>{ L=b.dataset.l; m.querySelectorAll("#lst button").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#lso").style.display=L==="sonst"?"":"none"; });
     m.querySelectorAll("#mgl [data-m]").forEach(b=>b.onclick=()=>{ MJ=b.dataset.m; m.querySelectorAll("#mgl button").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#mtx").style.display=MJ==="ja"?"":"none"; });
-    const cv=m.querySelector("#cv"); const r=cv.getBoundingClientRect(); const dpr=window.devicePixelRatio||1; cv.width=r.width*dpr; cv.height=r.height*dpr;
-    const ctx=cv.getContext("2d"); ctx.scale(dpr,dpr); ctx.lineWidth=2.4; ctx.lineCap="round"; ctx.strokeStyle="#0b1b33";
-    let draw=false, any=false;
+    // Unterschriftsfeld: wird beim Öffnen und nach „Löschen“ komplett neu eingerichtet,
+    // damit danach wieder gezeichnet und gespeichert werden kann.
+    const cv=m.querySelector("#cv"); let ctx=null, draw=false, any=false;
+    const setup=()=>{
+      const r=cv.getBoundingClientRect(); const dpr=window.devicePixelRatio||1;
+      cv.width=Math.max(1,Math.round((r.width||300)*dpr)); cv.height=Math.max(1,Math.round((r.height||200)*dpr)); // setzt Inhalt und Zeichenzustand zurück
+      ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineWidth=2.4; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#0b1b33";
+      draw=false; any=false; m.querySelector("#sh").textContent="Mit dem Finger unterschreiben";
+    };
+    requestAnimationFrame(()=>{ if(!ctx) setup(); });
     const pt=e=>{ const b=cv.getBoundingClientRect(); return [e.clientX-b.left,e.clientY-b.top]; };
-    cv.onpointerdown=e=>{ draw=true; any=true; cv.setPointerCapture(e.pointerId); const [x,y]=pt(e); ctx.beginPath(); ctx.moveTo(x,y); };
-    cv.onpointermove=e=>{ if(!draw) return; const [x,y]=pt(e); ctx.lineTo(x,y); ctx.stroke(); };
-    cv.onpointerup=()=>draw=false;
-    m.querySelector("#clr").onclick=()=>{ ctx.clearRect(0,0,cv.width,cv.height); any=false; };
+    const stop=e=>{ draw=false; try{ if(e&&cv.hasPointerCapture(e.pointerId)) cv.releasePointerCapture(e.pointerId); }catch(err){} };
+    cv.onpointerdown=e=>{ if(!ctx) setup(); e.preventDefault(); draw=true; any=true; try{ cv.setPointerCapture(e.pointerId); }catch(err){} const [x,y]=pt(e); ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+.1,y+.1); ctx.stroke(); m.querySelector("#sh").textContent="✓ Unterschrift erfasst"; };
+    cv.onpointermove=e=>{ if(!draw) return; e.preventDefault(); const [x,y]=pt(e); ctx.lineTo(x,y); ctx.stroke(); };
+    cv.onpointerup=stop; cv.onpointercancel=stop; cv.onlostpointercapture=()=>{ draw=false; };
+    m.querySelector("#clr").onclick=e=>{ e.preventDefault(); setup(); };
+    m.querySelector("#afi").onchange=async e=>{
+      if(!S.assets) return toast("Foto-Upload nicht freigeschaltet");
+      const files=[...e.target.files]; e.target.value="";
+      for(const file of files){ try{ const blob=await shrink(file); const a=await S.assets.upload(blob); await S.db.collection("fotos").doc().set({auftragId:id,kat:"abnahme",assetId:a.id,name:file.name||"",typ:blob.type,am:Date.now(),von:myId()}); fotos.push(URL.createObjectURL(blob)); m.querySelector("#af").innerHTML=fotos.map(u=>`<div class="t"><img src="${u}" alt=""></div>`).join(""); }catch(err){ toast("Upload fehlgeschlagen"); } }
+    };
     m.querySelector("#ok").onclick=async()=>{
-      if(L==="sonst" && !m.querySelector("#lso").value.trim()) return toast("Bitte eintragen, welche Bauleistung");
+      if(L==="sonst" && !m.querySelector("#lso").value.trim()) return toast("Bitte eintragen, was abgenommen wird");
       if(MJ==="ja" && !m.querySelector("#mtx").value.trim()) return toast("Bitte die Mängel beschreiben");
+      const nm=m.querySelector("#sn").value.trim(); if(!nm) return toast("Bitte den Namen der unterschreibenden Person eintragen");
       if(!any) return toast("Bitte unterschreiben");
       if(!S.assets) return toast("Upload nicht freigeschaltet");
       const b=m.querySelector("#ok"); b.disabled=true;
       const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
-      try{ const a=await S.assets.upload(blob); const nm=m.querySelector("#sn").value.trim(); await upd(orderPath(id),{unterschrift:{assetId:a.id,name:nm,am:Date.now(),von:myId()},vordruck:{leistung:L,leistungSonst:m.querySelector("#lso").value.trim(),maengelJa:MJ,maengel:MJ==="ja"?m.querySelector("#mtx").value.trim():"",abnahmeName:nm}}); close(); toast("Sichtabnahme gespeichert ✓"); }catch(e){ b.disabled=false; toast("Fehler beim Speichern"); }
+      try{
+        const alt=S.orders[id]?.unterschrift?.assetId;
+        const a=await S.assets.upload(blob);
+        await upd(orderPath(id),{unterschrift:{assetId:a.id,name:nm,am:Date.now(),von:myId()},bericht:{abnahmeArt:"handy"},vordruck:{leistung:L,leistungSonst:m.querySelector("#lso").value.trim(),maengelJa:MJ,maengel:MJ==="ja"?m.querySelector("#mtx").value.trim():"",abnahmeName:nm}});
+        if(alt&&alt!==a.id){ try{ await S.assets.delete(alt); }catch(err){} }
+        close(); toast("Abnahme gespeichert ✓");
+      }catch(e){ b.disabled=false; toast("Fehler beim Speichern"); }
     };
   });
 }
@@ -1492,7 +1921,7 @@ async function readDeckblatt(id, blobs){
   if(!S.sample) throw new Error("Claude-Auslesen ist hier nicht verfügbar");
   let lim={}; try{ lim=await S.sample.limits(); }catch(e){}
   if(!lim.images) throw new Error("Bilder auslesen ist hier nicht verfügbar");
-  const imgs=[]; for(const b of blobs.slice(0,4)) imgs.push(await shrink(b,1800,.85));
+  const imgs=[]; for(const b of blobs.slice(0,4)) imgs.push(/pdf/i.test(b.type||"")?b:await shrink(b,1800,.85));
   const res=await S.sample.json(DECK_PROMPT,{images:imgs,modelTier:"default"});
   const o=S.orders[id]; const p={};
   const map={vorgang:"vorgang",berater:"berater",adresse:"adresse",bauleiterName:"bauleiterName",bauleiterTel:"bauleiterTel",bauleiterMail:"bauleiterMail",oeffnungszeiten:"oeffnungszeiten",geschosse:"geschosse",aufzug:"aufzug",montageHinweise:"montageHinweise",kaufmHinweise:"kaufmHinweise",technHinweise:"technHinweise",aufbau:"aufbau",kabinen:"kabinen",zahlungspflichtiger:"zahlungspflichtiger"};
@@ -1502,10 +1931,10 @@ async function readDeckblatt(id, blobs){
   return Object.keys(p).length;
 }
 function deckblattDialog(id){
-  const unter=Object.values(S.fotos).filter(f=>f.kat==="unterlagen" && /^image/.test(f.typ||"image"));
+  const unter=Object.values(S.fotos).filter(f=>f.kat==="unterlagen" && /^image|pdf/.test(f.typ||"image"));
   modal(`<h2>Deckblatt auslesen</h2><p class="mute small">Claude liest Adresse, Bauleiter, Telefon, Geschosse und Hinweise vom Aufmaß-Deckblatt und trägt sie ein. Bereits eingetragene Felder bleiben unverändert.</p>
-   ${unter.length?`<button class="btn pri block" id="fromU">Aus den ${unter.length} Unterlagen-Bildern lesen</button>`:""}
-   <label class="btn block" style="margin-top:8px">📷 Foto vom Deckblatt wählen<input type="file" accept="image/*" multiple hidden id="df"></label>
+   ${unter.length?`<button class="btn pri block" id="fromU">Aus den ${unter.length} Unterlagen lesen (Bilder/PDF)</button>`:""}
+   <label class="btn block" style="margin-top:8px">📷 Foto oder PDF vom Deckblatt wählen<input type="file" accept="image/*,application/pdf" multiple hidden id="df"></label>
    <div id="st" class="small mute" style="margin-top:10px"></div><button class="btn ghost block" data-close style="margin-top:10px">Schließen</button>`,(m,close)=>{
     const st=m.querySelector("#st");
     const run=async blobs=>{ st.innerHTML=`<span class="spin"></span> Claude liest das Deckblatt …`; try{ const n=await readDeckblatt(id,blobs); st.textContent=n?`${n} Felder übernommen ✓`:"Keine neuen Angaben gefunden."; }catch(e){ st.textContent="Hat nicht geklappt: "+(e.code==="not_granted"?"Zugriff auf Claude wurde nicht erlaubt.":(e.message||e.code)); } };
@@ -1515,7 +1944,7 @@ function deckblattDialog(id){
 }
 
 /* ============ Gmail ============ */
-const DEFAULT_QUERY='from:meta.de newer_than:60d';
+const DEFAULT_QUERY='(from:meta.de OR "@meta.de") newer_than:60d';
 const GM="Gmail";
 function mcpMsg(e){
   const c=e?.code;
@@ -1530,135 +1959,15 @@ const num = s => { const v=parseFloat(String(s).replace(/\s/g,"").replace(/\.(?=
 function splitBV(s){ const i=s.lastIndexOf(","); return i>0?{bauvorhaben:s.slice(0,i).trim(),plzOrt:s.slice(i+1).trim()}:{bauvorhaben:s,plzOrt:""}; }
 function htmlDoc(m){ const h=(m.htmlBody||"").replace(/<br\s*\/?>/gi," "); if(!h) return null; return new DOMParser().parseFromString(h,"text/html"); }
 
-function parseUebersicht(m){
-  const doc=htmlDoc(m); const out=[];
-  if(doc){
-    const tbl=doc.querySelector("table"); if(!tbl) return out;
-    const heads=[...tbl.querySelectorAll("th")].map(th=>txt(th).toLowerCase());
-    const ix=k=>heads.findIndex(h=>h.startsWith(k));
-    const iA=ix("aufnr"), iV=ix("vorgang"), iB=ix("bauvorhaben"), iK=ix("kabinen"), iS=ix("status");
-    let kw=null,jahr=null;
-    tbl.querySelectorAll("tr").forEach(tr=>{
-      const tds=[...tr.querySelectorAll("td")];
-      if(tds.length===1){ const mm=txt(tds[0]).match(/KW\s*(\d+)\s*\/\s*(\d{4})/i); if(mm){ kw=+mm[1]; jahr=+mm[2]; } return; }
-      if(tds.length>=4 && iA>=0){
-        const nr=txt(tds[iA]); if(!nr) return;
-        out.push({nr, vorgang:iV>=0?txt(tds[iV]).replace(/^-$/,""):"", ...splitBV(txt(tds[iB])), kabinen:iK>=0?txt(tds[iK]):"", versand:iS>=0?txt(tds[iS]):"", kw, jahr});
-      }
-    });
-    return out;
-  }
-  // Fallback Klartext
-  let kw=null,jahr=null;
-  (m.plaintextBody||"").split(/\n/).forEach(l=>{
-    const k=l.match(/^\s*KW\s*(\d+)\/(\d{4})/); if(k){kw=+k[1];jahr=+k[2];return;}
-    const r=l.match(/^\s*((?:R-)?\d{4,6}(?:\/\d+)?)\s+(?:(\d{5,7}|-)\s+)?(.+?,\s*\d{4,5}\s+[^\d]+?)\s+(\d+)?\s*(versendet|noch nicht)/);
-    if(r) out.push({nr:r[1],vorgang:r[2]&&r[2]!=="-"?r[2]:"",...splitBV(r[3].trim()),kabinen:r[4]||"",versand:r[5]==="noch nicht"?"noch nicht versendet":"versendet",kw,jahr});
-  });
-  return out;
-}
-function parseAbrechnung(m){
-  const doc=htmlDoc(m); const pos=[]; let summe=0, bem="";
-  if(doc){
-    doc.querySelectorAll("tr").forEach(tr=>{
-      const tds=[...tr.querySelectorAll("td")]; const t=txt(tr);
-      if(/^Bem\.?:/i.test(t)) bem=t.replace(/^Bem\.?:\s*/i,"");
-      if(/Summe/i.test(t)){ const v=num(txt(tds[tds.length-1])); if(v) summe=v; return; }
-      if(tds.length===4){ const [a,me,ep,gp]=tds.map(txt); if(a && /^[\d.,]+$/.test(gp)) pos.push({artikel:a,menge:num(me),ep:num(ep),gp:num(gp)}); }
-    });
-  }
-  if(!summe){ const mm=(m.plaintextBody||"").match(/Summe:\s*([\d.,]+)/); if(mm) summe=num(mm[1]); }
-  if(!pos.length && m.plaintextBody){ m.plaintextBody.split("\n").forEach(l=>{ const r=l.match(/^\s*(.+?)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*$/); if(r && !/Summe/.test(r[1])) pos.push({artikel:r[1].trim(),menge:num(r[2]),ep:num(r[3]),gp:num(r[4])}); }); }
-  const mm=(m.plaintextBody||txt(doc?.body)).match(/Auftrag\s+\S+\s+\(([^)]+)\)/);
-  return {positionen:pos,summe,bemerkung:bem,bv:mm?mm[1]:""};
-}
-
 async function syncMails(){
   if(!can.mails()) return;
-  const logLines=[]; let closeM=null; let logEl=null;
-  const log=s=>{ logLines.push(s); if(logEl){ logEl.textContent=logLines.join("\n"); logEl.scrollTop=1e9; } };
-  closeM=modal(`<h2>Mails von meta abrufen</h2><div class="small mute">Suche: ${esc(S.settings.gmailQuery||DEFAULT_QUERY)}</div><div class="log" id="lg"></div><button class="btn block" data-close style="margin-top:12px" id="cl">Schließen</button>`,(m)=>{ logEl=m.querySelector("#lg"); });
+  let logEl=null; const lines=[]; const log=t=>{ lines.push(t); if(logEl){ logEl.textContent=lines.join(String.fromCharCode(10)); logEl.scrollTop=1e9; } };
+  modal(`<h2>Mails von meta abrufen</h2><div class="small mute">Läuft auch automatisch alle 15 Minuten im Hintergrund. Suche: ${esc(S.settings.gmailQuery||DEFAULT_QUERY)}</div><div class="log" id="lg"></div><button class="btn block" data-close style="margin-top:12px">Schließen</button>`,m=>{ logEl=m.querySelector("#lg"); });
   const btn=$("#syncBtn"); btn.disabled=true;
-  let neu=0, upd_=0, abr=0;
-  try{
-    log("Suche Mails …");
-    const sr=await S.mcp.callTool(GM,"search_threads",{query:S.settings.gmailQuery||DEFAULT_QUERY,pageSize:50,view:"THREAD_VIEW_MINIMAL"},{cache:false});
-    const threads=(sr.payload&&sr.payload.threads)||[];
-    log(`${threads.length} Mail-Verläufe gefunden.`);
-    const stDoc=await S.db.doc("mails/status").get();
-    const st=stDoc.exists?stDoc.data():{threads:{},msgs:{}};
-    st.threads=st.threads||{}; st.msgs=st.msgs||{};
-    // älteste zuerst, damit neuere Infos gewinnen
-    const msgs=[];
-    for(const t of threads){
-      const subj=(t.messages&&t.messages[0]&&t.messages[0].subject)||"";
-      if(!/Montageauftr|Montagezusage|Montageabrechnung/i.test(subj) && !(t.messages||[]).some(x=>/Montage/i.test(x.subject||""))) continue;
-      const known=(t.messages||[]).every(x=>st.msgs[x.id]) && st.threads[t.id]===(t.messageCount||t.messages?.length);
-      if(known) continue;
-      try{
-        const th=await S.mcp.callTool(GM,"get_thread",{threadId:t.id,messageFormat:"FULL_CONTENT"},{cache:false});
-        const p=th.payload||{};
-        (p.messages||[]).forEach(mm=>{ if(!st.msgs[mm.id]) msgs.push(mm); });
-        st.threads[t.id]=(p.messages||[]).length;
-      }catch(e){ log("⚠ "+(t.messages?.[0]?.subject||t.id)+": "+mcpMsg(e)); }
-    }
-    msgs.sort((a,b)=>new Date(a.date)-new Date(b.date));
-    log(`${msgs.length} neue Nachrichten werden verarbeitet …`);
-    const zusagen=[];
-    for(const m of msgs){
-      const subj=m.subject||"";
-      if(!/meta\.de/i.test(m.sender||"")) { st.msgs[m.id]=1; continue; }
-      try{
-        if(/Montageauftr/i.test(subj)){
-          const rows=parseUebersicht(m); log(`📋 Wochenübersicht ${new Date(m.date).toLocaleDateString("de-DE")}: ${rows.length} Aufträge`);
-          for(const r of rows){
-            const id=idOf(r.nr); const ex=S.orders[id];
-            if(!ex){ await setDoc(orderPath(id),{...r,terminStatus:"zu_terminieren",prodStatus:/nicht/i.test(r.versand)?"in_produktion":"abholbereit",erstelltAm:Date.now(),quelle:"mail",uebersichtAm:new Date(m.date).getTime()}); S.orders[id]={id,...r}; neu++; }
-            else { const p={}; ["vorgang","bauvorhaben","plzOrt","kabinen","versand","kw","jahr"].forEach(k=>{ if(r[k] && r[k]!==ex[k]) p[k]=r[k]; });
-              if(p.versand && !/nicht/i.test(p.versand) && (!ex.prodStatus||ex.prodStatus==="offen"||ex.prodStatus==="in_produktion"||ex.prodStatus==="produziert")) p.prodStatus="abholbereit";
-              if(Object.keys(p).length){ await upd(orderPath(id),{...p,uebersichtAm:new Date(m.date).getTime()}); Object.assign(ex,p); upd_++; } }
-          }
-        } else if(/Montagezusage/i.test(subj)){
-          const mm=subj.match(/Auftrag\s+(\S+)\s+in\s+KW\s+(\d+)\/(\d{4})/i);
-          if(mm){
-            const nr=mm[1], id=idOf(nr); const body=m.plaintextBody||txt(htmlDoc(m)?.body);
-            const kab=(body.match(/\((\d+)\s+Kabine/)||[])[1]||"";
-            const ab=(body.match(/Der Auftrag kann (.*?) abgeholt werden/s)||[])[1]||"";
-            const att=(m.attachments||[]).filter(a=>/image|pdf/i.test(a.mimeType||"")).map(a=>({id:a.id,filename:a.filename||"",mimeType:a.mimeType||""}));
-            const data={kw:+mm[2],jahr:+mm[3],zusage:true,abholung:ab?ab.replace(/\s+/g," ").trim():"",zusageMail:{msgId:m.id,viewUrl:m.viewUrl||"",att,am:new Date(m.date).getTime()}};
-            if(kab) data.kabinen=kab;
-            if(!S.orders[id]){ await setDoc(orderPath(id),{nr,...data,terminStatus:"zu_terminieren",prodStatus:"in_produktion",erstelltAm:Date.now(),quelle:"mail"}); S.orders[id]={id,nr,...data}; neu++; }
-            else { await upd(orderPath(id),data); Object.assign(S.orders[id],data); upd_++; }
-            log(`✅ Montagezusage ${nr} für KW ${mm[2]} (${att.length} Anhänge)`);
-            if(att.length) zusagen.push(id);
-          }
-        } else if(/Montageabrechnung/i.test(subj)){
-          const mm=subj.match(/Auftrag\s+(\S+)/i);
-          if(mm){
-            const nr=mm[1].replace(/[^\w\/\-]/g,""), id=idOf(nr); const a=parseAbrechnung(m);
-            if(a.summe){
-              const ex=S.fin[id]; const d=new Date(m.date).getTime();
-              if(!ex || (ex.datum||0)<=d){
-                await setDoc("finanzen/"+id,{nr,bauvorhaben:a.bv,summe:a.summe,positionen:a.positionen,bemerkung:a.bemerkung,datum:d,mailId:m.id,rechnungStatus:ex?.rechnungStatus||"offen",rechnungsNr:ex?.rechnungsNr||"",quelle:"mail"});
-              }
-              if(!S.orders[id]){ const bv=splitBV(a.bv); await setDoc(orderPath(id),{nr,bauvorhaben:bv.bauvorhaben,plzOrt:bv.plzOrt,terminStatus:"fest",prodStatus:"abholbereit",erstelltAm:Date.now(),quelle:"mail",abgerechnet:true,abschluss:{typ:"ok",am:d,by:null},berichtStatus:"gesendet",berichtGesendetAm:d}); }
-              else await upd(orderPath(id),{abgerechnet:true});
-              abr++; log(`💶 Abrechnung ${nr}: ${fmtEUR(a.summe)}`);
-            } else log(`⚠ Abrechnung ${nr}: Summe nicht lesbar`);
-          }
-        }
-        st.msgs[m.id]=1;
-      }catch(e){ log("⚠ Fehler bei „"+subj+"“: "+(e.message||e.code)); }
-    }
-    await setDoc("mails/status",st);
-    await setDoc("einstellungen/allgemein",{...S.settings,letzterAbruf:Date.now()});
-    // Unterlagen neuer Zusagen holen & Deckblatt lesen
-    for(const id of zusagen){
-      try{ log(`📎 Unterlagen für ${S.orders[id]?.nr} …`); const n=await importUnterlagen(id,s=>log("   "+s)); log(`   ${n} Bilder übernommen`); }
-      catch(e){ log("   ⚠ "+mcpMsg(e)); }
-    }
-    log(`\nFertig: ${neu} neu, ${upd_} aktualisiert, ${abr} Abrechnungen.`);
-  }catch(e){ log("⚠ "+mcpMsg(e)); }
+  if(!S.sync){ log("⚠ Abruf auf dem Server ist hier nicht verfügbar."); btn.disabled=false; return; }
+  log("Mails werden auf dem Server abgerufen – Aufträge, PDFs und Deckblätter …");
+  try{ const r=await S.sync.run({quelle:"manuell"}); (r.log||[]).forEach(log); if(r.weitere) log("Es gibt noch mehr Mails – einfach nochmal abrufen oder auf den nächsten automatischen Abruf warten."); }
+  catch(e){ log("⚠ "+mcpMsg(e)); }
   btn.disabled=false;
 }
 async function importUnterlagen(id,progress=()=>{}){
@@ -1671,12 +1980,12 @@ async function importUnterlagen(id,progress=()=>{}){
     const key=(a.filename||"")+"|"+z.msgId; if(have.has(key)) continue;
     progress(`lade ${a.filename} …`);
     const r=await S.mcp.callTool(GM,"download_gmail_attachment",{messageId:z.msgId,attachmentId:a.id,filename:a.filename,mimeType:a.mimeType},{cache:false});
-    const img=(r.content||[]).find(c=>c.type==="image"&&c.data);
+    const img=(r.content||[]).find(c=>c.data); // Bilder und PDFs
     if(!img) continue;
     const bin=atob(img.data); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
     const blob=new Blob([u8],{type:img.mimeType||a.mimeType||"image/jpeg"});
     blobs.push(blob);
-    if(S.assets){ const sb=await shrink(blob,2000,.85); const up=await S.assets.upload(sb); await S.db.collection("fotos").doc().set({auftragId:id,kat:"unterlagen",assetId:up.id,name:a.filename,typ:sb.type,mailAtt:key,am:Date.now(),von:myId()}); }
+    if(S.assets){ const sb=/pdf/i.test(blob.type)?blob:await shrink(blob,2000,.85); const up=await S.assets.upload(sb); await S.db.collection("fotos").doc().set({auftragId:id,kat:"unterlagen",assetId:up.id,name:a.filename,typ:sb.type,mailAtt:key,am:Date.now(),von:myId()}); }
     n++;
   }
   if(blobs.length && S.sample){
@@ -1698,15 +2007,22 @@ function berichtText(o){
   else if(typ==="rekla") L.push(`Auftrag ${o.nr} (${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}): Montage abgeschlossen, es gibt eine Reklamation (siehe unten).`);
   else L.push(`Auftrag ${o.nr} (${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}): Baustelle erfolgreich abgeschlossen.`);
   L.push("","Montagebericht:");
-  if(typ==="leerfahrt"&&lf){ L.push(`- Datum: ${new Date(lf.am).toLocaleDateString("de-DE")}`,`- Gefahrene km: ${lf.km||"-"}`,`- Personen: ${lf.personen||"-"}`,`- Zeit: ${Math.floor(lf.minuten/60)} Std ${lf.minuten%60} Min`,`- Grund: ${lf.grund}`); }
+  if(typ==="leerfahrt"&&lf){ L.push(`- Status: ${lf.status||"Leerfahrt"}`,`- Datum: ${new Date(lf.am).toLocaleDateString("de-DE")}`,lf.fahrzeug?`- Fahrzeug: ${FAHRZEUGE[lf.fahrzeug]||lf.fahrzeug}`:null,`- Selbst gefahrene km: ${lf.km||"-"}`,`- Personen vor Ort: ${lf.personen||"-"}`,lf.personenMit?`- Mitgefahren: ${lf.personenMit}`:null,`- Zeit: ${Math.floor(lf.minuten/60)} Std ${lf.minuten%60} Min`,`- Grund: ${lf.grund}`,lf.schreibenAm?`- Schreiben an den Kunden gesendet am ${new Date(lf.schreibenAm).toLocaleDateString("de-DE")}${lf.schreibenAn?" an "+lf.schreibenAn:""}`:null); }
   else {
-    L.push(`- Montagetag(e): ${tage||"-"}`,`- Arbeitszeit: ${fmtHM(totalMs(o))}`,`- Personen: ${b.personen||"-"}`,`- Gefahrene km: ${b.istKm||"-"}`,`- Übernachtung: ${b.hotel==="ja"?"ja"+(b.hotelInfo?" ("+b.hotelInfo+")":""):"nein"}`);
+    const az=arbeitszeitMin(o), uebern=!leer(b.uebernachtungen)?b.uebernachtungen:(b.hotel==="ja"?(b.hotelInfo||"1"):"0");
+    L.push(`- Montagetag(e): ${tage||"-"}`,`- Arbeitszeit: ${az?fmtHMin(az)+" Std.":"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Mitgefahrene Personen: ${leer(b.personenMit)?"-":b.personenMit}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,`- Geschosse (Material getragen): ${b.geschosse||"-"}`,`- Übernachtungen: ${uebern}`);
+    const tot=summeMengen(o); const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${(S.lohnPos.find(p=>p.k===k)||{}).label||k}`);
+    if(pos.length) L.push(`- Positionen: ${pos.join(", ")}`);
     if(b.taetigkeit) L.push(`- Ausgeführt: ${b.taetigkeit}`);
+    (b.sonder||[]).forEach(s=>L.push(`- Sonderleistung: ${s.arbeit} (${s.personen||1} Pers. × ${fmtStd(s.min)} Std.)`));
+    if(b.bemerkung) L.push(`- Bemerkungen: ${b.bemerkung}`);
     if(o.unterschrift) L.push(`- Abnahme unterschrieben von: ${o.unterschrift.name||"-"} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
+    else if(o.abnahmePapier) L.push(`- Abnahme: auf Papier unterschrieben`);
+    else L.push(`- Abnahme: steht noch aus`);
   }
   if((typ==="rekla"||typ==="leerfahrt") && rk){ L.push("","Reklamation:",`- Ursache: ${URSACHEN[rk.ursache]||rk.ursache}`,`- Beschreibung: ${rk.text}`); }
-  L.push("","Montagebericht und Abnahmebescheinigung im Anhang.","","Mit freundlichen Grüßen","JD Brüder");
-  return L.join("\n");
+  L.push("",typ==="leerfahrt"?"Montagebericht im Anhang.":abnahmeOk(o)?"Montagebericht und Abnahmebescheinigung im Anhang.":"Montagebericht im Anhang. Die Abnahme reichen wir nach.","","Mit freundlichen Grüßen","JD Brüder");
+  return L.filter(x=>x!==null).join("\n");
 }
 async function blobToB64(blob){ return await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
 function berichtDialog(id){
@@ -1714,12 +2030,15 @@ function berichtDialog(id){
   const typ=o.berichtTyp||o.abschluss?.typ||"ok";
   const rk=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,c)=>c.am-a.am)[0];
   const cands=[];
-  Object.values(S.fotos).forEach(f=>{ if(/^image/.test(f.typ||"image") && f.kat!=="unterlagen") cands.push({assetId:f.assetId,label:{vorher:"Vorher",nachher:"Nachher",vordruck:"Berichtszettel"}[f.kat]||f.kat,def:f.kat!=="vorher"}); });
+  Object.values(S.fotos).forEach(f=>{ if(/^image/.test(f.typ||"image") && f.kat!=="unterlagen") cands.push({assetId:f.assetId,label:{vorher:"Vorher",nachher:"Nachher",vordruck:"Berichtszettel",abnahme:"Abnahme"}[f.kat]||f.kat,def:f.kat!=="vorher"}); });
   if((typ==="rekla"||typ==="leerfahrt") && rk) (rk.fotos||[]).forEach(a=>cands.push({assetId:a,label:"Reklamation",def:true}));
   if(o.unterschrift) cands.push({assetId:o.unterschrift.assetId,label:"Unterschrift",def:true,png:true});
   const subject=`${o.nr} ${o.bauvorhaben||""}`.trim()+(typ==="leerfahrt"?" – Leerfahrt":typ==="rekla"?" – Reklamation":"");
   const to=S.settings.berichtEmail||"Montagebericht@meta.de";
-  modal(`<h2>Bericht an meta senden</h2>
+  modal(`<h2>Bericht abschicken</h2>
+   <label class="f">PDF-Vorschau Montagebericht</label>
+   <div id="pv" style="min-height:60px"><span class="spin"></span> Vorschau wird erstellt …</div>
+   <div class="small mute">Stimmt etwas nicht? Schließen und im Montagebericht oder unter „Montagebericht-PDF“ korrigieren.</div>
    <label class="f">An</label><input class="i" id="to" value="${esc(to)}">
    <label class="f">Betreff</label><input class="i" id="sj" value="${esc(subject)}">
    <label class="f">Text</label><textarea class="i" id="bd" style="min-height:240px">${esc(berichtText(o))}</textarea>
@@ -1729,6 +2048,7 @@ function berichtDialog(id){
    <div class="thumbs">${cands.map((c,i)=>`<label class="t" style="cursor:pointer"><img src="_blob/${esc(c.assetId)}" alt=""><input type="checkbox" data-ci="${i}" ${c.def?"checked":""} style="position:absolute;top:5px;left:5px;width:20px;height:20px"><span style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;font-size:10.5px;padding:2px 4px">${esc(c.label)}</span></label>`).join("")||`<span class="small mute">Keine Fotos vorhanden.</span>`}</div>
    <div id="st" class="small mute" style="margin-top:8px"></div>
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">✉︎ Jetzt senden</button></div>`,(m,close)=>{
+    renderVordruck(o).then(cs=>{ const show=o.unterschrift?cs:cs.slice(0,1); m.querySelector("#pv").innerHTML=show.map(c=>`<img src="${c.toDataURL("image/jpeg",.8)}" alt="Vorschau" style="width:100%;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:zoom-in" data-z>`).join(""); m.querySelectorAll("#pv [data-z]").forEach(im=>im.onclick=()=>lightbox(im.src)); }).catch(()=>{ m.querySelector("#pv").textContent="Vorschau nicht möglich."; });
     m.querySelector("#ok").onclick=async()=>{
       const btn=m.querySelector("#ok"), st=m.querySelector("#st");
       const toV=m.querySelector("#to").value.trim(); if(!/@/.test(toV)) return toast("Empfänger fehlt");
@@ -1757,7 +2077,7 @@ function berichtDialog(id){
         close(); toast("Bericht gesendet ✓"+(skipped?` (${skipped} Foto(s) zu groß, nicht angehängt)`:""),4000);
       }catch(e){
         btn.disabled=false;
-        st.textContent = (e.code==="server_unavailable"||e.code==="upstream_error") ? "Unklar, ob die Mail raus ist – bitte im Gmail-Postausgang nachsehen, bevor du nochmal sendest." : "Nicht gesendet: "+mcpMsg(e);
+        st.textContent = e.code==="approval_required" ? "Du darfst noch keine Mails über die App senden – der Bericht bleibt für den Chef zum Versand bereit." : (e.code==="server_unavailable"||e.code==="upstream_error") ? "Unklar, ob die Mail raus ist – bitte im Gmail-Postausgang nachsehen, bevor du nochmal sendest." : "Nicht gesendet: "+mcpMsg(e);
       }
     };
   });

@@ -1,6 +1,6 @@
 /* Service Worker: macht die App installierbar, hält die App-Dateien offline vor
    und lädt Fotos (_blob/<id>) mit dem Login-Token aus dem privaten Supabase-Speicher. */
-const VERSION = "jd-montage-v1";
+const VERSION = "jd-montage-v2";
 const SHELL = ["./", "index.html", "claude-shim.js", "config.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL))); self.skipWaiting(); });

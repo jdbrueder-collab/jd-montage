@@ -1,0 +1,159 @@
+// Auswertung der meta-Mails (Wochenübersicht, Montagezusage, Montageabrechnung, Disposition mit Unterlagen).
+// Reines JavaScript ohne Abhängigkeiten: den HTML-Parser bekommt jede Funktion übergeben (parseHTML),
+// damit derselbe Code auf dem Server (Deno) und in Tests (Node) läuft.
+
+export const txt = (el) => (el?.textContent || "").replace(/ /g, " ").replace(/\s+/g, " ").trim();
+export const num = (s) => { const v = parseFloat(String(s).replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".")); return isNaN(v) ? 0 : v; };
+export const idOf = (nr) => String(nr).trim().replace(/\//g, "-").replace(/[^A-Za-z0-9_\-.~:@+]/g, "");
+export function splitBV(s) { const i = s.lastIndexOf(","); return i > 0 ? { bauvorhaben: s.slice(0, i).trim(), plzOrt: s.slice(i + 1).trim() } : { bauvorhaben: s, plzOrt: "" }; }
+// "Fwd: Re: AW: WG: …" entfernen
+export const cleanSubject = (s) => String(s || "").replace(/^\s*((fwd?|wg|aw|re|fw)\s*:\s*)+/i, "").trim();
+
+function htmlDoc(m, parseHTML) {
+  const h = (m.htmlBody || "").replace(/<br\s*\/?>/gi, " ");
+  if (!h || !parseHTML) return null;
+  return parseHTML(h);
+}
+
+/** Absender ist meta – direkt oder als weitergeleitete Mail */
+export function vonMeta(m) {
+  if (/meta\.de/i.test(m.sender || "")) return true;
+  const body = m.plaintextBody || "";
+  return /(Von|From):\s*[^\n]*@meta\.de/i.test(body) || /(Von|From):\s*meta Trennwandanlagen/i.test(body);
+}
+
+/** Art der Mail bestimmen */
+export function art(m) {
+  const s = cleanSubject(m.subject);
+  if (/Montageauftr/i.test(s)) return "uebersicht";
+  if (/Montagezusage/i.test(s)) return "zusage";
+  if (/Montageabrechnung/i.test(s)) return "abrechnung";
+  if (istStorno(m)) return "storno";
+  if (/Rechnung|Zahlung|Mahnung|Gutschrift|Berufskleidung|Luxemburg/i.test(s)) return null; // nichts für die Auftragsliste
+  return "dispo";
+}
+
+/** Nur der eigene Text der Mail – ohne Zitate älterer Mails und ohne Signatur */
+export function eigenerText(m) {
+  const b = String(m.plaintextBody || "");
+  const ende = b.search(/^\s*(>|-{3,}|Am .{5,80}schrieb|Von:|From:|-----Urspr|Mit freundlichen|Viele Grüße|Freundliche Grüße|Gruß)/im);
+  return (ende > 0 ? b.slice(0, ende) : b).slice(0, 1500);
+}
+const STORNO = /\b(storniert|stornieren|stornierung|storno|annulliert|abgesagt|zurückgezogen)\b|auftrag\s+(wird|wurde|ist)\s+(gestrichen|aufgehoben|gelöscht)/i;
+/** Storno: Formulierung im Betreff oder im eigenen Text der Mail (nicht in Zitaten) */
+export function istStorno(m) {
+  return STORNO.test(cleanSubject(m.subject)) || STORNO.test(eigenerText(m));
+}
+
+// Auftragsnummern wie 17714/1, 12403, R-42259
+const NR = /((?:R-)?\d{4,6}(?:\/\d{1,2})?)/;
+/** Auftragsnummer aus Betreff oder weitergeleitetem Betreff/Text ("Scans zu Auftrag Nr. 16872") */
+export function nrAusMail(m) {
+  const s = cleanSubject(m.subject);
+  const body = m.plaintextBody || "";
+  const kandidaten = [
+    s.match(new RegExp("Auftrag(?:s)?(?:\\s*-?\\s*Nr\\.?)?\\s*['\"„“]?" + NR.source, "i")),
+    body.match(new RegExp("Subject:\\s*[^\\n]*Auftrag(?:\\s*Nr\\.?)?\\s*" + NR.source, "i")),
+    body.match(new RegExp("Betreff:\\s*[^\\n]*Auftrag(?:\\s*Nr\\.?)?\\s*" + NR.source, "i")),
+    eigenerText(m).match(new RegExp("Auftrag(?:s)?(?:\\s*-?\\s*Nr\\.?)?\\s*['\"„“]?" + NR.source, "i")),
+    s.match(new RegExp("^" + NR.source + "\\b")),
+    s.match(new RegExp("\\b" + NR.source + "\\s+KW\\s*\\d", "i")),
+  ];
+  for (const k of kandidaten) if (k && !/^(19|20)\d\d$/.test(k[1])) return k[1];
+  return "";
+}
+/** "KW 18" aus dem Betreff, Jahr aus dem Mail-Datum */
+export function kwAusMail(m) {
+  const s = cleanSubject(m.subject) + " " + (m.plaintextBody || "").slice(0, 600);
+  const k = s.match(/KW\s*(\d{1,2})(?:\s*\/\s*(\d{4}))?/i);
+  if (!k) return null;
+  const kw = +k[1]; if (kw < 1 || kw > 53) return null;
+  let jahr = k[2] ? +k[2] : new Date(m.date).getFullYear();
+  if (!k[2]) { const mailKw = isoWeek(new Date(m.date)).kw; if (kw < mailKw - 20) jahr++; }
+  return { kw, jahr };
+}
+export function isoWeek(d) { d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() + 4 - day); const y = d.getUTCFullYear(); const w = Math.ceil(((d - Date.UTC(y, 0, 1)) / 86400000 + 1) / 7); return { kw: w, jahr: y }; }
+
+/** Brauchbare Anhänge: PDFs und Bilder, aber keine Signatur-Logos (image001.png usw., sehr kleine Bilder) */
+export function unterlagen(m) {
+  return (m.attachments || []).filter((a) => {
+    const t = a.mimeType || "", n = a.filename || "";
+    if (/pdf/i.test(t) || /\.pdf$/i.test(n)) return true;
+    if (!/^image\//i.test(t)) return false;
+    if (/^image0\d\d\.(png|jpe?g|gif)$/i.test(n)) return false;
+    if (a.size && a.size < 25000) return false;
+    return true;
+  });
+}
+
+export function parseUebersicht(m, parseHTML) {
+  const doc = htmlDoc(m, parseHTML); const out = [];
+  if (doc) {
+    const tbl = doc.querySelector("table"); if (!tbl) return out;
+    const heads = [...tbl.querySelectorAll("th")].map((th) => txt(th).toLowerCase());
+    const ix = (k) => heads.findIndex((h) => h.startsWith(k));
+    const iA = ix("aufnr"), iV = ix("vorgang"), iB = ix("bauvorhaben"), iK = ix("kabinen"), iS = ix("status");
+    let kw = null, jahr = null;
+    tbl.querySelectorAll("tr").forEach((tr) => {
+      const tds = [...tr.querySelectorAll("td")];
+      if (tds.length === 1) { const mm = txt(tds[0]).match(/KW\s*(\d+)\s*\/\s*(\d{4})/i); if (mm) { kw = +mm[1]; jahr = +mm[2]; } return; }
+      if (tds.length >= 4 && iA >= 0) {
+        const nr = txt(tds[iA]); if (!nr) return;
+        out.push({ nr, vorgang: iV >= 0 ? txt(tds[iV]).replace(/^-$/, "") : "", ...splitBV(txt(tds[iB])), kabinen: iK >= 0 ? txt(tds[iK]) : "", versand: iS >= 0 ? txt(tds[iS]) : "", kw, jahr });
+      }
+    });
+    if (out.length) return out;
+  }
+  // Fallback Klartext
+  let kw = null, jahr = null;
+  (m.plaintextBody || "").split(/\n/).forEach((l) => {
+    const k = l.match(/^\s*KW\s*(\d+)\/(\d{4})/); if (k) { kw = +k[1]; jahr = +k[2]; return; }
+    const r = l.match(/^\s*((?:R-)?\d{4,6}(?:\/\d+)?)\s+(?:(\d{5,7}|-)\s+)?(.+?,\s*\d{4,5}\s+[^\d]+?)\s+(\d+)?\s*(versendet|noch nicht)/);
+    if (r) out.push({ nr: r[1], vorgang: r[2] && r[2] !== "-" ? r[2] : "", ...splitBV(r[3].trim()), kabinen: r[4] || "", versand: r[5] === "noch nicht" ? "noch nicht versendet" : "versendet", kw, jahr });
+  });
+  return out;
+}
+
+export function parseZusage(m) {
+  const s = cleanSubject(m.subject);
+  const body = m.plaintextBody || "";
+  const mm = s.match(/Auftrag\s+(\S+)\s+in\s+KW\s+(\d+)\/(\d{4})/i) || body.match(/Montagezusage für Auftrag\s+(\S+)\s+in\s+KW\s+(\d+)\/(\d{4})/i);
+  if (!mm) return null;
+  const kab = (body.match(/\((\d+)\s+Kabine/) || [])[1] || "";
+  const ab = (body.match(/Der Auftrag kann (.*?) abgeholt werden/s) || [])[1] || "";
+  return { nr: mm[1], kw: +mm[2], jahr: +mm[3], kabinen: kab, abholung: ab ? ab.replace(/\s+/g, " ").trim() : "" };
+}
+
+export function parseAbrechnung(m, parseHTML) {
+  const doc = htmlDoc(m, parseHTML); const pos = []; let summe = 0, bem = "";
+  if (doc) {
+    doc.querySelectorAll("tr").forEach((tr) => {
+      const tds = [...tr.querySelectorAll("td")]; const t = txt(tr);
+      if (/^Bem\.?:/i.test(t)) bem = t.replace(/^Bem\.?:\s*/i, "");
+      if (/Summe/i.test(t)) { const v = num(txt(tds[tds.length - 1])); if (v) summe = v; return; }
+      if (tds.length === 4) { const [a, me, ep, gp] = tds.map(txt); if (a && /^[\d.,]+$/.test(gp)) pos.push({ artikel: a, menge: num(me), ep: num(ep), gp: num(gp) }); }
+    });
+  }
+  if (!summe) { const mm = (m.plaintextBody || "").match(/Summe:\s*([\d.,]+)/); if (mm) summe = num(mm[1]); }
+  if (!pos.length && m.plaintextBody) { m.plaintextBody.split("\n").forEach((l) => { const r = l.match(/^\s*(.+?)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s*$/); if (r && !/Summe/.test(r[1])) pos.push({ artikel: r[1].trim(), menge: num(r[2]), ep: num(r[3]), gp: num(r[4]) }); }); }
+  const nr = (cleanSubject(m.subject).match(/Auftrag\s+(\S+)/i) || [])[1] || "";
+  const mm = (m.plaintextBody || txt(doc?.body)).match(/Auftrag\s+\S+\s+\(([^)]+)\)/);
+  return { nr: nr.replace(/[^\w\/\-]/g, ""), positionen: pos, summe, bemerkung: bem, bv: mm ? mm[1] : "" };
+}
+
+/** Passenden Auftrag finden: exakt, sonst eindeutig über die Grundnummer (16872 ↔ 16872/1) */
+export function findeAuftrag(orders, nr) {
+  if (!nr) return null;
+  const id = idOf(nr);
+  if (orders[id]) return id;
+  const base = String(nr).split("/")[0];
+  const treffer = Object.keys(orders).filter((k) => String(orders[k].nr || k).split("/")[0] === base);
+  return treffer.length === 1 ? treffer[0] : null;
+}
+
+export const DECK_PROMPT = `Du bekommst Unterlagen eines Montageauftrags der Firma meta Trennwandanlagen (Aufmaß-Deckblatt, Produktdeckblatt, Zeichnungen) als PDF oder Bild.
+Lies die Felder aus und antworte NUR mit einem JSON-Objekt mit diesen Schlüsseln (leerer String, wenn nicht vorhanden):
+{"fertigungsNr":"Fertigungs-Auftrags-Nr. z.B. 17714/1","vorgang":"Auftrags-Vorgangs-Nr.","berater":"meta-Berater mit Telefon","adresse":"Baustellenanschrift: Straße Nr, PLZ Ort","bauvorhabenName":"z.B. Wohnquartier","bauleiterName":"","bauleiterTel":"","bauleiterMail":"","oeffnungszeiten":"","geschosse":"Montage in Geschoss","aufzug":"","montageHinweise":"","kaufmHinweise":"Kaufmännische Hinweise kurz","technHinweise":"Technische Hinweise vom Produktdeckblatt","aufbau":"Was aufgebaut wird: Modell/Design, Anzahl Kabinen, Anlagenhöhe, Farben, Bodenanschluss – kurz in einer Zeile","kabinen":"Anzahl Kabinen als Zahl","zahlungspflichtiger":"Firma, Ort","kw":"gewünschte Montage-KW als Zahl"}
+Handschriftliche Werte mit lesen. Nichts erfinden.`;
+// Welche Deckblatt-Felder in den Auftrag übernommen werden (nur wenn dort noch leer)
+export const DECK_FELDER = ["vorgang", "berater", "adresse", "bauleiterName", "bauleiterTel", "bauleiterMail", "oeffnungszeiten", "geschosse", "aufzug", "montageHinweise", "kaufmHinweise", "technHinweise", "aufbau", "kabinen", "zahlungspflichtiger"];

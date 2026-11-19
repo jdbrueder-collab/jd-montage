@@ -2,7 +2,7 @@
 // Ersetzt sample.json aus claude.ai: bekommt einen Prompt (+ Bilder) und gibt ein JSON-Objekt zurück.
 // Freigegebene Nutzer dürfen sie aufrufen. Schlüssel: Secret ANTHROPIC_API_KEY.
 import Anthropic from "npm:@anthropic-ai/sdk";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.119.1";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -27,10 +27,10 @@ Deno.serve(async (req) => {
 
     const { prompt, images = [] } = await req.json();
     const content: Anthropic.Beta.BetaContentBlockParam[] = [
-      ...images.slice(0, 4).map((i: { type: string; data: string }) => ({
-        type: "image" as const,
-        source: { type: "base64" as const, media_type: i.type as "image/jpeg", data: i.data },
-      })),
+      ...images.slice(0, 4).map((i: { type: string; data: string }) =>
+        /pdf/i.test(i.type)
+          ? ({ type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: i.data } })
+          : ({ type: "image" as const, source: { type: "base64" as const, media_type: i.type as "image/jpeg", data: i.data } })),
       { type: "text", text: String(prompt || "") },
     ];
 
