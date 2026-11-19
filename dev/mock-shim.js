@@ -107,6 +107,7 @@
   // Simulierter Server-Abruf: legt eine Anfrage der Disposition mit Dokumente.pdf an
   const sync = {
     async run(body = {}) {
+      if (body.pushTest || body.abholbereit) { console.log("[TEST] Benachrichtigung (nicht gesendet):", body); window.__push = (window.__push || []).concat([body]); return { gesendet: 1, geraete: 1 }; }
       if (body.erinnerung) { console.log("[TEST] Erinnerung NICHT gesendet (Testumgebung) an", body.an); return { gesendet: true, an: [body.an], offen: 3 }; }
       const pdf = new Blob(["%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 595 842]/Parent 2 0 R>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF"], { type: "application/pdf" });
       const a = await assets.upload(pdf);

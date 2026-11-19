@@ -5,6 +5,7 @@
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { createClient } from "jsr:@supabase/supabase-js@2.119.1";
 import { DOMParser } from "npm:linkedom@0.18.5";
+import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
   art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, kwAusMail, nrAusMail,
@@ -46,9 +47,16 @@ Deno.serve(async (req) => {
       const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
       });
+      const body = await req.json().catch(() => ({}));
+      // Benachrichtigungen: meta meldet „abholbereit“, oder Test an die eigenen Geräte (alle freigegebenen Nutzer)
+      if (body?.abholbereit || body?.pushTest) {
+        const { data: member } = await user.rpc("is_member");
+        const { data: u } = await user.auth.getUser();
+        if (!member || !u?.user) return json({ code: "approval_required", message: "Kein Zugriff." }, 403);
+        return json(body.pushTest ? await pushTest(db, u.user.id) : await pushAbholbereit(db, String(body.abholbereit)));
+      }
       const { data: owner } = await user.rpc("is_owner");
       if (!owner) return json({ code: "approval_required", message: "Nur Admins dürfen Mails abrufen." }, 403);
-      const body = await req.json().catch(() => ({}));
       // Admin: Erinnerung zum Testen sofort senden (an die eigene Adresse oder an alle Empfänger)
       if (body?.erinnerung) return json(await metaErinnerung(db, true, body.an ? String(body.an) : ""));
     }
@@ -58,6 +66,50 @@ Deno.serve(async (req) => {
     return json({ code: e.code || "upstream_error", message: e.message || String(e) }, e.code === "server_not_connected" || e.code === "needs_reauth" ? 409 : 502);
   }
 });
+
+// ---------- Handy-Benachrichtigungen (Web-Push) ----------
+// Abos: Sammlung „push“ (je Gerät ein Eintrag mit uid und Push-Abo). Schlüssel: Secret VAPID_KEYS (JWK-Paar).
+let pushServer: any = null;
+async function pushServerHolen() {
+  if (pushServer) return pushServer;
+  const roh = Deno.env.get("VAPID_KEYS"); if (!roh) throw new Error("Benachrichtigungen sind noch nicht eingerichtet (VAPID_KEYS fehlt).");
+  const keys = await webpush.importVapidKeys(JSON.parse(roh), { extractable: false });
+  pushServer = await webpush.ApplicationServer.new({ contactInformation: "mailto:jd.brueder.meta@gmail.com", vapidKeys: keys });
+  return pushServer;
+}
+async function pushSenden(db: any, uids: Set<string>, nachricht: { titel: string; text: string; url: string }) {
+  const abos = Object.entries(await getCol(db, "push")).map(([id, a]: [string, any]) => ({ id, ...a })).filter((a: any) => uids.has(a.uid));
+  const server = await pushServerHolen();
+  let gesendet = 0;
+  for (const a of abos) {
+    try { await server.subscribe(a.sub).pushTextMessage(JSON.stringify(nachricht), { ttl: 24 * 3600, urgency: "high" }); gesendet++; }
+    catch (e: any) { if (/\b(403|404|410)\b/.test(String(e?.response?.status ?? e?.message ?? ""))) await db.from("docs").delete().match({ col: "push", id: a.id }); }
+  }
+  return { gesendet, geraete: abos.length };
+}
+async function chefIds(db: any) {
+  const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
+  const { data } = await db.from("app_owner").select("id");
+  return new Set<string>([...(data || []).map((r: any) => r.id), ...Object.entries(rollen.map || {}).filter(([, r]) => r === "chef").map(([id]) => id)]);
+}
+/** meta hat „abholbereit“ bestätigt → Chefs benachrichtigen (einmal je Bestätigung) */
+async function pushAbholbereit(db: any, id: string) {
+  const o = await getDoc(db, "auftraege", id);
+  const b = o?.abholbereitBestaetigt;
+  if (!o || o.prodStatus !== "abholbereit" || !b?.am) return { gesendet: 0, grund: "nicht abholbereit" };
+  if (Date.now() - b.am > 15 * 60_000) return { gesendet: 0, grund: "Bestätigung zu alt" };
+  if (o.abholbereitGemeldetAm && o.abholbereitGemeldetAm >= b.am) return { gesendet: 0, grund: "schon gemeldet" };
+  await updDoc(db, "auftraege", id, { abholbereitGemeldetAm: Date.now() });
+  const r = await pushSenden(db, await chefIds(db), {
+    titel: `Abholbereit: ${o.nr}`,
+    text: [o.bauvorhaben, o.plzOrt].filter(Boolean).join(", ") + (b.name ? `\nBestätigt von ${b.name}` : ""),
+    url: APP_URL + "#a-" + id,
+  });
+  return r;
+}
+async function pushTest(db: any, uid: string) {
+  return await pushSenden(db, new Set([uid]), { titel: "Benachrichtigungen sind an ✓", text: "Du bekommst Bescheid, sobald meta einen Auftrag als abholbereit meldet.", url: APP_URL });
+}
 
 // ---------- Morgendliche Erinnerung an meta ----------
 // Einstellungen in einstellungen/allgemein.metaErinnerung = { aktiv, an: "a@meta.de, b@meta.de", uhrzeit: 7, tage: "werktags" }

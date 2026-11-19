@@ -1,6 +1,6 @@
 /* Service Worker: macht die App installierbar, hält die App-Dateien offline vor
    und lädt Fotos (_blob/<id>) mit dem Login-Token aus dem privaten Supabase-Speicher. */
-const VERSION = "jd-montage-v2";
+const VERSION = "jd-montage-v3";
 const SHELL = ["./", "index.html", "claude-shim.js", "config.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL))); self.skipWaiting(); });
@@ -40,4 +40,21 @@ self.addEventListener("fetch", e => {
     if (r.ok) { const c = r.clone(); caches.open(VERSION).then(s => s.put(e.request, c)); }
     return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: true })));
+});
+
+// Handy-Benachrichtigungen (z. B. „Abholbereit: 17714/1“)
+self.addEventListener("push", e => {
+  let d = {}; try { d = e.data ? e.data.json() : {}; } catch (err) { d = { titel: "JD Brüder Montage", text: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.titel || "JD Brüder Montage", {
+    body: d.text || "", icon: "icon-192.png", badge: "icon-192.png", tag: d.url || "jd", renotify: true, data: { url: d.url || "./" }
+  }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || "./", self.registration.scope).href;
+  e.waitUntil((async () => {
+    const tabs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of tabs) { if (c.url.startsWith(self.registration.scope)) { await c.focus(); c.navigate(url).catch(() => {}); return; } }
+    await self.clients.openWindow(url);
+  })());
 });

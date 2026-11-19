@@ -121,14 +121,90 @@ canvas.sig{width:100%;height:200px;border:1px solid var(--line);border-radius:10
 @keyframes sp{to{transform:rotate(360deg)}}
 .log{font-size:12.5px;color:var(--mute);max-height:180px;overflow:auto;background:var(--greybg);border-radius:9px;padding:8px;margin-top:8px;white-space:pre-wrap}
 .hide{display:none!important}
+/* ===== Ruhiges, minimalistisches Design ===== */
+:root{
+  --bg:#f5f6f8;--card:#fff;--ink:#101828;--mute:#667085;--line:#eaecf0;
+  --brand:#1d3a5f;--brand2:#2e5b8f;--accent:#d9912b;
+  --ok:#15803d;--okbg:#ecfdf3;--warn:#b54708;--warnbg:#fff6e5;--bad:#d92d20;--badbg:#fef3f2;--info:#1d4ed8;--infobg:#eff4ff;--grey:#475467;--greybg:#f2f4f7;
+  --r:16px;--sh:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+}
+html,body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;letter-spacing:-.005em}
+svg.ic{width:1.15em;height:1.15em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.2em;flex:none}
+.cc{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.4px;padding:1px 4px;border-radius:4px;background:currentColor;line-height:1.3;vertical-align:.1em}
+.cc{background:none;border:1.5px solid currentColor}
+.dotc{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--line);vertical-align:.05em}
+.dotc.ok{background:var(--ok)}.dotc.warn{background:var(--accent)}.dotc.bad{background:var(--bad)}
+/* Kopf: hell und ruhig */
+header.top{background:rgba(255,255,255,.92);-webkit-backdrop-filter:saturate(180%) blur(12px);backdrop-filter:saturate(180%) blur(12px);color:var(--ink);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top) + 10px) 16px 10px}
+header.top .logo{font-size:17px;font-weight:800;letter-spacing:-.01em;color:var(--brand)}
+header.top .logo small{color:var(--mute);opacity:1;font-weight:600;font-size:11px;letter-spacing:.02em;text-transform:uppercase}
+header.top .chip.dark,#roleChip{background:var(--greybg);color:var(--grey)}
+header.top .btn{background:var(--greybg)!important;color:var(--ink)!important}
+/* Karten ohne harte Ränder */
+.card{border:0;box-shadow:var(--sh);padding:16px;margin-bottom:12px}
+.card h3{font-size:15px;text-transform:none;letter-spacing:-.005em;color:var(--ink);font-weight:700;margin:0 0 12px}
+main{padding:16px 16px calc(96px + env(safe-area-inset-bottom))}
+/* Auftragskarten */
+.order{border:0;box-shadow:var(--sh);border-radius:var(--r);padding:14px 16px;margin-bottom:10px}
+.order .nr{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.order .bv{font-weight:600;margin-top:2px}
+.order .chips{gap:6px;margin-top:10px}
+.order.hl{box-shadow:var(--sh),inset 3px 0 0 var(--accent)}
+.order.done{opacity:.6}
+.chip{font-size:11.5px;font-weight:600;padding:3px 9px;gap:4px;background:var(--greybg);color:var(--grey)}
+.chip.gold{background:#fff6e5;color:var(--warn)}
+.kw{margin:20px 2px 8px}
+.kw b{font-size:14px;color:var(--grey);font-weight:700}
+.kw .now{font-size:11.5px}
+/* Bedienelemente */
+.btn{border-radius:12px;font-weight:600;background:var(--greybg)}
+.btn.ghost{background:#fff;border:1px solid var(--line)}
+.btn.sm{border-radius:10px}
+.btn.warn{background:#fff6e5;color:var(--warn);border:1px solid #fedf89}
+input.i,select.i,textarea.i{border-color:var(--line);border-radius:12px;background:#fff}
+label.f{font-weight:600;color:var(--grey)}
+.seg{background:var(--greybg);border-radius:12px}
+.seg button{border-radius:10px;font-weight:600;color:var(--mute)}
+.seg button.on{box-shadow:0 1px 3px rgba(16,24,40,.1)}
+.seg.phasen .n{background:#fff;color:var(--mute)}
+.banner{border-radius:14px;font-size:13.5px;padding:12px 14px}
+.banner.bad{background:var(--badbg);color:#912018}.banner.warn{background:var(--warnbg);color:#93370d}.banner.info{background:var(--infobg);color:#1e3a8a}.banner.ok{background:var(--okbg);color:#085d3a}
+.toolbar input{background:#fff;box-shadow:var(--sh);border-color:transparent}
+.back{color:var(--grey);font-weight:600}
+.steps div{height:4px}
+.steps div.on{background:var(--brand2)}
+.q{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.choice .btn{background:#fff;border:1px solid var(--line);font-weight:600}
+.choice .btn.on{background:var(--brand);border-color:var(--brand)}
+.thumbs .t,.thumbs .add{border-radius:12px}
+.thumbs .t.pdf svg.ic{width:28px;height:28px;color:var(--brand2)}
+/* Untere Leiste: ruhige Symbole */
+nav.bottom{background:rgba(255,255,255,.94);-webkit-backdrop-filter:saturate(180%) blur(12px);backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--line)}
+nav.bottom a{font-size:11px;font-weight:600;padding:9px 2px 10px;color:#98a2b3}
+nav.bottom a .ic{display:block;margin:0 auto 3px;width:22px;height:22px;stroke-width:1.8}
+nav.bottom a.on{color:var(--brand)}
+nav.bottom a.on .ic{stroke-width:2.2}
+.modal{border-radius:20px 20px 0 0}
+@media(min-width:600px){.modal{border-radius:20px}}
+.toast{border-radius:14px;font-weight:500}
+.order.abh{background:#f0fdf4;box-shadow:var(--sh),inset 4px 0 0 var(--ok)}
+.chip.abh{background:var(--ok);color:#fff}
+#pushBtn{padding:6px 9px}
+#pushBtn.on{color:var(--ok)!important;background:var(--okbg)!important}
+.seg.laender{background:none;padding:0;gap:6px;flex-wrap:nowrap;margin-top:10px!important}
+.seg.laender button{flex:none;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 12px;min-height:32px;font-size:12.5px;white-space:nowrap;color:var(--grey);box-shadow:none}
+.seg.laender button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.seg.laender button.on .cc{color:#fff}
+.seg.laender .n{color:inherit;opacity:.7;margin-left:3px}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="logo">JD Brüder<small>Montage</small></div>
   <div class="sp"></div>
-  <span id="roleChip" class="chip dark"></span>
-  <button id="syncBtn" class="btn sm hide" style="background:rgba(255,255,255,.16);color:#fff">✉︎ Mails abrufen</button>
+  <span id="roleChip" class="chip"></span>
+  <button id="pushBtn" class="btn sm hide" title="Benachrichtigungen" aria-label="Benachrichtigungen"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+  <button id="syncBtn" class="btn sm hide"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Mails</button>
 </header>
 <main id="app"><div class="empty"><span class="spin"></span><br><br>App wird geladen …</div></main>
 <nav class="bottom" id="nav"></nav>
@@ -137,6 +213,51 @@ canvas.sig{width:100%;height:200px;border:1px solid var(--line);border-radius:10
 <script>
 "use strict";
 /* ============ Grundlagen ============ */
+/* ============ Symbole: einheitliche Linien-Icons statt bunter Emojis ============ */
+const ICONS={
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  xcircle:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
+  car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  truck:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/>',
+  pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  eye:'<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  list:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+  inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  clip:'<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+  settings:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  ban:'<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  nav:'<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
+  pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  spark:'<path d="M12 3l1.9 5.8L20 10.7l-6.1 1.9L12 18.5l-1.9-5.9L4 10.7l6.1-1.9z"/>',
+  euro:'<path d="M4 10h12"/><path d="M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>',
+  refresh:'<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+  back:'<path d="m15 18-6-6 6-6"/>'
+};
+const ic=(n,cls="")=>`<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]||""}</svg>`;
+// Emojis in der Oberfläche durch Symbole ersetzen (nicht in Eingabefeldern/Mailtexten)
+const EMOJI_IC=[["🇩🇪",'<span class="cc">DE</span>'],["🇱🇺",'<span class="cc">LU</span>'],["✉︎","mail"],["✉️","mail"],["✉","mail"],["⚠️","alert"],["⚠","alert"],["🎤","mic"],["🚗","car"],["🚐","truck"],["⏰","bell"],["📞","phone"],["❌","xcircle"],["👷","user"],["⏱","clock"],["📄","file"],["✍️","pen"],["✍","pen"],["👁","eye"],["📋","list"],["📥","inbox"],["🔎","search"],["📷","camera"],["➕","plus"],["📎","clip"],["🗓️","calendar"],["🗓","calendar"],["⚙️","settings"],["⚙","settings"],["⏳","clock"],["📨","mail"],["⛔","ban"],["🧭","nav"],["⏸","pause"],["📝","file"],["✏️","pen"],["✏","pen"],["✨","spark"],["👍","check"],["💶","euro"],["🟢",'<i class="dotc ok"></i>'],["🟡",'<i class="dotc warn"></i>'],["🔴",'<i class="dotc bad"></i>'],["⚪",'<i class="dotc"></i>']];
+function iconize(html){
+  return String(html).split(/(<textarea[\s\S]*?<\/textarea>|<option[\s\S]*?<\/option>|<[^>]*>)/).map((part,i)=>{
+    if(i%2) return part; // Tags, Textfelder und Auswahllisten unverändert lassen
+    let p=part; for(const [e,r] of EMOJI_IC){ if(p.includes(e)) p=p.split(e).join(r.startsWith("<")?r:ic(r)); }
+    return p.replace(/️/g,"");
+  }).join("");
+}
+
+
 const $ = (s, el=document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmtEUR = n => (Number(n)||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
@@ -187,7 +308,7 @@ function toast(msg,ms=2600){ const t=document.createElement("div"); t.className=
 function modal(html, onMount, onClose){
   const root=$("#modalRoot");
   const bg=document.createElement("div"); bg.className="modalbg";
-  bg.innerHTML=`<div class="modal">${html}</div>`;
+  bg.innerHTML=`<div class="modal">${iconize(html)}</div>`;
   root.appendChild(bg);
   const close=()=>{ if(!bg.isConnected) return; bg.remove(); try{ onClose&&onClose(); }catch(e){} };
   bg.addEventListener("click",e=>{ if(e.target===bg) close(); });
@@ -342,17 +463,18 @@ function go(h){ if(location.hash==="#"+h) render(true); else location.hash=h; }
 function renderNav(){
   const r=route().v;
   const offR=Object.values(S.reklas).filter(x=>x.offen).length;
-  if(S.role==="hersteller" && !S.isOwner){ $("#nav").innerHTML=""; $("#roleChip").textContent="meta"; $("#syncBtn").classList.add("hide"); return; }
+  if(S.role==="hersteller" && !S.isOwner){ $("#nav").innerHTML=""; $("#roleChip").textContent="meta"; $("#syncBtn").classList.add("hide"); $("#pushBtn")?.classList.add("hide"); return; }
   if(S.role==="pending"){ $("#nav").innerHTML=""; $("#roleChip").textContent=""; $("#syncBtn").classList.add("hide"); return; }
   const meineR=can.sub()?Object.values(S.reklas).filter(x=>x.offen&&sichtbar(S.orders[x.auftragId]||{})).length:offR;
   const items=[["auftraege","📋","Aufträge"],["woche","🗓️","Woche"]];
   if(can.fahrten()) items.push(["fahrten","🚗","Fahrten"]);
   items.push(["rekla","⚠️","Reklam.",meineR]);
-  if(can.finanzen()) items.push(["geld","€","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
+  if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
   if(can.setup()) items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length:0]);
-  $("#nav").innerHTML=items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}"><span class="ic">${ic}</span>${l}${n?`<span class="dot">${n}</span>`:""}</a>`).join("");
+  $("#nav").innerHTML=iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}"><span class="ic">${ic}</span>${l}${n?`<span class="dot">${n}</span>`:""}</a>`).join(""));
   $("#roleChip").textContent = S.isOwner ? "Chef · Admin" : (ROLLEN[S.role]||"");
   $("#syncBtn").classList.toggle("hide", !can.mails());
+  const pb=$("#pushBtn"); if(pb){ pb.classList.toggle("hide", !can.planen()); pb.classList.toggle("on", pushAktiv()); }
 }
 
 function render(scrollTop){
@@ -365,7 +487,7 @@ function render(scrollTop){
   let html="";
   if(S.loadErr) html+=`<div class="banner bad">${esc(S.loadErr)}</div>`;
   if(S.role==="pending"){ app.innerHTML=S.rolesLoaded?viewPending():`<div class="empty"><span class="spin"></span></div>`; bindPending(); return; }
-  if(S.role==="hersteller" && !S.isOwner){ app.innerHTML=html+viewMeta(); bindMeta(); bind({v:"meta"}); if(scrollTop) window.scrollTo(0,0); return; }
+  if(S.role==="hersteller" && !S.isOwner){ app.innerHTML=iconize(html+viewMeta()); bindMeta(); bind({v:"meta"}); if(scrollTop) window.scrollTo(0,0); return; }
   if(r.v==="detail") html+=viewDetail(r.id);
   else if(r.v==="fahrten" && can.fahrten()) html+=viewFahrten();
   else if(r.v==="woche") html+=viewWoche();
@@ -373,7 +495,7 @@ function render(scrollTop){
   else if(r.v==="geld" && can.finanzen()) html+=viewGeld();
   else if(r.v==="setup" && can.setup()) html+=viewSetup();
   else html+=viewListe();
-  app.innerHTML=html;
+  app.innerHTML=iconize(html);
   bind(r);
   if(scrollTop) window.scrollTo(0,0);
 }
@@ -412,7 +534,9 @@ function orderChips(o){
     if(running(o)) c.push(`<span class="chip info">⏱ läuft</span>`);
     if(o.terminStatus==="fest") c.push(`<span class="chip ok">Fest: ${esc(o.termin?fmtDate(o.termin):"terminiert")}</span>`);
     else c.push(`<span class="chip warn">Muss terminiert werden</span>`);
-    const p=PROD[o.prodStatus||"offen"]; if(o.prodStatus && o.prodStatus!=="offen") c.push(`<span class="chip ${p[1]}">${p[0]}</span>`);
+    const p=PROD[o.prodStatus||"offen"];
+    if(o.prodStatus==="abholbereit") c.push(`<span class="chip abh">✓ Abholbereit${o.abholbereitBestaetigt?" · meta":""}</span>`);
+    else if(o.prodStatus && o.prodStatus!=="offen") c.push(`<span class="chip ${p[1]}">${p[0]}</span>`);
     if(o.quelle==="mail-dispo"&&!o.zusage) c.push(`<span class="chip gold">📨 Anfrage von meta</span>`);
     if(o.versand) c.push(`<span class="chip ${/nicht/i.test(o.versand)?"":"ok"}">${esc(o.versand)}</span>`);
     if((o.leerfahrten||[]).length) c.push(`<span class="chip bad">${o.leerfahrten.length>1?o.leerfahrten.length+"× ":""}${esc(o.leerfahrten[o.leerfahrten.length-1].status||"Leerfahrt")}</span>`);
@@ -428,7 +552,8 @@ function orderChips(o){
 }
 function orderCard(o){
   const hl = !istFertig(o) && !o.storniert && o.terminStatus!=="fest" && (o.prodStatus==="abholbereit"||o.prodStatus==="produziert");
-  return `<a class="order ${istFertig(o)?"done":""} ${hl?"hl":""} ${o.storniert?"storno":""}" href="#a-${esc(o.id)}">
+  const abh=o.prodStatus==="abholbereit" && !istFertig(o) && !o.storniert;
+  return `<a class="order ${istFertig(o)?"done":""} ${hl?"hl":""} ${abh?"abh":""} ${o.storniert?"storno":""}" href="#a-${esc(o.id)}">
     <div class="row between"><span class="nr">${esc(o.nr)}</span><span class="small mute">${o.kabinen?esc(o.kabinen)+" Kabinen":""}</span></div>
     <div class="bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
     <div class="small mute">${esc(o.plzOrt||o.adresse||"")}</div>
@@ -536,7 +661,7 @@ function metaAbholbereitDialog(id){
     ok.onclick=async()=>{
       const name=nm.value.trim(); if(name.replace(/\s+/g,"").length<3||!mc.checked) return toast("Bitte Namen eintragen und bestätigen");
       ok.disabled=true; S.metaName=name; const now=Date.now();
-      try{ await upd(orderPath(id),{prodStatus:"abholbereit",prodVorMeta:o.prodStatus==="abholbereit"?(o.prodVorMeta||"produziert"):(o.prodStatus||"offen"),prodGeaendertAm:now,prodVon:myId(),abholbereitBestaetigt:{name,am:now,von:myId()},prodVerlauf:[...(o.prodVerlauf||[]),{status:"abholbereit",name,am:now,von:myId()}].slice(-20)}); close(); toast(`Auftrag ${o.nr} ist abholbereit ✓`); }
+      try{ await upd(orderPath(id),{prodStatus:"abholbereit",prodVorMeta:o.prodStatus==="abholbereit"?(o.prodVorMeta||"produziert"):(o.prodStatus||"offen"),prodGeaendertAm:now,prodVon:myId(),abholbereitBestaetigt:{name,am:now,von:myId()},prodVerlauf:[...(o.prodVerlauf||[]),{status:"abholbereit",name,am:now,von:myId()}].slice(-20)}); close(); toast(`Auftrag ${o.nr} ist abholbereit ✓`); S.sync?.run({abholbereit:id}).catch(()=>{}); }
       catch(e){ ok.disabled=false; }
     };
   });
@@ -545,7 +670,7 @@ function metaAbholbereitDialog(id){
 /* ---------- Detail ---------- */
 function viewDetail(id){
   const o=S.orders[id];
-  if(!o||!sichtbar(o)) return `<button class="back" data-back>← Zurück</button><div class="empty">Auftrag nicht gefunden.</div>`;
+  if(!o||!sichtbar(o)) return `<button class="back" data-back>‹ Zurück</button><div class="empty">Auftrag nicht gefunden.</div>`;
   if(S.fotoFor!==id) subscribeFotos(id);
   const f=S.fin[id];
   const fotos=Object.values(S.fotos).sort((a,b)=>(a.am||0)-(b.am||0));
@@ -555,7 +680,7 @@ function viewDetail(id){
   const route=S.settings.firmenAdresse?`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(S.settings.firmenAdresse)}&destination=${encodeURIComponent(addr)}`:"";
   const reklas=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,b)=>b.am-a.am);
   const w=planWeek(o);
-  let h=`<button class="back" data-back>← Alle Aufträge</button>`;
+  let h=`<button class="back" data-back>‹ Alle Aufträge</button>`;
   if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
   // Kopf
@@ -2109,6 +2234,43 @@ async function importUnterlagen(id,progress=()=>{}){
   return n;
 }
 
+/* ============ Handy-Benachrichtigungen ============ */
+// Der Chef bekommt eine Benachrichtigung, sobald meta einen Auftrag als abholbereit bestätigt.
+const pushUnterstuetzt=()=>"serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const pushAktiv=()=>{ try{ return pushUnterstuetzt() && Notification.permission==="granted" && !!localStorage.getItem("jdPushId"); }catch(e){ return false; } };
+function b64uZuBytes(s){ const p="=".repeat((4-s.length%4)%4); const b=atob((s+p).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(b,c=>c.charCodeAt(0)); }
+async function pushEinschalten(){
+  const reg=await navigator.serviceWorker.ready;
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted") throw new Error("Benachrichtigungen wurden nicht erlaubt. Du kannst sie in den Einstellungen des Handys für diese App erlauben.");
+  const sub=(await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uZuBytes(window.JD_CONFIG?.vapid||"")});
+  let h=0; for(const ch of sub.endpoint) h=(h*31+ch.charCodeAt(0))>>>0;
+  const id=myId()+"_"+h.toString(36);
+  await setDoc("push/"+id,{uid:myId(),sub:sub.toJSON(),am:Date.now(),geraet:(navigator.userAgent.match(/\(([^)]+)\)/)||[])[1]||""});
+  localStorage.setItem("jdPushId",id);
+}
+async function pushAusschalten(){
+  const id=localStorage.getItem("jdPushId");
+  try{ const sub=await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if(sub) await sub.unsubscribe(); }catch(e){}
+  if(id){ try{ await S.db.doc("push/"+id).delete(); }catch(e){} }
+  localStorage.removeItem("jdPushId");
+}
+function pushDialog(){
+  const ios=/iPhone|iPad/i.test(navigator.userAgent), standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+  const an=pushAktiv();
+  modal(`<h2>🔔 Benachrichtigungen</h2>
+   <div class="small mute">Du bekommst eine Nachricht aufs Handy, sobald meta einen Auftrag als <b>abholbereit</b> bestätigt. Antippen öffnet den Auftrag.</div>
+   ${!pushUnterstuetzt()?`<div class="banner warn" style="margin-top:10px">${ios&&!standalone?"Auf dem iPhone geht das nur aus der installierten App: In Safari auf <b>Teilen</b> → <b>Zum Home-Bildschirm</b> tippen, die App dort öffnen und hier erneut tippen.":"Dieser Browser unterstützt keine Benachrichtigungen. Bitte die App auf dem Handy öffnen (Chrome oder installierte App)."}</div>`:""}
+   <div id="pst" class="small" style="margin-top:10px">${an?"✓ Auf diesem Gerät eingeschaltet.":""}</div>
+   <div class="grid2" style="margin-top:12px">${an?`<button class="btn" id="pOff">Ausschalten</button><button class="btn pri" id="pTest">Test senden</button>`:`<button class="btn" data-close>Später</button><button class="btn pri" id="pOn" ${pushUnterstuetzt()?"":"disabled"}>Einschalten</button>`}</div>`,(m,close)=>{
+    const st=m.querySelector("#pst");
+    const test=async()=>{ st.innerHTML=`<span class="spin"></span> Test wird gesendet …`; try{ const r=await S.sync.run({pushTest:true}); st.textContent=r.gesendet?"✓ Test gesendet – die Nachricht sollte gleich erscheinen.":"Nicht gesendet: "+(r.grund||"kein Gerät gefunden"); }catch(e){ st.textContent="Nicht gesendet: "+(e.message||e.code); } };
+    m.querySelector("#pOn") && (m.querySelector("#pOn").onclick=async()=>{ st.innerHTML=`<span class="spin"></span> wird eingeschaltet …`; try{ await pushEinschalten(); renderNav(); await test(); }catch(e){ st.textContent=e.message||String(e); } });
+    m.querySelector("#pTest") && (m.querySelector("#pTest").onclick=test);
+    m.querySelector("#pOff") && (m.querySelector("#pOff").onclick=async()=>{ await pushAusschalten(); renderNav(); close(); toast("Benachrichtigungen ausgeschaltet"); });
+  });
+}
+
 /* ============ Bericht senden ============ */
 function berichtText(o){
   const b=o.bericht||{}; const typ=o.berichtTyp||o.abschluss?.typ||"ok";
@@ -2198,6 +2360,7 @@ function berichtDialog(id){
 }
 
 $("#syncBtn").onclick=syncMails;
+$("#pushBtn").onclick=pushDialog;
 boot();
 </script>
 </body>
