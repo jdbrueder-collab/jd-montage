@@ -190,6 +190,9 @@ nav.bottom a.on .ic{stroke-width:2.2}
 .order.abh{background:#f0fdf4;box-shadow:var(--sh),inset 4px 0 0 var(--ok)}
 .chip.abh{background:var(--ok);color:#fff}
 #pushBtn{padding:6px 9px}
+.seg.phasen button.ab.on .n{background:var(--ok)}
+.stlink{border:0;background:none;color:var(--mute);font-size:12.5px;font-weight:600;cursor:pointer;padding:4px 2px;text-decoration:underline;text-underline-offset:2px}
+.stlink.on{color:var(--bad)}
 #pushBtn.on{color:var(--ok)!important;background:var(--okbg)!important}
 .seg.laender{background:none;padding:0;gap:6px;flex-wrap:nowrap;margin-top:10px!important}
 .seg.laender button{flex:none;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 12px;min-height:32px;font-size:12.5px;white-space:nowrap;color:var(--grey);box-shadow:none}
@@ -390,7 +393,9 @@ function running(o){ const z=(o.zeiten||[]); return z.length && !z[z.length-1].e
 function offeneReklas(id){ return Object.values(S.reklas).filter(r=>r.auftragId===id && r.offen); }
 function istFertig(o){ return !!o.abschluss; }
 // Bereiche der Startansicht: nicht verplant → verplant & in Arbeit → erledigt; stornierte extra
-const PHASEN=[["offen","Nicht verplant"],["arbeit","Verplant & in Arbeit"],["erledigt","Erledigt"],["storniert","Storniert"]];
+// Weg eines Auftrags: nicht verplant → abholbereit → terminiert → erledigt (Storniert steht abseits)
+const PHASEN=[["offen","Nicht verplant"],["abholbereit","Abholbereit"],["arbeit","Terminiert"],["erledigt","Erledigt"],["storniert","Storniert"]];
+const HAUPT_PHASEN=PHASEN.filter(([k])=>k!=="storniert");
 // Land der Baustelle: von Hand festgelegt, sonst aus der Adresse erkannt (L-1234, 4-stellige PLZ, „Luxemburg“)
 const LAENDER={de:["🇩🇪","Deutschland"],lu:["🇱🇺","Luxemburg"]};
 function landOf(o){
@@ -403,14 +408,23 @@ function landOf(o){
 }
 // Abrechnung/Vergütung von meta liegt vor (S.fin sieht nur der Chef, „abgerechnet“ steht am Auftrag)
 const abgerechnet=o=>!!(o.abgerechnet || S.fin[o.id]);
-// Verplant: fester Termin, Montagezusage von meta, Monteure eingeteilt oder Einsatz begonnen
-const verplant=o=>o.terminStatus==="fest" || !!o.zusage || (o.monteure||[]).length>0 || !!o.einsatz || (o.zeiten||[]).length>0;
+// Montagebericht ist verschickt (Leerfahrt-Berichte zählen nicht – da muss neu geplant werden)
+const berichtVerschickt=o=>!!o.abschluss && o.berichtStatus==="gesendet";
+// Erledigt, aber die Abrechnung von meta fehlt noch
+const wartetAufAbrechnung=o=>berichtVerschickt(o) && !abgerechnet(o) && !o.storniert;
+// Vorleistung: frühere Leerfahrten dieses Auftrags (werden im nächsten Montagebericht mit aufgeführt)
+const leerDatum=l=>new Date(l.am).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"});
+const leerKm=o=>(o.leerfahrten||[]).reduce((a,l)=>a+nn(l.km),0);
+function vorleistungZeilen(o){
+  return (o.leerfahrten||[]).map(l=>`Vorleistung: Leerfahrt am ${leerDatum(l)}${nn(l.km)?` – ${String(l.km).replace(".",",")} km`:""}${l.personen?`, ${l.personen} Pers.`:""}${l.minuten?`, ${fmtHMin(l.minuten)} Std.`:""}${l.fahrzeug?`, ${fahrzeugText(l)}`:""} (${l.grund||"Baustelle nicht montagefertig"})`);
+}
+// Terminiert: fester Termin eingetragen oder Einsatz schon begonnen
+const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).length>0;
 function phase(o){
   if(o.storniert) return "storniert";
-  if(istFertig(o) || abgerechnet(o)) return "erledigt";
-  // nach einer Leerfahrt ohne neuen festen Termin muss neu geplant werden
-  if((o.leerfahrten||[]).length && o.terminStatus!=="fest" && !o.einsatz) return "offen";
-  if(verplant(o)) return "arbeit";
+  if(abgerechnet(o) || berichtVerschickt(o)) return "erledigt"; // Bericht verschickt oder Abrechnung da
+  if(terminiert(o)) return "arbeit";
+  if(o.prodStatus==="abholbereit") return "abholbereit"; // Ware fertig – jetzt einplanen
   return "offen";
 }
 
@@ -546,6 +560,7 @@ function orderChips(o){
     if(o.berichtStatus==="pruefung") c.push(`<span class="chip warn">📥 Sub-Bericht prüfen</span>`);
     if(o.berichtStatus==="bereit"&&!can.sub()) c.push(`<span class="chip warn">Bericht senden</span>`);
     if(o.berichtStatus==="gesendet") c.push(`<span class="chip ok">Bericht gesendet</span>`);
+    if(wartetAufAbrechnung(o)) c.push(`<span class="chip warn">⏳ Warten auf Abrechnung</span>`);
   } else {
     if(running(o)) c.push(`<span class="chip info">⏱ läuft</span>`);
     if(o.terminStatus==="fest") c.push(`<span class="chip ok">Fest: ${esc(o.termin?fmtDate(o.termin):"terminiert")}</span>`);
@@ -555,7 +570,7 @@ function orderChips(o){
     else if(o.prodStatus && o.prodStatus!=="offen") c.push(`<span class="chip ${p[1]}">${p[0]}</span>`);
     if(o.quelle==="mail-dispo"&&!o.zusage) c.push(`<span class="chip gold">📨 Anfrage von meta</span>`);
     if(o.versand) c.push(`<span class="chip ${/nicht/i.test(o.versand)?"":"ok"}">${esc(o.versand)}</span>`);
-    if((o.leerfahrten||[]).length) c.push(`<span class="chip bad">${o.leerfahrten.length>1?o.leerfahrten.length+"× ":""}${esc(o.leerfahrten[o.leerfahrten.length-1].status||"Leerfahrt")}</span>`);
+    if((o.leerfahrten||[]).length){ const l=o.leerfahrten[o.leerfahrten.length-1]; c.push(`<span class="chip warn">↩ Zuvor ${o.leerfahrten.length>1?o.leerfahrten.length+"× ":""}Leerfahrt ${leerDatum(l)}${leerKm(o)?` · ${String(leerKm(o)).replace(".",",")} km`:""}</span>`); }
     if(o.einsatz?.bereit==="nein"&&!o.einsatz?.nmb?.weiter) c.push(`<span class="chip bad">⛔ Nicht montagebereit – Freigabe offen</span>`);
     else if(o.einsatz?.fahrzeug&&!o.einsatz?.startAm&&!running(o)) c.push(`<span class="chip info">🚐 unterwegs / vor Ort</span>`);
   }
@@ -598,9 +613,10 @@ function viewListe(){
   list.forEach(o=>{ const w=planWeek(o); const k=w.kw?wkKey(w.jahr,w.kw):0; (groups[k]=groups[k]||{w,items:[]}).items.push(o); });
   const keys=Object.keys(groups).map(Number).sort((a,b)=>S.filter==="erledigt"||S.filter==="storniert"?b-a:a-b);
   let h=`<div class="toolbar"><input class="i" id="q" placeholder="Nummer, Bauvorhaben, Ort suchen …" value="${esc(S.q)}"></div>
-  <div class="seg phasen" id="flt">${PHASEN.map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""} ${k==="storniert"?"st":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
+  <div class="seg phasen" id="flt">${HAUPT_PHASEN.map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""} ${k==="abholbereit"?"ab":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="seg laender" id="landFlt" style="margin-top:8px">${[["alle","Alle"],["de",LAENDER.de.join(" ")],["lu",LAENDER.lu.join(" ")]].map(([k,l])=>`<button data-land="${k}" class="${land===k?"on":""}">${l} <span class="n">${proLand[k]}</span></button>`).join("")}</div>
-  <label class="row small" style="margin-top:8px;gap:6px;cursor:pointer;width:max-content"><input type="checkbox" id="nurMeine" ${S.nurMeine?"checked":""} style="width:18px;height:18px"> Nur meine Aufträge</label>
+  <div class="row between" style="margin-top:8px"><label class="row small" style="gap:6px;cursor:pointer;width:max-content"><input type="checkbox" id="nurMeine" ${S.nurMeine?"checked":""} style="width:18px;height:18px"> Nur meine Aufträge</label>
+  <button class="stlink ${S.filter==="storniert"?"on":""}" data-f="storniert">Storniert (${anzahl.storniert||0})</button></div>
   ${suche?`<div class="banner info small" style="margin-top:8px">Suche in allen Bereichen.</div>`:""}
   ${S.filter==="storniert"&&!suche?`<div class="small mute" style="margin-top:8px">Aufträge, die reingekommen sind, aber von meta wieder storniert wurden.</div>`:""}`;
   if(can.planen()){
@@ -882,6 +898,7 @@ function einsatzCard(o,fk){
    <div class="steps" style="margin-top:10px">${SCHRITTE.map((s,i)=>`<div class="${i<idx||st==="fertig"?"on":i===idx?"cur":""}"></div>`).join("")}</div>
    <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
   if(st==="fahrzeug"){
+    if((o.leerfahrten||[]).length) h+=`<div class="banner warn small">${vorleistungZeilen(o).map(esc).join("<br>")}</div>`;
     h+=`<div class="q">Womit wird gefahren?</div><div class="choice">${Object.entries(FAHRZEUGE).map(([k,l])=>`<button class="btn ${e.fahrzeug===k?"on":""}" data-fz="${k}">🚐 ${l}</button>`).join("")}</div>
      <label class="f" style="margin-top:14px">Oder selbst eintragen</label>
      <div class="row" style="flex-wrap:nowrap"><input class="i" id="fzText" placeholder="z. B. 2 Autos, 2 Anhänger" value="${esc(e.fahrzeug==="sonst"?e.fahrzeugText||"":"")}"><button class="btn pri" id="fzTextOk" style="white-space:nowrap">Übernehmen</button></div>`;
@@ -947,7 +964,9 @@ function berichtCard(o,fk){
   const route=S.settings.firmenAdresse?`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(S.settings.firmenAdresse)}&destination=${encodeURIComponent(adresseOf(o))}`:"";
   const fahrtKm=Object.values(S.fahrten).filter(f=>f.auftragId===o.id).reduce((a,f)=>a+nn(f.km),0);
   const sv=sonderVorschlaege();
+  const vl=vorleistungZeilen(o);
   return `<div class="card" id="berichtCard"><h3>Montagebericht</h3>
+   ${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
    ${fertig?"":`<div class="grid2" style="margin-bottom:8px"><button class="btn pri" id="speak">🎤 Montagebericht einsprechen</button><button class="btn" id="manuell">✏️ Manuell ausfüllen</button></div>
    <div class="small mute" style="margin-bottom:4px">Beim Einsprechen trägt die App alles in die passenden Felder ein. Prüfe danach die Angaben und ergänze oder korrigiere sie.</div>`}
    <label class="f">Was wurde gemacht? (Tätigkeit)</label>
@@ -1082,7 +1101,7 @@ function leerfahrtDialog(id){
         const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
         const ms=z.reduce((s,x)=>s+(x.e-x.s),0)||(e.abfahrtAm?now-e.abfahrtAm:0);
         const lf=[...(o.leerfahrten||[]),{am:now,status:LEERFAHRT_NMB,km:m.querySelector("#km").value.trim(),personen:m.querySelector("#pp").value.trim(),personenMit:m.querySelector("#pm").value.trim(),fahrzeug:e.fahrzeug||"",fahrzeugText:e.fahrzeugText||"",minuten:Math.round(ms/60000),grund:text,schreibenAm:e.nmb?.schreibenAm||null,schreibenAn:e.nmb?.an||"",von:myId()}];
-        await upd(orderPath(id),{leerfahrten:lf,einsatz:null,zeiten:[],terminStatus:"zu_terminieren",berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:"leerfahrt"});
+        await upd(orderPath(id),{leerfahrten:lf,einsatz:null,zeiten:[],terminStatus:"zu_terminieren",termin:null,prodStatus:"abholbereit",bericht:{istKm:null,arbeitszeitMin:null},berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:"leerfahrt"});
         for(const f of vorher){ try{ await S.db.doc("fotos/"+f.id).update({kat:"leerfahrt"}); }catch(err){} }
         close(); toast("Gespeichert als „"+LEERFAHRT_NMB+"“",3500);
       }catch(err){ btn.disabled=false; }
@@ -1489,11 +1508,14 @@ function vdDefaults(o){
   if(az) bem.push(`Arbeitszeit: ${fmtHMin(az)} Std.${leer(b.personen)?"":`, ${b.personen} Pers. vor Ort`}${leer(b.personenMit)?"":`, ${b.personenMit} Pers. mitgefahren`}`);
   if(rk && rk.ursache!=="teile" && !rk.leerfahrt) bem.push(`Reklamation (${URSACHEN[rk.ursache]||rk.ursache}): ${rk.text}`);
   if(b.bemerkung) bem.push(b.bemerkung);
+  vorleistungZeilen(o).forEach(z=>bem.push(z));
   d.bemerkungen=bem.join("\n");
   d.fertigung=(rk&&rk.ursache==="teile")?rk.text:"";
   // Montage-Abrechnung ganz unten: ausschließlich gefahrene km und Geschosse
   const ab=[];
-  if(!leer(b.istKm)) ab.push(`${fmtZahl(b.istKm)} km`);
+  const lk=leerKm(o), ld=(o.leerfahrten||[]).filter(l=>nn(l.km)).map(leerDatum).join(", ");
+  if(!leer(b.istKm)) ab.push(`${fmtZahl(b.istKm)} km${lk?` + ${fmtZahl(lk)} km Leerfahrt (${ld})`:""}`);
+  else if(lk) ab.push(`${fmtZahl(lk)} km Leerfahrt (${ld})`);
   if(mitAnhaenger(o.einsatz)) ab.push("Bitte beachten: Anhängerfahrt");
   const g=leer(b.geschosse)?"":b.geschosse; if(g) ab.push(`Geschosse: ${g}`);
   d.abrechnung=ab.join(", ");
@@ -1857,7 +1879,7 @@ function bind(r){
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go("auftraege"));
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto]")) return; lightbox(t.dataset.zoom); });
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); },250); }; }
-  app.querySelectorAll("#flt [data-f]").forEach(b=>b.onclick=()=>{ S.filter=b.dataset.f; render(); });
+  app.querySelectorAll("#flt [data-f], .stlink[data-f]").forEach(b=>b.onclick=()=>{ S.filter=S.filter===b.dataset.f&&b.dataset.f==="storniert"?"offen":b.dataset.f; render(); });
   $("#nurMeine") && ($("#nurMeine").onchange=()=>{ S.nurMeine=$("#nurMeine").checked; render(); });
   app.querySelectorAll("#landFlt [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
@@ -2308,6 +2330,7 @@ function berichtText(o){
     if(b.taetigkeit) L.push(`- Ausgeführt: ${b.taetigkeit}`);
     (b.sonder||[]).forEach(s=>L.push(`- Sonderleistung: ${s.arbeit} (${s.personen||1} Pers. × ${fmtStd(s.min)} Std.)`));
     if(b.bemerkung) L.push(`- Bemerkungen: ${b.bemerkung}`);
+    vorleistungZeilen(o).forEach(z=>L.push(`- ${z}`));
     if(o.unterschrift) L.push(`- Abnahme unterschrieben von: ${o.unterschrift.name||"-"} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
     else if(o.abnahmePapier) L.push(`- Abnahme: auf Papier unterschrieben`);
     else L.push(`- Abnahme: steht noch aus`);
