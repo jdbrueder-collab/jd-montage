@@ -4,3 +4,4 @@ supabase/.temp/
 .gmail-secrets.env
 migration/
 .claude/
+backup/

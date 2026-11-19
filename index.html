@@ -496,7 +496,7 @@ function renderNav(){
   if(S.role==="hersteller" && !S.isOwner){ $("#nav").innerHTML=""; $("#roleChip").textContent="meta"; $("#syncBtn").classList.add("hide"); $("#pushBtn")?.classList.add("hide"); return; }
   if(S.role==="pending"){ $("#nav").innerHTML=""; $("#roleChip").textContent=""; $("#syncBtn").classList.add("hide"); return; }
   const meineR=can.sub()?Object.values(S.reklas).filter(x=>x.offen&&sichtbar(S.orders[x.auftragId]||{})).length:offR;
-  const items=[["auftraege","📋","Aufträge"],["woche","🗓️","Woche"]];
+  const items=[["auftraege","📋","Aufträge"]];
   if(can.fahrten()) items.push(["fahrten","🚗","Fahrten"]);
   items.push(["rekla","⚠️","Reklam.",meineR]);
   if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
