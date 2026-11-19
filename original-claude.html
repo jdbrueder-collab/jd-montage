@@ -110,6 +110,37 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 @media(min-width:600px){.modalbg{align-items:center}.modal{border-radius:18px}}
 .modal h2{margin:0 0 6px;font-size:19px}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#14171c;color:#fff;padding:10px 16px;border-radius:12px;z-index:60;font-size:14px;max-width:90vw;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.kal-nav{display:flex;align-items:center;gap:8px;margin:12px 0 8px}
+.kal-nav .t{flex:1;text-align:center;font-weight:750;font-size:16px}
+.kal-nav .btn{min-width:44px;font-size:20px;line-height:1}
+.kal-woche{display:grid;gap:8px}
+@media(min-width:720px){.kal-woche{grid-template-columns:repeat(var(--tage),minmax(0,1fr));align-items:start}.kal-tag{min-height:140px}}
+.kal-tag{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px}
+.kal-tag.heute{border:2px solid var(--brand2)}
+.kal-tag.frei{padding:6px 8px}
+@media(max-width:719px){.kal-tag.frei{display:flex;justify-content:space-between;align-items:center}.kal-tag.frei .kal-kopf{margin:0}}
+.kal-kopf{display:flex;justify-content:space-between;gap:6px;font-size:12.5px;font-weight:750;color:var(--mute);margin-bottom:2px}
+.kal-tag.heute .kal-kopf{color:var(--brand2)}
+.kal-leer{font-size:12px;color:var(--mute)}
+.kal-o{display:block;text-decoration:none;color:var(--ink);background:var(--greybg);border-radius:9px;padding:7px 8px;margin-top:6px;border-left:4px solid var(--brand2);font-size:13px}
+.kal-o:hover{filter:brightness(.97)}
+.kal-o.fertig{border-left-color:var(--ok);opacity:.75}.kal-o.laeuft{border-left-color:var(--accent);background:var(--warnbg)}.kal-o.ueber{border-left-color:var(--bad);background:var(--badbg)}
+.kal-bv{font-weight:600;line-height:1.25;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.kal-ort{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kal-av{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--brand2);color:#fff;font-size:10px;font-weight:700}
+.kal-st{font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--infobg);color:var(--info)}
+.kal-st.ok{background:var(--okbg);color:var(--ok)}.kal-st.bad{background:var(--badbg);color:var(--bad)}.kal-st.warn{background:var(--warnbg);color:var(--warn)}
+.kal-monat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.kal-wt{text-align:center;font-size:11.5px;font-weight:700;color:var(--mute);padding:2px 0}
+.kal-zelle{min-height:64px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px;cursor:pointer;overflow:hidden}
+.kal-zelle.aus{opacity:.45}.kal-zelle.heute{border:2px solid var(--brand2)}
+.kal-zn{font-size:11.5px;font-weight:700;color:var(--mute)}
+.kal-chip{display:block;background:var(--brand2);color:#fff;border-radius:4px;padding:0 3px;margin-top:2px;font-size:10px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kal-chip.fertig{background:var(--ok)}
+.kal-mehr{display:block;font-size:10px;color:var(--mute);margin-top:1px}
+.kal-n{display:none;margin:4px auto 0;width:24px;height:24px;border-radius:50%;background:var(--brand2);color:#fff;font-size:12px;font-weight:750;align-items:center;justify-content:center}
+.kal-n.fertig{background:var(--ok)}
+@media(max-width:600px){.kal-chip,.kal-mehr{display:none}.kal-n{display:flex}.kal-zelle{min-height:56px;text-align:center}}
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:70;display:flex;align-items:center;justify-content:center;cursor:zoom-out}
 .dv{position:fixed;inset:0;z-index:90;background:#1b1f24;display:flex;flex-direction:column;color:#fff}
 .dvbar{display:flex;align-items:center;gap:6px;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));background:#111418}
@@ -476,7 +507,7 @@ async function loadProfiles(ids){
   try{ const ps=await S.user.profiles(need); Object.assign(S.profiles, ps||{}); scheduleRender(); }catch(e){}
 }
 function nameOf(id){ if(!id) return "–"; if(id===myId()) return "Ich"; const f=S.rolesInfo?.[id]?.firma; if(f) return f; const p=S.profiles[id]; return (p&&p.name)||"Jemand"; }
-function initials(id){ const n=nameOf(id); return n==="Ich"?(S.me?.name||"I").slice(0,1):n.split(/\s+/).map(x=>x[0]).join("").slice(0,2).toUpperCase(); }
+function initials(id){ const n=nameOf(id); return n==="Ich"?(S.me?.name||"I").slice(0,1):(n.split(/\s+/).map(x=>x.replace(/[^\p{L}\d]/gu,"")[0]).filter(Boolean).join("").slice(0,2).toUpperCase()||"?"); }
 
 /* ============ Datenzugriff ============ */
 const writeQ = {};
@@ -730,6 +761,66 @@ function sichtbar(o){
   if(can.sub()) return (o.monteure||[]).includes(myId());
   return true;
 }
+/* ---------- Kalender für „Terminiert“: Woche (Tage mit Aufträgen) oder Monat (Übersicht) ---------- */
+const tagKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const montagVon=d=>{ const m=new Date(d.getFullYear(),d.getMonth(),d.getDate()); m.setDate(m.getDate()-((m.getDay()+6)%7)); return m; };
+const WT=["Mo","Di","Mi","Do","Fr","Sa","So"];
+function kalKarte(o, heute){
+  const fertig=istFertig(o), laeuft=running(o), tag=o.termin?tagKey(new Date(o.termin)):"";
+  const ueber=!fertig && !laeuft && tag && tag<heute;
+  const reklas=offeneReklas(o.id).length;
+  const mon=(o.monteure||[]).map(m=>`<span class="kal-av" title="${esc(nameOf(m))}">${esc(initials(m))}</span>`).join("");
+  return `<a class="kal-o ${fertig?"fertig":laeuft?"laeuft":ueber?"ueber":""}" href="#a-${esc(o.id)}">
+    <div class="row between" style="flex-wrap:nowrap;gap:4px"><b>${esc(o.nr)}</b><span class="small">${landOf(o)==="lu"?"🇱🇺":""}${o.kabinen?` <span class="mute">${esc(o.kabinen)} Kab.</span>`:""}</span></div>
+    <div class="kal-bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
+    ${o.plzOrt?`<div class="small mute kal-ort">${esc(o.plzOrt)}</div>`:""}
+    <div class="row" style="gap:4px;margin-top:5px;flex-wrap:wrap;align-items:center">${mon}
+      ${fertig?`<span class="kal-st ok">✓ fertig</span>`:laeuft?`<span class="kal-st info">⏱ läuft</span>`:ueber?`<span class="kal-st bad">überfällig</span>`:""}
+      ${o.berichtStatus==="pruefung"&&can.planen()?`<span class="kal-st warn">📥 prüfen</span>`:""}${reklas?`<span class="kal-st bad">⚠ ${reklas}</span>`:""}</div></a>`;
+}
+function kalender(list){
+  const k=S.kal||(S.kal={ansicht:"woche",start:montagVon(new Date()).getTime()});
+  const heute=tagKey(new Date());
+  const mitTag={}, ohne=[];
+  list.forEach(o=>{ if(o.termin){ const t=tagKey(new Date(o.termin)); (mitTag[t]=mitTag[t]||[]).push(o); } else ohne.push(o); });
+  Object.values(mitTag).forEach(a=>a.sort((x,y)=>String(x.nr).localeCompare(String(y.nr),"de",{numeric:true})));
+  const ueber=list.filter(o=>o.termin && !istFertig(o) && !running(o) && tagKey(new Date(o.termin))<heute && montagVon(new Date(o.termin)).getTime()<montagVon(new Date()).getTime());
+  let h=`<div class="kal-nav">
+    <button class="btn sm" data-kal="zurueck" aria-label="Zurück">‹</button>`;
+  const start=new Date(k.start);
+  if(k.ansicht==="monat"){
+    const m0=new Date(start.getFullYear(),start.getMonth(),1);
+    h+=`<div class="t">${m0.toLocaleDateString("de-DE",{month:"long",year:"numeric"})}</div>`;
+  } else {
+    const w=isoWeek(start), ende=new Date(start); ende.setDate(ende.getDate()+6);
+    const anzahl=Object.entries(mitTag).filter(([t])=>t>=tagKey(start)&&t<=tagKey(ende)).reduce((n,[,a])=>n+a.length,0);
+    h+=`<div class="t">KW ${w.kw} <span class="small mute" style="font-weight:500">${start.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${ende.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} · ${anzahl} Auftr.</span></div>`;
+  }
+  h+=`<button class="btn sm" data-kal="vor" aria-label="Weiter">›</button></div>
+   <div class="row between" style="margin-bottom:8px;gap:8px"><div class="seg" id="kalSeg" style="width:auto"><button data-kalv="woche" class="${k.ansicht!=="monat"?"on":""}">Woche</button><button data-kalv="monat" class="${k.ansicht==="monat"?"on":""}">Monat</button></div>
+   <button class="btn sm ghost" data-kal="heute">Heute</button></div>`;
+  if(ueber.length) h+=`<div class="banner bad small" style="cursor:pointer" data-kal-ueber="${ueber[0].termin}">⚠ <b>${ueber.length} Termin${ueber.length>1?"e":""}</b> in vergangenen Wochen noch nicht abgeschlossen: ${ueber.slice(0,6).map(o=>esc(o.nr)).join(", ")}${ueber.length>6?" …":""} – <u>anzeigen</u></div>`;
+  if(k.ansicht==="monat"){
+    const m0=new Date(start.getFullYear(),start.getMonth(),1), ab=montagVon(m0);
+    h+=`<div class="kal-monat">${WT.map(t=>`<div class="kal-wt">${t}</div>`).join("")}`;
+    const tageImMonat=new Date(m0.getFullYear(),m0.getMonth()+1,0).getDate(), felder=Math.ceil(((m0.getDay()+6)%7+tageImMonat)/7)*7;
+    for(let i=0;i<felder;i++){ const d=new Date(ab); d.setDate(ab.getDate()+i);
+      const t=tagKey(d), a=mitTag[t]||[];
+      h+=`<div class="kal-zelle ${d.getMonth()!==m0.getMonth()?"aus":""} ${t===heute?"heute":""}" data-kal-tag="${d.getTime()}"><div class="kal-zn">${d.getDate()}</div>
+        ${a.length?`<span class="kal-n ${a.every(istFertig)?"fertig":""}">${a.length}</span>`:""}
+        ${a.slice(0,3).map(o=>`<span class="kal-chip ${istFertig(o)?"fertig":""}">${esc(o.nr)}</span>`).join("")}${a.length>3?`<span class="kal-mehr">+${a.length-3}</span>`:""}</div>`; }
+    h+=`</div><div class="small mute" style="margin-top:6px">Tag antippen → Woche mit allen Aufträgen öffnen.</div>`;
+  } else {
+    const tage=[]; for(let i=0;i<7;i++){ const d=new Date(start); d.setDate(start.getDate()+i); tage.push(d); }
+    const zeig=tage.filter((d,i)=>i<5 || (mitTag[tagKey(d)]||[]).length); // Sa/So nur, wenn dort etwas geplant ist
+    h+=`<div class="kal-woche" style="--tage:${zeig.length}">${zeig.map(d=>{ const t=tagKey(d), a=mitTag[t]||[];
+      return `<div class="kal-tag ${t===heute?"heute":""} ${a.length?"":"frei"}"><div class="kal-kopf"><span>${WT[(d.getDay()+6)%7]} ${d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}${t===heute?" · heute":""}</span>${a.length?`<span>${a.length}</span>`:""}</div>
+        ${a.map(o=>kalKarte(o,heute)).join("")||`<div class="kal-leer">frei</div>`}</div>`; }).join("")}</div>`;
+  }
+  if(ohne.length) h+=`<div class="kw" style="margin-top:14px"><b>Terminiert, aber ohne Datum</b><span class="small mute">${ohne.length} Auftr.</span></div>${ohne.map(orderCard).join("")}`;
+  if(!list.length) h+=`<div class="empty">Keine terminierten Aufträge.</div>`;
+  return h;
+}
 function viewListe(){
   if(can.sub() && (S.filter==="offen"||S.filter==="abholbereit")) S.filter="arbeit"; // Subunternehmer sehen nur Terminiert/Erledigt
   let list=Object.values(S.orders).filter(sichtbar);
@@ -768,6 +859,7 @@ function viewListe(){
   const faellig=Object.values(S.orders).filter(o=>sichtbar(o)&&meinAuftrag(o)&&abnahmeFaellig(o));
   if(faellig.length && S.filter!=="abnahme") h+=`<div class="banner bad" style="margin-top:10px;cursor:pointer" id="abnBanner">⏰ <b>${faellig.length} Sichtabnahme${faellig.length>1?"n":""}</b> seit über einer Woche offen${faellig.some(o=>o.berichtGesendetAm)?" (Bericht schon verschickt)":""} – bitte beim Kunden nachhaken. <u>Anzeigen</u></div>`;
   if(S.filter==="abnahme") h+=`<div class="banner warn" style="margin-top:10px">Aufträge mit offener Sichtabnahme · <a href="#" id="abnBack">alle anzeigen</a></div>`;
+  if(S.filter==="arbeit" && !suche){ h+=kalender(list); return h; } // Terminiert: als Kalender
   if(!list.length) h+=`<div class="empty">Keine Aufträge in dieser Ansicht.</div>`;
   const nowK=wkKey(NOW.jahr,NOW.kw);
   keys.forEach(k=>{
@@ -2403,6 +2495,15 @@ function bind(r){
   app.querySelectorAll("#landFlt [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
   const no=$("#newOrder"); if(no) no.onclick=newOrderDialog;
+  app.querySelectorAll("[data-kal]").forEach(b=>b.onclick=()=>{ const k=S.kal; if(!k) return; const d=new Date(k.start);
+    if(b.dataset.kal==="heute") k.start=(k.ansicht==="monat"?new Date(new Date().getFullYear(),new Date().getMonth(),1):montagVon(new Date())).getTime();
+    else if(k.ansicht==="monat"){ d.setDate(1); d.setMonth(d.getMonth()+(b.dataset.kal==="vor"?1:-1)); k.start=d.getTime(); }
+    else { d.setDate(d.getDate()+(b.dataset.kal==="vor"?7:-7)); k.start=d.getTime(); }
+    render(); });
+  app.querySelectorAll("[data-kalv]").forEach(b=>b.onclick=()=>{ const k=S.kal; if(!k||k.ansicht===b.dataset.kalv) return; const d=new Date(k.start);
+    k.ansicht=b.dataset.kalv; k.start=(k.ansicht==="monat"?new Date(d.getFullYear(),d.getMonth(),1):montagVon(d.getMonth()===new Date().getMonth()&&d.getFullYear()===new Date().getFullYear()?new Date():d)).getTime(); render(); });
+  app.querySelectorAll("[data-kal-tag]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalTag)).getTime()}; render(); });
+  app.querySelectorAll("[data-kal-ueber]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalUeber)).getTime()}; render(); });
   app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
     const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Nicht verplant“`,3000); });
   app.querySelectorAll("[data-nv-zurueck]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); const o=S.orders[b.dataset.nvZurueck]; if(!o) return;
