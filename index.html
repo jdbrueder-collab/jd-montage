@@ -52,6 +52,8 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .seg.phasen .n{font-size:11px;font-weight:700;background:var(--line);color:var(--grey);border-radius:9px;padding:0 7px}
 .seg.phasen button.on .n{background:var(--brand);color:#fff}
 .seg.phasen button.st.on .n{background:var(--bad)}
+.seg.laender button{font-size:12.5px;min-height:34px;padding:5px 6px}
+.seg.laender .n{font-size:11px;font-weight:700;color:var(--grey);margin-left:2px}
 .metacard.fertig{border-color:#bfe3cc;background:#f6fbf8}
 .order.storno{opacity:.75}.order.storno .bv{text-decoration:line-through}
 .toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
@@ -170,7 +172,14 @@ const URSACHEN = {
   teile:"Fehlerhafte Teile",
   sonst:"Sonstiges"
 };
-const FAHRZEUGE = {auto:"Auto", anhaenger:"Auto mit Anhänger", zwei:"Zwei Autos mit Anhänger"};
+const FAHRZEUGE = {auto:"Auto", anhaenger:"Auto mit Anhänger"};
+const FAHRZEUG_ALT = {zwei:"Zwei Autos mit Anhänger"}; // ältere Einträge
+// Fahrzeug als Text (auch selbst eingetragen, z. B. „2 Autos, 2 Anhänger“)
+function fahrzeugText(x){ if(!x) return ""; if(x.fahrzeug==="sonst") return x.fahrzeugText||"Sonstiges"; return FAHRZEUGE[x.fahrzeug]||FAHRZEUG_ALT[x.fahrzeug]||x.fahrzeug||""; }
+// Anhängerfahrt? (Auswahl „Auto mit Anhänger“ oder „Anhänger“ im selbst eingetragenen Text)
+function mitAnhaenger(x){ if(!x) return false; return x.fahrzeug==="anhaenger"||x.fahrzeug==="zwei"||(x.fahrzeug==="sonst"&&/anh[äa]nger/i.test(x.fahrzeugText||"")); }
+// km-Sätze nur für den Chef (stehen in lohn/preise, das sieht sonst niemand)
+const kmSatz=x=>{ const P=S.preise||{}; return mitAnhaenger(x)?nn(P.fahrtSatzAnhaenger??1.10):nn(P.fahrtSatzAuto??0.80); };
 const LEERFAHRT_NMB = "Leerfahrt – Baustelle nicht montagefertig";
 const SONDER_VORLAGEN = ["Abdeckrohr wegen Wandvorbau ausgeklemmt","Füße geklebt und gebohrt","Spiegel abgemacht und Rohr neu angeklebt"];
 const PROD = {offen:["Produktion offen",""], in_produktion:["In Produktion","warn"], produziert:["Produziert","info"], abholbereit:["Abholbereit","ok"]};
@@ -261,10 +270,26 @@ function offeneReklas(id){ return Object.values(S.reklas).filter(r=>r.auftragId=
 function istFertig(o){ return !!o.abschluss; }
 // Bereiche der Startansicht: nicht verplant → verplant & in Arbeit → erledigt; stornierte extra
 const PHASEN=[["offen","Nicht verplant"],["arbeit","Verplant & in Arbeit"],["erledigt","Erledigt"],["storniert","Storniert"]];
+// Land der Baustelle: von Hand festgelegt, sonst aus der Adresse erkannt (L-1234, 4-stellige PLZ, „Luxemburg“)
+const LAENDER={de:["🇩🇪","Deutschland"],lu:["🇱🇺","Luxemburg"]};
+function landOf(o){
+  if(o.land==="de"||o.land==="lu") return o.land;
+  const t=[o.adresse,o.plzOrt,o.bauvorhaben].filter(Boolean).join(" ");
+  if(/luxemb|luxembourg|lëtzebuerg|(^|[\s,(])L\s?-\s?\d{4}\b/i.test(t)) return "lu";
+  const plz=String(o.plzOrt||"").trim()||String(o.adresse||"").replace(/^.*,\s*/,"");
+  if(/^\d{4}(\s|$)/.test(plz)) return "lu";
+  return "de";
+}
+// Abrechnung/Vergütung von meta liegt vor (S.fin sieht nur der Chef, „abgerechnet“ steht am Auftrag)
+const abgerechnet=o=>!!(o.abgerechnet || S.fin[o.id]);
+// Verplant: fester Termin, Montagezusage von meta, Monteure eingeteilt oder Einsatz begonnen
+const verplant=o=>o.terminStatus==="fest" || !!o.zusage || (o.monteure||[]).length>0 || !!o.einsatz || (o.zeiten||[]).length>0;
 function phase(o){
   if(o.storniert) return "storniert";
-  if(istFertig(o)) return "erledigt";
-  if(o.terminStatus==="fest" || o.einsatz || (o.zeiten||[]).length) return "arbeit";
+  if(istFertig(o) || abgerechnet(o)) return "erledigt";
+  // nach einer Leerfahrt ohne neuen festen Termin muss neu geplant werden
+  if((o.leerfahrten||[]).length && o.terminStatus!=="fest" && !o.einsatz) return "offen";
+  if(verplant(o)) return "arbeit";
   return "offen";
 }
 
@@ -390,7 +415,8 @@ function bindPending(){
 /* ---------- Liste ---------- */
 function orderChips(o){
   const c=[];
-  if(o.storniert){ c.push(`<span class="chip bad">❌ Storniert${o.storniert.am?" am "+new Date(o.storniert.am).toLocaleDateString("de-DE"):""}</span>`); if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`); return c.join(""); }
+  if(o.storniert){ if(landOf(o)==="lu") c.push(`<span class="chip info">🇱🇺 Luxemburg</span>`); c.push(`<span class="chip bad">❌ Storniert${o.storniert.am?" am "+new Date(o.storniert.am).toLocaleDateString("de-DE"):""}</span>`); if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`); return c.join(""); }
+  if(landOf(o)==="lu") c.push(`<span class="chip info">🇱🇺 Luxemburg</span>`);
   if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o)) c.push(`<span class="chip gold">NEU</span>`);
   if(o.abschluss){
     const t=o.abschluss.typ;
@@ -434,9 +460,13 @@ function viewListe(){
   const q=S.q.trim().toLowerCase();
   if(q) list=list.filter(o=>[o.nr,o.bauvorhaben,o.plzOrt,o.adresse,o.vorgang].join(" ").toLowerCase().includes(q));
   if(S.nurMeine) list=list.filter(o=>(o.monteure||[]).includes(myId()));
-  const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
   const suche=!!q && PHASEN.some(([k])=>k===S.filter);
-  if(PHASEN.some(([k])=>k===S.filter) && !suche) list=list.filter(o=>phase(o)===S.filter);
+  const imBereich=o=>!PHASEN.some(([k])=>k===S.filter) || suche || phase(o)===S.filter;
+  const land=S.land||"alle";
+  const proLand={alle:0,de:0,lu:0}; list.filter(imBereich).forEach(o=>{ proLand.alle++; proLand[landOf(o)]++; });
+  if(land!=="alle") list=list.filter(o=>landOf(o)===land);
+  const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
+  list=list.filter(imBereich);
   if(S.filter==="pruefung") list=list.filter(o=>o.berichtStatus==="pruefung");
   if(S.filter==="abnahme") list=list.filter(o=>istFertig(o)&&abnahmeStatus(o)!=="ok"&&abnahmeStatus(o)!=="verzicht");
   const groups={};
@@ -444,6 +474,7 @@ function viewListe(){
   const keys=Object.keys(groups).map(Number).sort((a,b)=>S.filter==="erledigt"||S.filter==="storniert"?b-a:a-b);
   let h=`<div class="toolbar"><input class="i" id="q" placeholder="Nummer, Bauvorhaben, Ort suchen …" value="${esc(S.q)}"></div>
   <div class="seg phasen" id="flt">${PHASEN.map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""} ${k==="storniert"?"st":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
+  <div class="seg laender" id="landFlt" style="margin-top:8px">${[["alle","Alle"],["de",LAENDER.de.join(" ")],["lu",LAENDER.lu.join(" ")]].map(([k,l])=>`<button data-land="${k}" class="${land===k?"on":""}">${l} <span class="n">${proLand[k]}</span></button>`).join("")}</div>
   <label class="row small" style="margin-top:8px;gap:6px;cursor:pointer;width:max-content"><input type="checkbox" id="nurMeine" ${S.nurMeine?"checked":""} style="width:18px;height:18px"> Nur meine Aufträge</label>
   ${suche?`<div class="banner info small" style="margin-top:8px">Suche in allen Bereichen.</div>`:""}
   ${S.filter==="storniert"&&!suche?`<div class="small mute" style="margin-top:8px">Aufträge, die reingekommen sind, aber von meta wieder storniert wurden.</div>`:""}`;
@@ -478,7 +509,7 @@ function viewListe(){
 // (mit Namensbestätigung). Kein Öffnen von Aufträgen, keine Navigation, keine Preise.
 // Für meta zählt nur die eigene Bestätigung mit Namen – sonst steht der Auftrag auf „Offen“
 const metaAbholbereit=o=>!!o.abholbereitBestaetigt;
-const fuerMeta=o=>!o.storniert && !istFertig(o);
+const fuerMeta=o=>!o.storniert && !istFertig(o) && !abgerechnet(o);
 function metaKarte(o){
   const fertig=metaAbholbereit(o), w=planWeek(o), ab=o.abholbereitBestaetigt;
   return `<div class="card metacard ${fertig?"fertig":""}" style="padding:12px 14px">
@@ -571,6 +602,7 @@ function viewDetail(id){
   h+=`<div class="card"><div class="row between"><h3 style="margin:0">Baustelle &amp; Kunde</h3>${can.planen()?`<button class="btn sm ghost" id="editBau">Bearbeiten</button>`:""}</div>
    <dl class="kv" style="margin-top:10px">
    ${kv("Adresse",esc(addr))}
+   ${kv("Land",`${LAENDER[landOf(o)].join(" ")}${o.land?"":` <span class="mute small">(erkannt)</span>`}`)}
    ${kv("Bauleiter",esc(o.bauleiterName||""))}
    ${kv("Telefon",o.bauleiterTel?`<a href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">${esc(o.bauleiterTel)}</a>`:"")}
    ${kv("E-Mail",o.bauleiterMail?`${esc(o.bauleiterMail)}`:"")}
@@ -651,8 +683,16 @@ function reklaItem(r){
   </div>`;
 }
 function kostenAuftrag(oid){ let k=0; Object.values(S.lohn).forEach(l=>{ if(l.auftragId===oid){ const c=calcLohn(l,S.preise); if(c) k+=c.total; } }); return r2(k); }
+function fahrtZeile(o){
+  const fahrten=[];
+  if(!leer(o.bericht?.istKm)) fahrten.push({km:nn(o.bericht.istKm),x:o.einsatz,was:"Montage"});
+  (o.leerfahrten||[]).forEach(l=>{ if(nn(l.km)) fahrten.push({km:nn(l.km),x:l,was:"Leerfahrt"}); });
+  if(!fahrten.length) return "";
+  const summe=r2(fahrten.reduce((a,f)=>a+f.km*kmSatz(f.x),0)), anh=fahrten.some(f=>mitAnhaenger(f.x));
+  return `<div class="small" style="margin-top:8px;background:var(--greybg);border-radius:10px;padding:8px 10px">🚐 <b>Fahrtkosten ${fmtEUR(summe)}</b> – ${fahrten.map(f=>`${f.was}: ${String(f.km).replace(".",",")} km × ${fmtEUR(kmSatz(f.x))} (${esc(fahrzeugText(f.x)||"Fahrzeug unbekannt")})`).join(" · ")}${anh?`<div style="color:var(--warn);font-weight:700;margin-top:3px">⚠ Bitte beachten: Anhängerfahrt</div>`:""}</div>`;
+}
 function finanzCard(o,f){
-  if(!f) return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3><div class="small mute">Noch keine Montageabrechnung von meta zu diesem Auftrag.</div>
+  if(!f) return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3><div class="small mute">Noch keine Montageabrechnung von meta zu diesem Auftrag.</div>${fahrtZeile(o)}
    <button class="btn sm ghost" id="manFin" style="margin-top:8px">Summe von Hand eintragen</button></div>`;
   const st=f.rechnungStatus||"offen"; const order=["offen","freigegeben","erstellt","versendet","bezahlt"]; const idx=order.indexOf(st);
   let actions="";
@@ -663,6 +703,7 @@ function finanzCard(o,f){
   return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3>
    <div class="row between"><div><div class="small mute">Montageabrechnung meta${f.datum?" vom "+new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="big">${fmtEUR(f.summe)}</div></div><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span></div>
    ${(()=>{ const k=kostenAuftrag(o.id); const g=r2((Number(f.summe)||0)-k); return `<div class="grid3" style="margin-top:10px;text-align:center"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Vergütung meta</div><b>${fmtEUR(f.summe)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Akkord / Subs</div><b>− ${fmtEUR(k)}</b></div><div style="background:${g>=0?"var(--okbg)":"var(--badbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b style="color:${g>=0?"var(--ok)":"var(--bad)"}">${fmtEUR(g)}</b></div></div>`; })()}
+   ${fahrtZeile(o)}
    ${f.bemerkung?`<div class="small mute">Bem.: ${esc(f.bemerkung)}</div>`:""}
    ${f.positionen?.length?`<table class="pos" style="margin-top:10px"><thead><tr><th>Artikel</th><th>Menge</th><th>EP</th><th>GP</th></tr></thead><tbody>${f.positionen.map(p=>`<tr><td>${esc(p.artikel)}</td><td>${esc(p.menge)}</td><td>${esc(Number(p.ep).toFixed(2))}</td><td>${esc(Number(p.gp).toFixed(2))}</td></tr>`).join("")}</tbody><tfoot><tr><td colspan="3">Summe netto</td><td>${Number(f.summe).toFixed(2)}</td></tr></tfoot></table>`:""}
    <div class="steps">${order.slice(0,4).map((s,i)=>`<div class="${i<=idx&&st!=="offen"?"on":""}"></div>`).join("")}</div>
@@ -702,7 +743,7 @@ function zeitenListe(o){
 function stepBackPatch(o){
   const st=schritt(o), e=o.einsatz||{};
   if(!o.einsatz||istFertig(o)) return null;
-  if(st==="ankunft") return {einsatz:{fahrzeug:null,abfahrtAm:null}};
+  if(st==="ankunft") return {einsatz:{fahrzeug:null,fahrzeugText:null,abfahrtAm:null}};
   if(st==="vorher") return {einsatz:{ankunftAm:null}};
   if(st==="nmb") return {einsatz:{bereit:null}};
   if(st==="start") return e.bereit==="nein"?{einsatz:{nmb:{weiter:false}}}:{einsatz:{bereit:null}};
@@ -712,11 +753,13 @@ function stepBackPatch(o){
 function einsatzCard(o,fk){
   const st=schritt(o), e=o.einsatz||{}, id=o.id, b=o.bericht||{};
   const idx=SCHRITTE.findIndex(s=>s[0]===st);
-  let h=`<div class="card" id="einsatzCard"><div class="row between"><h3 style="margin:0">Einsatz</h3>${e.fahrzeug?`<span class="chip">🚐 ${esc(FAHRZEUGE[e.fahrzeug]||e.fahrzeug)}</span>`:""}</div>
+  let h=`<div class="card" id="einsatzCard"><div class="row between"><h3 style="margin:0">Einsatz</h3>${e.fahrzeug?`<span class="chip">🚐 ${esc(fahrzeugText(e))}</span>`:""}</div>
    <div class="steps" style="margin-top:10px">${SCHRITTE.map((s,i)=>`<div class="${i<idx||st==="fertig"?"on":i===idx?"cur":""}"></div>`).join("")}</div>
    <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
   if(st==="fahrzeug"){
-    h+=`<div class="q">Womit wird gefahren?</div><div class="choice">${Object.entries(FAHRZEUGE).map(([k,l])=>`<button class="btn ${e.fahrzeug===k?"on":""}" data-fz="${k}">🚐 ${l}</button>`).join("")}</div>`;
+    h+=`<div class="q">Womit wird gefahren?</div><div class="choice">${Object.entries(FAHRZEUGE).map(([k,l])=>`<button class="btn ${e.fahrzeug===k?"on":""}" data-fz="${k}">🚐 ${l}</button>`).join("")}</div>
+     <label class="f" style="margin-top:14px">Oder selbst eintragen</label>
+     <div class="row" style="flex-wrap:nowrap"><input class="i" id="fzText" placeholder="z. B. 2 Autos, 2 Anhänger" value="${esc(e.fahrzeug==="sonst"?e.fahrzeugText||"":"")}"><button class="btn pri" id="fzTextOk" style="white-space:nowrap">Übernehmen</button></div>`;
   } else if(st==="ankunft"){
     h+=`<div class="q">Auf der Baustelle angekommen?</div>
      <div class="small mute" style="margin-bottom:10px">Abfahrt ${fmtDT(e.abfahrtAm)} · ${esc(adresseOf(o))}</div>
@@ -849,7 +892,8 @@ function abschlussCard(o,fk){
 }
 function bindEinsatz(o){
   const id=o.id, P=orderPath(id), e=o.einsatz||{};
-  document.querySelectorAll("[data-fz]").forEach(b=>b.onclick=()=>upd(P,{einsatz:{fahrzeug:b.dataset.fz,abfahrtAm:Date.now(),von:myId()}}));
+  document.querySelectorAll("[data-fz]").forEach(b=>b.onclick=()=>upd(P,{einsatz:{fahrzeug:b.dataset.fz,fahrzeugText:null,abfahrtAm:Date.now(),von:myId()}}));
+  $("#fzTextOk") && ($("#fzTextOk").onclick=()=>{ const t=($("#fzText").value||"").trim(); if(!t) return toast("Bitte eintragen, womit gefahren wird"); upd(P,{einsatz:{fahrzeug:"sonst",fahrzeugText:t,abfahrtAm:Date.now(),von:myId()}}); });
   $("#ankunft") && ($("#ankunft").onclick=()=>{ upd(P,{einsatz:{ankunftAm:Date.now()}}); toast("Bitte jetzt Vorher-Fotos machen 📷",3500); });
   $("#bereitJa") && ($("#bereitJa").onclick=()=>{ S.bereitWahl[id]="ja"; render(); });
   $("#bereitWeiter") && ($("#bereitWeiter").onclick=()=>{ delete S.bereitWahl[id]; upd(P,{einsatz:{bereit:"ja"}}); });
@@ -912,7 +956,7 @@ function leerfahrtDialog(id){
         await setDoc("reklamationen/"+rid,{auftragId:id,ursache:"baustelle",text,fotos:vorher.map(f=>f.assetId),offen:true,am:now,von:myId(),leerfahrt:true});
         const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
         const ms=z.reduce((s,x)=>s+(x.e-x.s),0)||(e.abfahrtAm?now-e.abfahrtAm:0);
-        const lf=[...(o.leerfahrten||[]),{am:now,status:LEERFAHRT_NMB,km:m.querySelector("#km").value.trim(),personen:m.querySelector("#pp").value.trim(),personenMit:m.querySelector("#pm").value.trim(),fahrzeug:e.fahrzeug||"",minuten:Math.round(ms/60000),grund:text,schreibenAm:e.nmb?.schreibenAm||null,schreibenAn:e.nmb?.an||"",von:myId()}];
+        const lf=[...(o.leerfahrten||[]),{am:now,status:LEERFAHRT_NMB,km:m.querySelector("#km").value.trim(),personen:m.querySelector("#pp").value.trim(),personenMit:m.querySelector("#pm").value.trim(),fahrzeug:e.fahrzeug||"",fahrzeugText:e.fahrzeugText||"",minuten:Math.round(ms/60000),grund:text,schreibenAm:e.nmb?.schreibenAm||null,schreibenAn:e.nmb?.an||"",von:myId()}];
         await upd(orderPath(id),{leerfahrten:lf,einsatz:null,zeiten:[],terminStatus:"zu_terminieren",berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:"leerfahrt"});
         for(const f of vorher){ try{ await S.db.doc("fotos/"+f.id).update({kat:"leerfahrt"}); }catch(err){} }
         close(); toast("Gespeichert als „"+LEERFAHRT_NMB+"“",3500);
@@ -1325,6 +1369,7 @@ function vdDefaults(o){
   // Montage-Abrechnung ganz unten: ausschließlich gefahrene km und Geschosse
   const ab=[];
   if(!leer(b.istKm)) ab.push(`${fmtZahl(b.istKm)} km`);
+  if(mitAnhaenger(o.einsatz)) ab.push("Bitte beachten: Anhängerfahrt");
   const g=leer(b.geschosse)?"":b.geschosse; if(g) ab.push(`Geschosse: ${g}`);
   d.abrechnung=ab.join(", ");
   // Stunden-Bereich: Sonderleistungen mit Personen und Dauer
@@ -1638,6 +1683,10 @@ function viewSetup(){
     <div class="small mute" style="margin-top:4px">Holt Wochenübersichten, Montagezusagen, Montageabrechnungen und Mails der Disposition mit Unterlagen (z. B. „Auftrag Nr. 16872“ mit Dokumente.pdf).</div>
     <div class="small mute" style="margin-top:6px">Automatischer Abruf alle 15 Minuten: Aufträge, PDFs/Unterlagen und Deckblätter von meta.${s.autoAbruf?` ${s.autoAbruf.postfach?` Postfach: <b>${esc(s.autoAbruf.postfach)}</b>.`:""} Zuletzt ${fmtDT(s.autoAbruf.am)} (${s.autoAbruf.quelle==="zeitplan"?"automatisch":"von Hand"}): ${s.autoAbruf.neu||0} neu, ${s.autoAbruf.aktualisiert||0} aktualisiert, ${s.autoAbruf.dateien||0} Unterlagen${s.autoAbruf.fehler?`, <span style="color:var(--bad)">${s.autoAbruf.fehler} Fehler</span>`:""}.`:s.letzterAbruf?` Letzter Abruf: ${fmtDT(s.letzterAbruf)}`:""}</div>
   </div>
+  ${S.isOwner?`<div class="card"><h3>Fahrtkosten je km (nur für dich sichtbar)</h3>
+    <div class="grid2"><div><div class="small mute">Auto €/km</div><input class="i" data-fs="fahrtSatzAuto" inputmode="decimal" value="${esc(nn(S.preise?.fahrtSatzAuto??0.8).toFixed(2).replace(".",","))}"></div>
+    <div><div class="small mute">Auto mit Anhänger €/km</div><input class="i" data-fs="fahrtSatzAnhaenger" inputmode="decimal" value="${esc(nn(S.preise?.fahrtSatzAnhaenger??1.1).toFixed(2).replace(".",","))}"></div></div>
+    <div class="small mute" style="margin-top:6px">Wird in der Abrechnung des Auftrags verwendet. Selbst eingetragene Fahrzeuge mit „Anhänger“ im Text zählen als Anhängerfahrt.</div></div>`:""}
   ${S.isOwner?(()=>{ const e=s.metaErinnerung||{}; return `<div class="card"><h3>Morgendliche Erinnerung an meta</h3>
     <div class="small mute" style="margin-bottom:6px">Schickt meta eine Mail: „Bitte prüfen, welche Aufträge abholbereit sind, und in der Liste anklicken“ – mit Link zur Auftragsliste und den noch offenen Auftragsnummern. Gesendet über ${esc(s.autoAbruf?.postfach||"das JD-Brüder-Gmail")}.</div>
     <label class="row" style="gap:10px;flex-wrap:nowrap;cursor:pointer;padding:6px 0"><input type="checkbox" id="meAktiv" ${e.aktiv?"checked":""} style="width:22px;height:22px"><b>Erinnerung einschalten</b></label>
@@ -1685,6 +1734,7 @@ function bind(r){
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); },250); }; }
   app.querySelectorAll("#flt [data-f]").forEach(b=>b.onclick=()=>{ S.filter=b.dataset.f; render(); });
   $("#nurMeine") && ($("#nurMeine").onchange=()=>{ S.nurMeine=$("#nurMeine").checked; render(); });
+  app.querySelectorAll("#landFlt [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
   const no=$("#newOrder"); if(no) no.onclick=newOrderDialog;
   $("#abnBanner") && ($("#abnBanner").onclick=()=>{ S.filter="abnahme"; render(); });
@@ -1796,6 +1846,7 @@ function bindSetup(){
     S.roles={...S.roles,[id]:role}; await setDoc("einstellungen/rollen",{map:S.roles,info:{...(S.rolesInfo||{}),[id]:{firma:a.firma||"",name:a.name||"",tel:a.tel||""}}}); try{ await S.db.doc("anfragen/"+id).delete(); }catch(e){} if(S.preise) await savePreise({}); toast("Freigegeben ✓"); });
   document.querySelectorAll("[data-ano]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Anmeldung ablehnen?","Die Person bekommt keinen Zugriff.","Ablehnen","bad")) return; try{ await S.db.doc("anfragen/"+b.dataset.ano).delete(); }catch(e){} });
   if(S.isOwner) bindSetupLohn();
+  document.querySelectorAll("[data-fs]").forEach(i=>i.onchange=()=>{ savePreise({[i.dataset.fs]:nn(i.value)}); toast("Gespeichert"); });
   // Morgendliche Erinnerung an meta
   const meSave=patch=>setDoc("einstellungen/allgemein",{...S.settings,metaErinnerung:{...(S.settings.metaErinnerung||{}),...patch}});
   $("#meAktiv") && ($("#meAktiv").onchange=async()=>{ const an=($("#meAn").value||"").trim(); if($("#meAktiv").checked && !an){ $("#meAktiv").checked=false; return toast("Bitte zuerst Empfänger eintragen"); } await meSave({aktiv:$("#meAktiv").checked,an}); toast($("#meAktiv").checked?"Erinnerung eingeschaltet ✓":"Erinnerung ausgeschaltet"); });
@@ -1839,9 +1890,9 @@ function newOrderDialog(){
 function editBauDialog(id){
   const o=S.orders[id];
   const F=[["bauvorhaben","Bauvorhaben"],["plzOrt","PLZ Ort"],["adresse","Baustellenadresse (für Navi)"],["kabinen","Kabinen"],["bauleiterName","Bauleiter"],["bauleiterTel","Telefon Bauleiter"],["bauleiterMail","E-Mail Bauleiter"],["geschosse","Montage in Geschoss"],["oeffnungszeiten","Öffnungszeiten"],["aufzug","Aufzug"],["aufbau","Was aufbauen (Modell, Farbe …)"],["montageHinweise","Montagehinweise"],["technHinweise","Technische Hinweise"],["kaufmHinweise","Kaufmännische Hinweise"],["zahlungspflichtiger","Auftraggeber/Zahlungspflichtiger"],["vorgang","Vorgangs-Nr."],["berater","meta-Berater"]];
-  modal(`<h2>Baustelle bearbeiten</h2>${F.map(([k,l])=>`<label class="f">${l}</label>${/Hinweise|aufbau/.test(k)?`<textarea class="i" data-k="${k}">${esc(o[k]||"")}</textarea>`:`<input class="i" data-k="${k}" value="${esc(o[k]||"")}">`}`).join("")}
+  modal(`<h2>Baustelle bearbeiten</h2><label class="f">Land</label><select class="i" id="landSel"><option value="" ${!o.land?"selected":""}>Automatisch erkennen (jetzt: ${LAENDER[landOf({...o,land:null})][1]})</option><option value="de" ${o.land==="de"?"selected":""}>🇩🇪 Deutschland</option><option value="lu" ${o.land==="lu"?"selected":""}>🇱🇺 Luxemburg</option></select>${F.map(([k,l])=>`<label class="f">${l}</label>${/Hinweise|aufbau/.test(k)?`<textarea class="i" data-k="${k}">${esc(o[k]||"")}</textarea>`:`<input class="i" data-k="${k}" value="${esc(o[k]||"")}">`}`).join("")}
   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
-    m.querySelector("#ok").onclick=async()=>{ const p={}; m.querySelectorAll("[data-k]").forEach(i=>{ if((o[i.dataset.k]||"")!==i.value.trim()) p[i.dataset.k]=i.value.trim(); }); if(Object.keys(p).length) await upd(orderPath(id),p); close(); };
+    m.querySelector("#ok").onclick=async()=>{ const p={}; m.querySelectorAll("[data-k]").forEach(i=>{ if((o[i.dataset.k]||"")!==i.value.trim()) p[i.dataset.k]=i.value.trim(); }); const ld=m.querySelector("#landSel").value||null; if((o.land||null)!==ld) p.land=ld; if(Object.keys(p).length) await upd(orderPath(id),p); close(); };
   });
 }
 async function pickPerson(id){
@@ -2086,10 +2137,10 @@ function berichtText(o){
   else if(typ==="rekla") L.push(`Auftrag ${o.nr} (${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}): Montage abgeschlossen, es gibt eine Reklamation (siehe unten).`);
   else L.push(`Auftrag ${o.nr} (${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}): Baustelle erfolgreich abgeschlossen.`);
   L.push("","Montagebericht:");
-  if(typ==="leerfahrt"&&lf){ L.push(`- Status: ${lf.status||"Leerfahrt"}`,`- Datum: ${new Date(lf.am).toLocaleDateString("de-DE")}`,lf.fahrzeug?`- Fahrzeug: ${FAHRZEUGE[lf.fahrzeug]||lf.fahrzeug}`:null,`- Selbst gefahrene km: ${lf.km||"-"}`,`- Personen vor Ort: ${lf.personen||"-"}`,lf.personenMit?`- Mitgefahren: ${lf.personenMit}`:null,`- Zeit: ${Math.floor(lf.minuten/60)} Std ${lf.minuten%60} Min`,`- Grund: ${lf.grund}`,lf.schreibenAm?`- Schreiben an den Kunden gesendet am ${new Date(lf.schreibenAm).toLocaleDateString("de-DE")}${lf.schreibenAn?" an "+lf.schreibenAn:""}`:null); }
+  if(typ==="leerfahrt"&&lf){ L.push(`- Status: ${lf.status||"Leerfahrt"}`,`- Datum: ${new Date(lf.am).toLocaleDateString("de-DE")}`,lf.fahrzeug?`- Fahrzeug: ${fahrzeugText(lf)}${mitAnhaenger(lf)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Selbst gefahrene km: ${lf.km||"-"}`,`- Personen vor Ort: ${lf.personen||"-"}`,lf.personenMit?`- Mitgefahren: ${lf.personenMit}`:null,`- Zeit: ${Math.floor(lf.minuten/60)} Std ${lf.minuten%60} Min`,`- Grund: ${lf.grund}`,lf.schreibenAm?`- Schreiben an den Kunden gesendet am ${new Date(lf.schreibenAm).toLocaleDateString("de-DE")}${lf.schreibenAn?" an "+lf.schreibenAn:""}`:null); }
   else {
     const az=arbeitszeitMin(o), uebern=!leer(b.uebernachtungen)?b.uebernachtungen:(b.hotel==="ja"?(b.hotelInfo||"1"):"0");
-    L.push(`- Montagetag(e): ${tage||"-"}`,`- Arbeitszeit: ${az?fmtHMin(az)+" Std.":"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Mitgefahrene Personen: ${leer(b.personenMit)?"-":b.personenMit}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,`- Geschosse (Material getragen): ${b.geschosse||"-"}`,`- Übernachtungen: ${uebern}`);
+    L.push(`- Montagetag(e): ${tage||"-"}`,`- Arbeitszeit: ${az?fmtHMin(az)+" Std.":"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Mitgefahrene Personen: ${leer(b.personenMit)?"-":b.personenMit}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,o.einsatz?.fahrzeug?`- Fahrzeug: ${fahrzeugText(o.einsatz)}${mitAnhaenger(o.einsatz)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Geschosse (Material getragen): ${b.geschosse||"-"}`,`- Übernachtungen: ${uebern}`);
     const tot=summeMengen(o); const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${(S.lohnPos.find(p=>p.k===k)||{}).label||k}`);
     if(pos.length) L.push(`- Positionen: ${pos.join(", ")}`);
     if(b.taetigkeit) L.push(`- Ausgeführt: ${b.taetigkeit}`);
