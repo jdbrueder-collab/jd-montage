@@ -179,3 +179,11 @@ export function mitAbgerechnet(nr, bem, orders) {
   }
   return [...out];
 }
+
+/** Vergütung nur für die Sichtabnahme (z. B. Bemerkung „Abnahme“, Position „Abnahme 51 ×“) –
+ *  das ist NICHT die Abrechnung der Montage. Eine Montage-Abrechnung trägt in der Bemerkung die Auftragsnummer. */
+export function istAbnahmeVerguetung(a) {
+  const pos = (a?.positionen || []).filter((p) => p && p.artikel);
+  if (/^\s*(sicht)?abnahme/i.test(String(a?.bemerkung || ""))) return true;
+  return pos.length > 0 && pos.every((p) => /abnahme/i.test(p.artikel));
+}

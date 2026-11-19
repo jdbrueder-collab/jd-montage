@@ -623,6 +623,7 @@ function orderChips(o){
   else if(o.abschluss && abnahmeFaellig(o)) c.push(abnahmeChip(o));
   const rk=offeneReklas(o.id).length; if(rk) c.push(`<span class="chip bad">${rk} Reklamation offen</span>`);
   if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`);
+  if(can.finanzen() && o.abnahmeVerguetet) c.push(`<span class="chip info">💶 Sichtabnahme vergütet ${fmtEUR(o.abnahmeVerguetet.summe)}</span>`);
   if(!S.fin[o.id] && o.abgerechnetMit) c.push(`<span class="chip ok">💶 abgerechnet mit ${esc(o.abgerechnetMit)}</span>`);
   if(can.finanzen() && S.fin[o.id]){ const f=S.fin[o.id], st=f.rechnungStatus||"offen";
     c.push(`<span class="chip info">💶 ${fmtEUR(f.summe)}</span>`);
@@ -2112,7 +2113,7 @@ function viewRekla(){
 
 /* ---------- Abrechnung ---------- */
 function viewGeld(){
-  const rows=Object.values(S.fin).map(f=>({f,o:S.orders[f.id]||{nr:f.nr||f.id,id:f.id}})).sort((a,b)=>(b.f.datum||0)-(a.f.datum||0));
+  const rows=Object.values(S.fin).map(f=>({f,o:S.orders[f.auftragId||f.id]||{nr:f.nr||f.id,id:f.auftragId||f.id}})).sort((a,b)=>(b.f.datum||0)-(a.f.datum||0));
   const m=new Date(); const thisMonth=rows.filter(r=>{ const d=new Date(r.f.datum||0); return d.getMonth()===m.getMonth()&&d.getFullYear()===m.getFullYear(); });
   const sum=a=>a.reduce((s,r)=>s+(Number(r.f.summe)||0),0);
   const offen=rows.filter(r=>(r.f.rechnungStatus||"offen")!=="versendet"&&r.f.rechnungStatus!=="bezahlt");
@@ -2134,14 +2135,14 @@ function viewGeld(){
   // Gewinn je Auftrag: was meta zahlt, was Subunternehmer/Akkord bekommen, was übrig bleibt
   { const mk=k=>monatKey(k); const alleM=[...new Set(Object.values(S.fin).map(f=>mk(f.datum)))].sort((a,b)=>b-a);
     const gm=alleM.includes(S.geldMonat)?S.geldMonat:(alleM[0]??mk(Date.now()));
-    const zeilen=Object.values(S.fin).filter(f=>mk(f.datum)===gm).map(f=>{ const o=S.orders[f.id]||{nr:f.nr,id:f.id}; const wer=[...new Set(Object.values(S.lohn).filter(l=>l.auftragId===f.id).map(l=>nameOf(l.uid)))]; const k=kostenAuftrag(f.id); return {f,o,wer,ein:Number(f.summe)||0,k,g:r2((Number(f.summe)||0)-k)}; }).sort((a,b)=>(b.f.datum||0)-(a.f.datum||0));
+    const zeilen=Object.values(S.fin).filter(f=>mk(f.datum)===gm).map(f=>{ const aid=f.auftragId||f.id, o=S.orders[aid]||{nr:f.nr,id:aid}; const wer=f.art==="abnahme"?["Sichtabnahme"]:[...new Set(Object.values(S.lohn).filter(l=>l.auftragId===aid).map(l=>nameOf(l.uid)))]; const k=f.art==="abnahme"?0:kostenAuftrag(aid); return {f,o,wer,ein:Number(f.summe)||0,k,g:r2((Number(f.summe)||0)-k)}; }).sort((a,b)=>(b.f.datum||0)-(a.f.datum||0));
     const S1=zeilen.reduce((a,z)=>a+z.ein,0), S2=zeilen.reduce((a,z)=>a+z.k,0);
     h+=`<div class="card"><div class="row between"><h3 style="margin:0">Gewinn je Auftrag</h3>${alleM.length>1?`<select class="i" id="geldMonat" style="width:auto;min-height:36px;padding:4px 8px">${alleM.map(m=>`<option value="${m}" ${m===gm?"selected":""}>${monatName(m)}</option>`).join("")}</select>`:`<span class="small mute">${monatName(gm)}</span>`}</div>
      ${zeilen.length?`<table class="pos" style="margin-top:10px"><thead><tr><th>Auftrag</th><th>meta</th><th>Sub/Akkord</th><th>Gewinn</th></tr></thead><tbody>${zeilen.map(z=>`<tr><td><a href="#a-${esc(z.o.id)}"><b>${esc(z.o.nr||"")}</b></a><div class="small mute">${esc(z.wer.join(", ")||"–")}</div></td><td>${fmtEUR(z.ein)}</td><td>${z.k?"− "+fmtEUR(z.k):"–"}</td><td style="color:${z.g>=0?"var(--ok)":"var(--bad)"};font-weight:700">${fmtEUR(z.g)}</td></tr>`).join("")}</tbody>
      <tfoot><tr><td>Summe</td><td>${fmtEUR(S1)}</td><td>− ${fmtEUR(r2(S2))}</td><td style="color:var(--ok)">${fmtEUR(r2(S1-S2))}</td></tr></tfoot></table>`:`<div class="small mute" style="margin-top:8px">Noch keine Abrechnungen in diesem Monat.</div>`}</div>`; }
   h+=statistikCard();
   if(!rows.length) h+=`<div class="empty">Noch keine Montageabrechnungen.</div>`;
-  rows.forEach(({f,o})=>{ const st=f.rechnungStatus||"offen"; h+=`<a class="order" href="#a-${esc(f.id)}"><div class="row between"><span class="nr">${esc(o.nr||f.nr)}</span><b>${fmtEUR(f.summe)}</b></div><div class="small mute">${esc(o.bauvorhaben||f.bauvorhaben||"")} · ${f.datum?new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="chips"><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span>${f.rechnungsNr?`<span class="chip">${esc(f.rechnungsNr)}</span>`:""}${(()=>{ const g=r2((Number(f.summe)||0)-kostenAuftrag(f.id)); return `<span class="chip ${g>=0?"ok":"bad"}">Gewinn ${fmtEUR(g)}</span>`; })()}</div></a>`; });
+  rows.forEach(({f,o})=>{ const st=f.rechnungStatus||"offen"; h+=`<a class="order" href="#a-${esc(f.auftragId||f.id)}"><div class="row between"><span class="nr">${esc(o.nr||f.nr)}${f.art==="abnahme"?` <span class="chip info">Sichtabnahme</span>`:""}</span><b>${fmtEUR(f.summe)}</b></div><div class="small mute">${esc(o.bauvorhaben||f.bauvorhaben||"")} · ${f.datum?new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="chips"><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span>${f.rechnungsNr?`<span class="chip">${esc(f.rechnungsNr)}</span>`:""}${(()=>{ const g=r2((Number(f.summe)||0)-kostenAuftrag(f.id)); return `<span class="chip ${g>=0?"ok":"bad"}">Gewinn ${fmtEUR(g)}</span>`; })()}</div></a>`; });
   return h;
 }
 

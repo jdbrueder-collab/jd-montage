@@ -8,7 +8,7 @@ import { DOMParser } from "npm:linkedom@0.18.5";
 import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
-  art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
+  art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istAbnahmeVerguetung, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
   parseAbrechnung, parseUebersicht, parseZusage, splitBV, unterlagen, vonMeta,
 } from "../_shared/meta.js";
 
@@ -352,6 +352,17 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
           if (a.nr && a.summe) {
             const id = findeAuftrag(orders, a.nr) || idOf(a.nr); const ex = fin[id];
             if (!orders[id] && opt.nurBestehende) { st.msgs[m.id] = 1; continue; }
+            // Nur die Sichtabnahme wurde vergütet: eigener Eintrag, der Auftrag gilt dadurch NICHT als abgerechnet
+            if (istAbnahmeVerguetung(a)) {
+              const fid = id + "~abnahme"; const exA = fin[fid];
+              if (!exA || (exA.datum || 0) <= d) {
+                const doc = { nr: a.nr, auftragId: id, art: "abnahme", bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: exA?.rechnungStatus || "offen", rechnungsNr: exA?.rechnungsNr || "", quelle: "mail" };
+                await setDoc(db, "finanzen", fid, doc); fin[fid] = doc;
+              }
+              if (orders[id]) { const p = { abnahmeVerguetet: { summe: a.summe, am: d } }; await updDoc(db, "auftraege", id, p); Object.assign(orders[id], p); z.aktualisiert++; }
+              z.abrechnungen++; log.push(`💶 Sichtabnahme vergütet ${a.nr}: ${a.summe.toFixed(2)} € (keine Montage-Abrechnung)`);
+              st.msgs[m.id] = 1; continue;
+            }
             if (!ex || (ex.datum || 0) <= d) {
               const doc = { nr: a.nr, bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
               await setDoc(db, "finanzen", id, doc); fin[id] = doc;
