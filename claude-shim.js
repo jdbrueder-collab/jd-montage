@@ -57,6 +57,11 @@
     let { data: { session } } = await sb.auth.getSession();
     if (!session) session = await loginScreen();
     await saveToken(session);
+    const out = document.createElement("button");
+    out.className = "btn sm"; out.textContent = "Abmelden"; out.title = session.user.email;
+    out.style.cssText = "background:rgba(255,255,255,.16);color:#fff";
+    out.onclick = () => window.jdLogout();
+    document.querySelector("header.top")?.appendChild(out);
     if ("serviceWorker" in navigator) {
       try {
         await navigator.serviceWorker.register("sw.js");

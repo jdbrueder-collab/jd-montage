@@ -1,5 +1,5 @@
-// Öffentliche Supabase-Angaben (anon key ist für den Browser gedacht, Schutz läuft über die Datenbank-Regeln)
+// Öffentliche Supabase-Angaben (publishable key ist für den Browser gedacht, Schutz läuft über die Datenbank-Regeln)
 window.JD_CONFIG = {
-  url: "https://PROJEKT.supabase.co",
-  key: "ANON_KEY"
+  url: "https://glxnvjpoipcienngybmj.supabase.co",
+  key: "sb_publishable_pwXGKv-5uK4IKP8coL9M3Q_pd1Mtsnc"
 };
