@@ -53,7 +53,9 @@ export function istStorno(m) {
 }
 
 // Auftragsnummern wie 17714/1, 12403, R-42259
-const NR = /((?:R-)?\d{4,6}(?:\/\d{1,2})?)/;
+// auch „R 46659“ und „R - 47017“ (Leerzeichen statt Bindestrich) – wird zu „R-46659“ vereinheitlicht
+const NR = /((?:R\s?-\s?|R\s)?\d{4,6}(?:\/\d{1,2})?)/;
+const normNr = (x) => String(x).replace(/^R\s*-?\s*/i, "R-");
 /** Auftragsnummer aus Betreff oder weitergeleitetem Betreff/Text ("Scans zu Auftrag Nr. 16872") */
 export function nrAusMail(m) {
   const s = cleanSubject(m.subject);
@@ -66,7 +68,7 @@ export function nrAusMail(m) {
     s.match(new RegExp("^" + NR.source + "\\b")),
     s.match(new RegExp("\\b" + NR.source + "\\s+KW\\s*\\d", "i")),
   ];
-  for (const k of kandidaten) if (k && !/^(19|20)\d\d$/.test(k[1])) return k[1];
+  for (const k of kandidaten) if (k && !/^(19|20)\d\d$/.test(k[1])) return normNr(k[1]);
   return "";
 }
 /** "KW 18" aus dem Betreff, Jahr aus dem Mail-Datum */

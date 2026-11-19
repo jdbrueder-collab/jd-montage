@@ -308,10 +308,15 @@ async function abruf(db: any, quelle: string, nachholen = "") {
             const id = findeAuftrag(orders, nr) || idOf(nr);
             const grund = eigenerText(m).replace(/^\s*Sehr geehrte[^\n]*\n/i, "").replace(/\s+\n/g, "\n").trim().slice(0, 600);
             const storniert = { am: d, quelle: "mail", betreff: cleanSubject(m.subject), grund, mailId: m.id, widerruf: /Widerruf/i.test(m.subject || "") };
-            if (!orders[id]) { const doc = { nr, storniert, terminStatus: "zu_terminieren", prodStatus: "offen", erstelltAm: Date.now(), quelle: "mail-storno" }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; z.neu++; }
-            else if (!orders[id].storniert) { await updDoc(db, "auftraege", id, { storniert }); orders[id].storniert = storniert; z.aktualisiert++; }
-            z.storniert = (z.storniert || 0) + 1;
-            log.push(`❌ Storniert: Auftrag ${orders[id].nr || nr}`);
+            // Gibt es schon eine neuere Montagezusage? Dann ist der Widerruf überholt.
+            if (orders[id] && (orders[id].zusageMail?.am || 0) > d) {
+              log.push(`↩ Widerruf ${orders[id].nr || nr} übersprungen – danach kam eine neue Montagezusage`);
+            } else {
+              if (!orders[id]) { const doc = { nr, storniert, terminStatus: "zu_terminieren", prodStatus: "offen", erstelltAm: Date.now(), quelle: "mail-storno" }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; z.neu++; }
+              else if (!orders[id].storniert) { await updDoc(db, "auftraege", id, { storniert }); orders[id].storniert = storniert; z.aktualisiert++; }
+              z.storniert = (z.storniert || 0) + 1;
+              log.push(`❌ Storniert: Auftrag ${orders[id].nr || nr}`);
+            }
           }
         } else if (typ === "dispo") {
           // Disposition: z. B. „Auftrag Nr. 16872“ oder „15845 KW 18“ mit Dokumente.pdf
