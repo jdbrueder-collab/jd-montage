@@ -8,7 +8,7 @@ import { DOMParser } from "npm:linkedom@0.18.5";
 import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
-  art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, kwAusMail, nrAusMail,
+  art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istEigenerBericht, kwAusMail, nrAusMail,
   parseAbrechnung, parseUebersicht, parseZusage, splitBV, unterlagen, vonMeta,
 } from "../_shared/meta.js";
 
@@ -19,7 +19,7 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-const DEFAULT_QUERY = "(from:meta.de OR \"@meta.de\") newer_than:60d";
+const DEFAULT_QUERY = "(from:meta.de OR to:meta.de OR \"@meta.de\") newer_than:60d";
 const MAX_NACHRICHTEN = 40;   // pro Lauf, Rest beim nächsten Lauf
 const MAX_DATEIEN = 25;       // Anhänge pro Lauf
 const MAX_LAUFZEIT = 110_000; // ms, danach sauber aufhören
@@ -42,6 +42,7 @@ Deno.serve(async (req) => {
       // Nur lesen: Mails im Postfach suchen (z. B. um neue Mail-Arten wie Stornos kennenzulernen)
       const body = await req.json().catch(() => ({}));
       if (body?.suche) return json(await suche(String(body.suche), Math.min(+body.anzahl || 10, 25)));
+      if (body?.nachholen) return json(await abruf(db, "nachholen", String(body.nachholen)));
       if (body?.erinnerung) return json(await metaErinnerung(db, false));
     } else {
       const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -190,7 +191,7 @@ async function updDoc(db: any, col: string, id: string, patch: any) {
 }
 
 // ---------- Abruf ----------
-async function abruf(db: any, quelle: string) {
+async function abruf(db: any, quelle: string, nachholen = "") {
   const start = Date.now();
   const log: string[] = [];
   const zeit = () => Date.now() - start > MAX_LAUFZEIT;
@@ -201,7 +202,8 @@ async function abruf(db: any, quelle: string) {
   await updDoc(db, "mails", "status", { lauf: Date.now() });
 
   const settings = (await getDoc(db, "einstellungen", "allgemein")) || {};
-  const query = settings.gmailQuery || DEFAULT_QUERY;
+  // Beim Nachholen werden die gefundenen Mails erneut ausgewertet, auch wenn sie schon gelesen wurden
+  const query = nachholen || settings.gmailQuery || DEFAULT_QUERY;
   const orders = await getCol(db, "auftraege");
   const fin = await getCol(db, "finanzen");
   const z: any = { neu: 0, aktualisiert: 0, abrechnungen: 0, dateien: 0, gelesen: 0, fehler: 0, storniert: 0 };
@@ -228,10 +230,10 @@ async function abruf(db: any, quelle: string) {
     const neu: any[] = [];
     for (const t of threads.reverse()) {
       if (zeit() || neu.length >= MAX_NACHRICHTEN) { weitere = true; break; }
-      if (st.threads[t.id] && t.historyId && st.threads[t.id] === t.historyId) continue;
+      if (!nachholen && st.threads[t.id] && t.historyId && st.threads[t.id] === t.historyId) continue;
       const th = await gmail(`threads/${t.id}?format=full`);
       const ids = (th.messages || []).map((r: any) => r.id);
-      for (const raw of th.messages || []) if (!st.msgs[raw.id]) neu.push(message(raw));
+      for (const raw of th.messages || []) if (nachholen || !st.msgs[raw.id]) neu.push(message(raw));
       offen.push({ id: t.id, historyId: th.historyId || t.historyId, ids });
     }
     neu.sort((a, b) => +new Date(a.date) - +new Date(b.date));
@@ -242,6 +244,18 @@ async function abruf(db: any, quelle: string) {
     for (const m of neu) {
       if (zeit()) { weitere = true; break; }
       try {
+        // Eigener Montagebericht an meta (auch direkt aus Gmail gesendet) → Auftrag ist erledigt
+        if (istEigenerBericht(m)) {
+          const nr = nrAusMail(m); const id = nr ? findeAuftrag(orders, nr) : null;
+          if (id && orders[id].berichtStatus !== "gesendet") {
+            const d0 = +new Date(m.date);
+            const p: any = { berichtStatus: "gesendet", berichtGesendetAm: d0, berichtAn: "montagebericht@meta.de", berichtQuelle: "mail" };
+            if (!orders[id].abschluss) p.abschluss = { typ: "ok", am: d0, by: null, quelle: "mail" };
+            await updDoc(db, "auftraege", id, p); Object.assign(orders[id], p); z.aktualisiert++;
+            log.push(`📤 Montagebericht gesendet: Auftrag ${orders[id].nr} → erledigt`);
+          }
+          st.msgs[m.id] = 1; continue;
+        }
         if (!vonMeta(m)) { st.msgs[m.id] = 1; continue; }
         const typ = art(m);
         const d = +new Date(m.date);
@@ -266,6 +280,8 @@ async function abruf(db: any, quelle: string) {
             const id = findeAuftrag(orders, zs.nr) || idOf(zs.nr);
             const data: any = { kw: zs.kw, jahr: zs.jahr, zusage: true, abholung: zs.abholung, zusageMail: { msgId: m.id, viewUrl: m.viewUrl || "", am: d } };
             if (zs.kabinen) data.kabinen = zs.kabinen;
+            // neue Montagezusage nach einem Widerruf/Storno: Auftrag ist wieder aktiv
+            if (orders[id]?.storniert && (orders[id].storniert.am || 0) < d) { data.storniert = null; data.stornoAufgehobenAm = d; }
             if (!orders[id]) { const doc = { nr: zs.nr, ...data, terminStatus: "zu_terminieren", prodStatus: "in_produktion", erstelltAm: Date.now(), quelle: "mail" }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; z.neu++; }
             else { await updDoc(db, "auftraege", id, data); Object.assign(orders[id], data); z.aktualisiert++; }
             const n = await anhaenge(db, m, id, log, z);
@@ -290,7 +306,8 @@ async function abruf(db: any, quelle: string) {
           if (!nr) { log.push(`⚠ Storno-Mail „${cleanSubject(m.subject)}“ ohne Auftragsnummer – bitte von Hand markieren`); }
           else {
             const id = findeAuftrag(orders, nr) || idOf(nr);
-            const storniert = { am: d, quelle: "mail", betreff: cleanSubject(m.subject), grund: eigenerText(m).replace(/\s+\n/g, "\n").trim().slice(0, 600), mailId: m.id };
+            const grund = eigenerText(m).replace(/^\s*Sehr geehrte[^\n]*\n/i, "").replace(/\s+\n/g, "\n").trim().slice(0, 600);
+            const storniert = { am: d, quelle: "mail", betreff: cleanSubject(m.subject), grund, mailId: m.id, widerruf: /Widerruf/i.test(m.subject || "") };
             if (!orders[id]) { const doc = { nr, storniert, terminStatus: "zu_terminieren", prodStatus: "offen", erstelltAm: Date.now(), quelle: "mail-storno" }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; z.neu++; }
             else if (!orders[id].storniert) { await updDoc(db, "auftraege", id, { storniert }); orders[id].storniert = storniert; z.aktualisiert++; }
             z.storniert = (z.storniert || 0) + 1;
@@ -443,6 +460,10 @@ async function deckblattUebernehmen(db: any, id: string, o: any, res: any) {
   if (!o.bauvorhaben && res.bauvorhabenName) p.bauvorhaben = String(res.bauvorhabenName).trim();
   if (!o.plzOrt && res.adresse) { const m = String(res.adresse).match(/(\d{5}\s+[^,]+)$/); if (m) p.plzOrt = m[1].trim(); }
   if (!o.kw && parseInt(res.kw, 10)) p.kw = parseInt(res.kw, 10);
-  if (Object.keys(p).length) { await updDoc(db, "auftraege", id, { ...p, deckblattGelesenAm: Date.now() }); Object.assign(o, p); }
-  return Object.keys(p).length;
+  // Was Claude nicht sicher lesen konnte (oder was fehlt) – die App zeigt dort „bitte im Dokument nachsehen“
+  const unsicher = (Array.isArray(res.unsicher) ? res.unsicher : []).map(String).filter((k: string) => [...DECK_FELDER, "bauvorhabenName"].includes(k));
+  for (const k of ["bauleiterTel", "adresse"]) if (!o[k] && !p[k] && !unsicher.includes(k)) unsicher.push(k);
+  p.deckUnsicher = unsicher;
+  await updDoc(db, "auftraege", id, { ...p, deckblattGelesenAm: Date.now() }); Object.assign(o, p);
+  return Object.keys(p).filter((k) => k !== "deckUnsicher").length;
 }

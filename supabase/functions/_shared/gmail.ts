@@ -54,6 +54,7 @@ export function message(m: any) {
     threadId: m.threadId,
     subject: header(m.payload, "Subject"),
     sender: header(m.payload, "From"),
+    to: header(m.payload, "To"),
     date: new Date(Number(m.internalDate)).toISOString(),
     plaintextBody: out.plain,
     htmlBody: out.html,

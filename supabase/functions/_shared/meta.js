@@ -15,6 +15,11 @@ function htmlDoc(m, parseHTML) {
   return parseHTML(h);
 }
 
+/** Eigener Montagebericht an meta (aus der App oder direkt aus Gmail an montagebericht@meta.de) */
+export function istEigenerBericht(m) {
+  return /montagebericht@meta\.de/i.test(m.to || "") && !/meta\.de/i.test(m.sender || "");
+}
+
 /** Absender ist meta – direkt oder als weitergeleitete Mail */
 export function vonMeta(m) {
   if (/meta\.de/i.test(m.sender || "")) return true;
@@ -25,6 +30,8 @@ export function vonMeta(m) {
 /** Art der Mail bestimmen */
 export function art(m) {
   const s = cleanSubject(m.subject);
+  // „Widerruf des Montageauftrags R-46775 in KW 46/2026“ = Stornierung (vor der Wochenübersicht prüfen!)
+  if (/Widerruf/i.test(s) && /Montage/i.test(s)) return "storno";
   if (/Montageauftr/i.test(s)) return "uebersicht";
   if (/Montagezusage/i.test(s)) return "zusage";
   if (/Montageabrechnung/i.test(s)) return "abrechnung";
@@ -154,6 +161,7 @@ export function findeAuftrag(orders, nr) {
 export const DECK_PROMPT = `Du bekommst Unterlagen eines Montageauftrags der Firma meta Trennwandanlagen (Aufmaß-Deckblatt, Produktdeckblatt, Zeichnungen) als PDF oder Bild.
 Lies die Felder aus und antworte NUR mit einem JSON-Objekt mit diesen Schlüsseln (leerer String, wenn nicht vorhanden):
 {"fertigungsNr":"Fertigungs-Auftrags-Nr. z.B. 17714/1","vorgang":"Auftrags-Vorgangs-Nr.","berater":"meta-Berater mit Telefon","adresse":"Baustellenanschrift: Straße Nr, PLZ Ort","bauvorhabenName":"z.B. Wohnquartier","bauleiterName":"","bauleiterTel":"","bauleiterMail":"","oeffnungszeiten":"","geschosse":"Montage in Geschoss","aufzug":"","montageHinweise":"","kaufmHinweise":"Kaufmännische Hinweise kurz","technHinweise":"Technische Hinweise vom Produktdeckblatt","aufbau":"Was aufgebaut wird: Modell/Design, Anzahl Kabinen, Anlagenhöhe, Farben, Bodenanschluss – kurz in einer Zeile","kabinen":"Anzahl Kabinen als Zahl","zahlungspflichtiger":"Firma, Ort","kw":"gewünschte Montage-KW als Zahl"}
-Handschriftliche Werte mit lesen. Nichts erfinden.`;
+Handschriftliche Werte mit lesen. Nichts erfinden.
+Zusätzlich: "unsicher": Liste der Schlüssel, die du NICHT sicher lesen konntest (unleserlich, abgeschnitten, mehrdeutig) oder die im Dokument fehlen, aber wichtig wären – besonders "bauleiterTel" und "adresse". Beispiel: "unsicher":["bauleiterTel"].`;
 // Welche Deckblatt-Felder in den Auftrag übernommen werden (nur wenn dort noch leer)
 export const DECK_FELDER = ["vorgang", "berater", "adresse", "bauleiterName", "bauleiterTel", "bauleiterMail", "oeffnungszeiten", "geschosse", "aufzug", "montageHinweise", "kaufmHinweise", "technHinweise", "aufbau", "kabinen", "zahlungspflichtiger"];

@@ -187,6 +187,7 @@ nav.bottom a.on .ic{stroke-width:2.2}
 .modal{border-radius:20px 20px 0 0}
 @media(min-width:600px){.modal{border-radius:20px}}
 .toast{border-radius:14px;font-weight:500}
+.dokhinweis{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--warn);background:var(--warnbg);border-radius:999px;padding:1px 8px}
 .order.abh{background:#f0fdf4;box-shadow:var(--sh),inset 4px 0 0 var(--ok)}
 .chip.abh{background:var(--ok);color:#fff}
 #pushBtn{padding:6px 9px}
@@ -402,6 +403,9 @@ const leerKm=o=>(o.leerfahrten||[]).reduce((a,l)=>a+nn(l.km),0);
 function vorleistungZeilen(o){
   return (o.leerfahrten||[]).map(l=>`Vorleistung: Leerfahrt am ${leerDatum(l)}${nn(l.km)?` – ${String(l.km).replace(".",",")} km`:""}${l.personen?`, ${l.personen} Pers.`:""}${l.minuten?`, ${fmtHMin(l.minuten)} Std.`:""}${l.fahrzeug?`, ${fahrzeugText(l)}`:""} (${l.grund||"Baustelle nicht montagefertig"})`);
 }
+// Angaben, die beim Auslesen unsicher waren oder fehlen → „bitte im Dokument nachsehen“
+const unsicher=(o,k)=>(o.deckUnsicher||[]).includes(k);
+const DOK_HINWEIS=`<span class="dokhinweis">⚠️ bitte im Dokument prüfen</span>`;
 // Terminiert: fester Termin eingetragen oder Einsatz schon begonnen
 const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).length>0;
 function phase(o){
@@ -562,7 +566,11 @@ function orderChips(o){
   else if(o.abschluss && abnahmeFaellig(o)) c.push(abnahmeChip(o));
   const rk=offeneReklas(o.id).length; if(rk) c.push(`<span class="chip bad">${rk} Reklamation offen</span>`);
   if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`);
-  if(can.finanzen() && S.fin[o.id]) c.push(`<span class="chip info">${fmtEUR(S.fin[o.id].summe)}</span>`);
+  if(can.finanzen() && S.fin[o.id]){ const f=S.fin[o.id], st=f.rechnungStatus||"offen";
+    c.push(`<span class="chip info">💶 ${fmtEUR(f.summe)}</span>`);
+    if(st==="offen"||st==="freigegeben") c.push(`<span class="chip warn">✏️ Rechnung schreiben</span>`);
+    else if(st==="erstellt") c.push(`<span class="chip warn">Rechnung versenden</span>`);
+    else if(st==="versendet") c.push(`<span class="chip">Rechnung versendet – Zahlung offen</span>`); }
   return c.join("");
 }
 function orderCard(o){
@@ -703,8 +711,9 @@ function viewDetail(id){
   h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
-     <div class="grid2" style="margin-top:12px"><a class="btn pri" href="${esc(nav)}" target="_blank" rel="noopener">🧭 Zur Baustelle fahren</a>
-     ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 ${esc(o.bauleiterTel)}</a>`:`<span class="btn" style="opacity:.5">📞 keine Nummer</span>`}</div></div>`;
+     <div class="grid2" style="margin-top:12px">${addr?`<a class="btn pri" href="${esc(nav)}" target="_blank" rel="noopener">🧭 Zur Baustelle fahren</a>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument nachsehen</button>`}
+     ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 ${esc(o.bauleiterTel)}</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument nachsehen</button>`:`<span class="btn" style="opacity:.5">📞 keine Nummer</span>`}</div>
+     ${(addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel"))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
   // Planung
   h+=`<div class="card"><h3>Planung</h3>
@@ -726,10 +735,10 @@ function viewDetail(id){
   const kv=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
   h+=`<div class="card"><div class="row between"><h3 style="margin:0">Baustelle &amp; Kunde</h3>${can.planen()?`<button class="btn sm ghost" id="editBau">Bearbeiten</button>`:""}</div>
    <dl class="kv" style="margin-top:10px">
-   ${kv("Adresse",esc(addr))}
+   ${kv("Adresse",addr?esc(addr)+(unsicher(o,"adresse")?" "+DOK_HINWEIS:""):(o.deckblattGelesenAm?DOK_HINWEIS:""))}
    ${kv("Land",`${LAENDER[landOf(o)].join(" ")}${o.land?"":` <span class="mute small">(erkannt)</span>`}`)}
-   ${kv("Bauleiter",esc(o.bauleiterName||""))}
-   ${kv("Telefon",o.bauleiterTel?`<a href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">${esc(o.bauleiterTel)}</a>`:"")}
+   ${kv("Bauleiter",o.bauleiterName?esc(o.bauleiterName)+(unsicher(o,"bauleiterName")?" "+DOK_HINWEIS:""):(unsicher(o,"bauleiterName")?DOK_HINWEIS:""))}
+   ${kv("Telefon",o.bauleiterTel?`<a href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">${esc(o.bauleiterTel)}</a>`+(unsicher(o,"bauleiterTel")?" "+DOK_HINWEIS:""):(o.deckblattGelesenAm?DOK_HINWEIS:""))}
    ${kv("E-Mail",o.bauleiterMail?`${esc(o.bauleiterMail)}`:"")}
    ${kv("Geschosse",esc(o.geschosse||""))}
    ${kv("Öffnungszeiten",esc(o.oeffnungszeiten||""))}
@@ -747,7 +756,7 @@ function viewDetail(id){
   </div>`;
 
   // Unterlagen
-  h+=`<div class="card"><h3>Unterlagen &amp; Zeichnungen</h3>${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
+  h+=`<div class="card" id="unterlagenCard"><h3>Unterlagen &amp; Zeichnungen</h3>${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
    <div class="row" style="margin-top:10px">
    ${can.planen()&&S.sample?`<button class="btn sm ghost" id="readDeck">🔎 Deckblatt auslesen</button>`:""}
    ${can.mails()&&o.zusageMail?.att?.length?`<button class="btn sm ghost" id="mailUnterlagen">✉︎ Unterlagen aus Mail holen</button>`:""}
@@ -1889,6 +1898,7 @@ function bindDetail(id){
   document.querySelectorAll("[data-rm-m]").forEach(b=>b.onclick=()=>upd(P,{monteure:(o.monteure||[]).filter(x=>x!==b.dataset.rmM)}));
   const am=$("#addMonteur"); if(am) am.onclick=()=>pickPerson(id);
   const eb=$("#editBau"); if(eb) eb.onclick=()=>editBauDialog(id);
+  document.querySelectorAll("[data-dok]").forEach(b=>b.onclick=e=>{ e.preventDefault(); const c=$("#unterlagenCard"); c?.scrollIntoView({behavior:"smooth",block:"start"}); const d=Object.values(S.fotos).filter(f=>f.kat==="unterlagen").sort((a,b)=>(/pdf/.test(b.typ||"")?1:0)-(/pdf/.test(a.typ||"")?1:0))[0]; if(d){ setTimeout(()=>{ /pdf/.test(d.typ||"")?window.open("/_blob/"+d.assetId,"_blank"):lightbox("/_blob/"+d.assetId); },400); } else toast("Noch keine Unterlagen – bitte hochladen oder aus der Mail holen"); });
   $("#stornoSetzen") && ($("#stornoSetzen").onclick=()=>modal(`<h2>Auftrag stornieren?</h2><div class="small mute">Der Auftrag bleibt sichtbar, steht aber unter „Storniert“.</div><label class="f">Grund / Hinweis (optional)</label><textarea class="i" id="sg" placeholder="z. B. Bauherr hat abgesagt"></textarea><div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Stornieren</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd(P,{storniert:{am:Date.now(),von:myId(),quelle:"hand",grund:m.querySelector("#sg").value.trim()}}); close(); toast("Als storniert markiert"); }; }));
   $("#stornoAuf") && ($("#stornoAuf").onclick=async()=>{ if(await confirmBox("Storno aufheben?","Der Auftrag kommt wieder in die normale Liste.","Aufheben")) upd(P,{storniert:null,stornoAufgehobenAm:Date.now()}); });
   const tb=$("#timerBtn"); if(tb) tb.onclick=async()=>{
@@ -2177,7 +2187,8 @@ async function uploadFotos(id,kat,files){
 const DECK_PROMPT = `Du bekommst Fotos/Scans von Unterlagen eines Montageauftrags der Firma meta Trennwandanlagen (Aufmaß-Deckblatt, Produktdeckblatt, Zeichnungen).
 Lies die Felder aus und antworte NUR mit einem JSON-Objekt mit diesen Schlüsseln (leerer String, wenn nicht vorhanden):
 {"fertigungsNr":"Fertigungs-Auftrags-Nr. z.B. 17714/1","vorgang":"Auftrags-Vorgangs-Nr.","berater":"meta-Berater mit Telefon","adresse":"Baustellenanschrift: Straße Nr, PLZ Ort","bauvorhabenName":"z.B. Wohnquartier","bauleiterName":"","bauleiterTel":"","bauleiterMail":"","oeffnungszeiten":"","geschosse":"Montage in Geschoss","aufzug":"","montageHinweise":"","kaufmHinweise":"Kaufmännische Hinweise kurz","technHinweise":"Technische Hinweise vom Produktdeckblatt","aufbau":"Was aufgebaut wird: Modell/Design, Anzahl Kabinen, Anlagenhöhe, Farben, Bodenanschluss – kurz in einer Zeile","kabinen":"Anzahl Kabinen als Zahl","zahlungspflichtiger":"Firma, Ort","kw":"gewünschte Montage-KW als Zahl"}
-Handschriftliche Werte mit lesen. Nichts erfinden.`;
+Handschriftliche Werte mit lesen. Nichts erfinden.
+Zusätzlich: "unsicher": Liste der Schlüssel, die du NICHT sicher lesen konntest (unleserlich, abgeschnitten, mehrdeutig) oder die im Dokument fehlen, aber wichtig wären – besonders "bauleiterTel" und "adresse". Beispiel: "unsicher":["bauleiterTel"].`;
 async function readDeckblatt(id, blobs){
   if(!S.sample) throw new Error("Claude-Auslesen ist hier nicht verfügbar");
   let lim={}; try{ lim=await S.sample.limits(); }catch(e){}
@@ -2188,8 +2199,12 @@ async function readDeckblatt(id, blobs){
   const map={vorgang:"vorgang",berater:"berater",adresse:"adresse",bauleiterName:"bauleiterName",bauleiterTel:"bauleiterTel",bauleiterMail:"bauleiterMail",oeffnungszeiten:"oeffnungszeiten",geschosse:"geschosse",aufzug:"aufzug",montageHinweise:"montageHinweise",kaufmHinweise:"kaufmHinweise",technHinweise:"technHinweise",aufbau:"aufbau",kabinen:"kabinen",zahlungspflichtiger:"zahlungspflichtiger"};
   for(const [src,dst] of Object.entries(map)){ const v=String(res?.[src]??"").trim(); if(v && v!=="-" && !o[dst]) p[dst]=v; }
   if(!o.kw && parseInt(res?.kw,10)) p.kw=parseInt(res.kw,10);
-  if(Object.keys(p).length) await upd(orderPath(id),p);
-  return Object.keys(p).length;
+  const n=Object.keys(p).length;
+  const uns=(Array.isArray(res?.unsicher)?res.unsicher:[]).map(String).filter(k=>map[k]||k==="bauvorhabenName");
+  ["bauleiterTel","adresse"].forEach(k=>{ if(!o[k]&&!p[k]&&!uns.includes(k)) uns.push(k); });
+  p.deckUnsicher=uns; p.deckblattGelesenAm=Date.now();
+  await upd(orderPath(id),p);
+  return n;
 }
 function deckblattDialog(id){
   const unter=Object.values(S.fotos).filter(f=>f.kat==="unterlagen" && /^image|pdf/.test(f.typ||"image"));
