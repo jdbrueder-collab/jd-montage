@@ -207,6 +207,7 @@ details.fold .foldin{margin-top:12px}
 .seg.laender button.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .seg.laender button.on .cc{color:#fff}
 .seg.laender .n{color:inherit;opacity:.7;margin-left:3px}
+.nvrow{display:flex;justify-content:flex-end;margin:-4px 0 10px}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -460,11 +461,13 @@ const unsicher=(o,k)=>(o.deckUnsicher||[]).includes(k);
 const DOK_HINWEIS=`<span class="dokhinweis">⚠️ bitte im Dokument prüfen</span>`;
 // Terminiert: fester Termin eingetragen oder Einsatz schon begonnen
 const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).length>0;
+// Abholbereit, außer der Chef hat ihn von Hand zurück nach „Nicht verplant“ geschoben
+const abhBereit=o=>o.prodStatus==="abholbereit" && !o.nichtVerplant;
 function phase(o){
   if(o.storniert) return "storniert";
   if(abgerechnet(o) || berichtVerschickt(o)) return "erledigt"; // Bericht verschickt oder Abrechnung da
   if(terminiert(o)) return "arbeit";
-  if(o.prodStatus==="abholbereit") return "abholbereit"; // Ware fertig – jetzt einplanen
+  if(abhBereit(o)) return "abholbereit"; // Ware fertig – jetzt einplanen
   return "offen";
 }
 
@@ -611,7 +614,8 @@ function orderChips(o){
     if(o.terminStatus==="fest") c.push(`<span class="chip ok">Fest: ${esc(o.termin?fmtDate(o.termin):"terminiert")}</span>`);
     else c.push(`<span class="chip warn">Muss terminiert werden</span>`);
     const p=PROD[o.prodStatus||"offen"];
-    if(o.prodStatus==="abholbereit") c.push(`<span class="chip abh">✓ Abholbereit${o.abholbereitBestaetigt?" · meta":""}</span>`);
+    if(abhBereit(o)) c.push(`<span class="chip abh">✓ Abholbereit${o.abholbereitBestaetigt?" · meta":""}</span>`);
+    else if(o.prodStatus==="abholbereit" && o.nichtVerplant) c.push(`<span class="chip">↩ von Hand nach „Nicht verplant“</span>`);
     // Produktionsstand (offen / in Produktion / produziert) wird nicht mehr angezeigt – nur „Abholbereit“
     if(o.quelle==="mail-dispo"&&!o.zusage) c.push(`<span class="chip gold">📨 Anfrage von meta</span>`);
     if(o.versand) c.push(`<span class="chip ${/nicht/i.test(o.versand)?"":"ok"}">${esc(o.versand)}</span>`);
@@ -633,8 +637,8 @@ function orderChips(o){
   return c.join("");
 }
 function orderCard(o){
-  const hl = !istFertig(o) && !o.storniert && o.terminStatus!=="fest" && (o.prodStatus==="abholbereit"||o.prodStatus==="produziert");
-  const abh=o.prodStatus==="abholbereit" && !istFertig(o) && !o.storniert;
+  const hl = !istFertig(o) && !o.storniert && o.terminStatus!=="fest" && !o.nichtVerplant && (o.prodStatus==="abholbereit"||o.prodStatus==="produziert");
+  const abh=abhBereit(o) && !istFertig(o) && !o.storniert;
   return `<a class="order ${istFertig(o)?"done":""} ${hl?"hl":""} ${abh?"abh":""} ${o.storniert?"storno":""}" href="#a-${esc(o.id)}">
     <div class="row between"><span class="nr">${esc(o.nr)}</span><span class="small mute">${o.kabinen?esc(o.kabinen)+" Kabinen":""}</span></div>
     <div class="bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
@@ -691,7 +695,7 @@ function viewListe(){
     const tag = k===nowK?`<span class="now">diese Woche</span>`:(k && k<nowK && (S.filter==="offen"||S.filter==="arbeit")?`<span class="now" style="color:var(--bad)">vergangen</span>`:"");
     let range=""; if(k){ const m=mondayOf(g.w.jahr,g.w.kw); const f=new Date(m); f.setDate(f.getDate()+4); range=`${m.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${f.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`; }
     h+=`<div class="kw"><b>${label}</b><span class="small mute">${range} · ${g.items.length} Auftr.</span>${tag}</div>`;
-    h+=g.items.map(orderCard).join("");
+    h+=g.items.map(o=>orderCard(o)+(S.filter==="abholbereit"&&!suche&&can.planen()&&phase(o)==="abholbereit"?`<div class="nvrow"><button class="btn sm ghost" data-nv="${esc(o.id)}">↩ Nach „Nicht verplant“ verschieben</button></div>`:"")).join("");
   });
   return h;
 }
@@ -744,7 +748,7 @@ function metaAbholbereitDialog(id){
     ok.onclick=async()=>{
       const name=nm.value.trim(); if(name.replace(/\s+/g,"").length<3||!mc.checked) return toast("Bitte Namen eintragen und bestätigen");
       ok.disabled=true; S.metaName=name; const now=Date.now();
-      try{ await upd(orderPath(id),{prodStatus:"abholbereit",prodVorMeta:o.prodStatus==="abholbereit"?(o.prodVorMeta||"produziert"):(o.prodStatus||"offen"),prodGeaendertAm:now,prodVon:myId(),abholbereitBestaetigt:{name,am:now,von:myId()},prodVerlauf:[...(o.prodVerlauf||[]),{status:"abholbereit",name,am:now,von:myId()}].slice(-20)}); close(); toast(`Auftrag ${o.nr} ist abholbereit ✓`); S.sync?.run({abholbereit:id}).catch(()=>{}); }
+      try{ await upd(orderPath(id),{prodStatus:"abholbereit",prodVorMeta:o.prodStatus==="abholbereit"?(o.prodVorMeta||"produziert"):(o.prodStatus||"offen"),prodGeaendertAm:now,prodVon:myId(),abholbereitBestaetigt:{name,am:now,von:myId()},nichtVerplant:null,prodVerlauf:[...(o.prodVerlauf||[]),{status:"abholbereit",name,am:now,von:myId()}].slice(-20)}); close(); toast(`Auftrag ${o.nr} ist abholbereit ✓`); S.sync?.run({abholbereit:id}).catch(()=>{}); }
       catch(e){ ok.disabled=false; }
     };
   });
@@ -776,6 +780,8 @@ function viewDetail(id){
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
      ${frueh&&can.planen()?`<button class="btn pri block" id="terminieren" style="margin-top:12px">📅 Terminieren</button>`:""}
+     ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost block" data-nv="${esc(id)}" style="margin-top:8px">↩ Nach „Nicht verplant“ verschieben</button>`:""}
+     ${frueh&&can.planen()&&o.nichtVerplant&&o.prodStatus==="abholbereit"?`<button class="btn ghost block" data-nv-zurueck="${esc(id)}" style="margin-top:8px">✓ Wieder nach „Abholbereit“</button>`:""}
      <div class="grid2" style="margin-top:12px">${addr?`<a class="btn pri" href="${esc(nav)}" target="_blank" rel="noopener">🧭 Zur Baustelle fahren</a>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument nachsehen</button>`}
      ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 ${esc(o.bauleiterTel)}</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument nachsehen</button>`:`<span class="btn" style="opacity:.5">📞 keine Nummer</span>`}</div>
      ${(addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel"))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
@@ -2265,6 +2271,10 @@ function bind(r){
   app.querySelectorAll("#landFlt [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
   const no=$("#newOrder"); if(no) no.onclick=newOrderDialog;
+  app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
+    const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Nicht verplant“`,3000); });
+  app.querySelectorAll("[data-nv-zurueck]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); const o=S.orders[b.dataset.nvZurueck]; if(!o) return;
+    await upd(orderPath(o.id),{nichtVerplant:null}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:null}; render(); toast(`${o.nr} steht wieder unter „Abholbereit“`,3000); });
   $("#abnBanner") && ($("#abnBanner").onclick=()=>{ S.filter="abnahme"; render(); });
   $("#pruefBanner") && ($("#pruefBanner").onclick=()=>{ S.filter="pruefung"; render(); });
   $("#abnBack") && ($("#abnBack").onclick=e=>{ e.preventDefault(); S.filter="offen"; render(); });

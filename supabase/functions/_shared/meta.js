@@ -187,3 +187,14 @@ export function istAbnahmeVerguetung(a) {
   if (/^\s*(sicht)?abnahme/i.test(String(a?.bemerkung || ""))) return true;
   return pos.length > 0 && pos.every((p) => /abnahme/i.test(p.artikel));
 }
+
+/** Abrechnung einer Reklamation: meta antwortet im Verlauf „R 47006“ mit „Hier die Aufstellung/Abrechnung“
+ *  (Bild im Anhang) oder nur mit dem Betrag („359.00“). Liefert { nr, summe } oder null. */
+export function reklaAufstellung(m) {
+  const nr = nrAusMail(m);
+  if (!/^R-/.test(nr)) return null;
+  const own = eigenerText(m).split(/\bschrieb\b/i)[0];
+  const betrag = (own.replace(/\r/g, "").match(/^[ \t*_]*(\d{1,5}[.,]\d{2})[ \t*_]*(?:€|EUR)?[ \t*_]*$/m) || [])[1];
+  if (!betrag && !/Aufstellung|Abrechnung/i.test(own)) return null;
+  return { nr, summe: betrag ? num(betrag) : 0 };
+}

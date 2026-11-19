@@ -9,7 +9,7 @@ import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
   art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istAbnahmeVerguetung, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
-  parseAbrechnung, parseUebersicht, parseZusage, splitBV, unterlagen, vonMeta,
+  parseAbrechnung, parseUebersicht, parseZusage, reklaAufstellung, splitBV, unterlagen, vonMeta,
 } from "../_shared/meta.js";
 
 const cors = {
@@ -208,7 +208,8 @@ async function suche(q: string, anzahl: number) {
     const th = await gmail(`threads/${t.id}?format=full`);
     for (const raw of th.messages || []) {
       const m = message(raw);
-      out.push({ datum: m.date, von: m.sender, betreff: m.subject, text: (m.plaintextBody || "").slice(0, 1500), anhaenge: m.attachments.map((a: any) => a.filename) });
+      const html = (m.htmlBody || "").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<\/(td|th)>/gi, " | ").replace(/<\/(tr|p|div)>|<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+      out.push({ datum: m.date, von: m.sender, betreff: m.subject, text: (m.plaintextBody || "").slice(0, 1500), html: html.slice(0, 3000), anhaenge: m.attachments.map((a: any) => a.filename) });
     }
   }
   return { postfach: (await gmail("profile")).emailAddress, anzahl: out.length, mails: out };
@@ -351,7 +352,7 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
           const a = parseAbrechnung(m, parseHTML);
           if (a.nr && a.summe) {
             const id = findeAuftrag(orders, a.nr) || idOf(a.nr); const ex = fin[id];
-            if (!orders[id] && opt.nurBestehende) { st.msgs[m.id] = 1; continue; }
+            if (!orders[id] && opt.nurBestehende && !mitAbgerechnet(a.nr, a.bemerkung, orders).length) { st.msgs[m.id] = 1; continue; }
             // Nur die Sichtabnahme wurde vergütet: eigener Eintrag, der Auftrag gilt dadurch NICHT als abgerechnet
             if (istAbnahmeVerguetung(a)) {
               const fid = id + "~abnahme"; const exA = fin[fid];
@@ -415,6 +416,24 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
             }
           }
         } else if (typ === "dispo") {
+          // Reklamation abgerechnet: meta schickt im Verlauf „R 47006“ die Aufstellung (Bild) oder den Betrag → erledigt
+          const rk = reklaAufstellung(m);
+          if (rk) {
+            const id = findeAuftrag(orders, rk.nr);
+            if (id) {
+              if (!orders[id].abgerechnet) {
+                const p = { abgerechnet: true, abgerechnetMit: "Aufstellung von meta", abgerechnetAm: d };
+                await updDoc(db, "auftraege", id, p); Object.assign(orders[id], p); z.aktualisiert++;
+                log.push(`💶 Reklamation ${orders[id].nr}: Aufstellung von meta → erledigt`);
+              }
+              const ex = fin[id];
+              if (rk.summe && (!ex || (ex.datum || 0) <= d)) {
+                const doc = { nr: orders[id].nr || rk.nr, bauvorhaben: orders[id].bauvorhaben || "", summe: rk.summe, positionen: [], bemerkung: "Aufstellung von meta per Mail", datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
+                await setDoc(db, "finanzen", id, doc); fin[id] = doc; z.abrechnungen++;
+              }
+            }
+            st.msgs[m.id] = 1; continue;
+          }
           // Disposition: z. B. „Auftrag Nr. 16872“ oder „15845 KW 18“ mit Dokumente.pdf
           const att = unterlagen(m);
           if (!att.length) { st.msgs[m.id] = 1; continue; }
