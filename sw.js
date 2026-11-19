@@ -1,6 +1,6 @@
 /* Service Worker: macht die App installierbar, hält die App-Dateien offline vor
    und lädt Fotos (_blob/<id>) mit dem Login-Token aus dem privaten Supabase-Speicher. */
-const VERSION = "jd-montage-v3";
+const VERSION = "jd-montage-v4";
 const SHELL = ["./", "index.html", "claude-shim.js", "config.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL))); self.skipWaiting(); });
@@ -54,7 +54,8 @@ self.addEventListener("notificationclick", e => {
   const url = new URL(e.notification.data?.url || "./", self.registration.scope).href;
   e.waitUntil((async () => {
     const tabs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const c of tabs) { if (c.url.startsWith(self.registration.scope)) { await c.focus(); c.navigate(url).catch(() => {}); return; } }
+    // offene App: direkt zum Auftrag springen (ohne neu zu laden)
+    for (const c of tabs) { if (c.url.startsWith(self.registration.scope)) { await c.focus().catch(() => {}); c.postMessage({ jdOpen: url }); return; } }
     await self.clients.openWindow(url);
   })());
 });

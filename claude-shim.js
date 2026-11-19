@@ -129,6 +129,12 @@
     });
   }
 
+  // Antippen einer Benachrichtigung bei offener App: zum Auftrag springen
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => {
+    if (!e.data?.jdOpen) return;
+    try { const h = new URL(e.data.jdOpen).hash; if (h && h !== location.hash) location.hash = h; else if (h) window.dispatchEvent(new HashChangeEvent("hashchange")); } catch (x) {}
+  });
+
   /* Token für den Service Worker hinterlegen, damit Bilder (_blob/<id>) geladen werden können */
   const saveToken = s => caches.open("jd-auth").then(c => c.put("token", new Response(s ? s.access_token : ""))).catch(() => {});
   sb.auth.onAuthStateChange((_e, s) => saveToken(s));

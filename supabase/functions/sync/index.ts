@@ -55,13 +55,14 @@ Deno.serve(async (req) => {
       });
       const body = await req.json().catch(() => ({}));
       // Benachrichtigungen: meta meldet „abholbereit“, oder Test an die eigenen Geräte (alle freigegebenen Nutzer)
-      if (body?.abholbereit || body?.pushTest || body?.reklamation || body?.subBericht || body?.subFreigabe) {
+      if (body?.abholbereit || body?.pushTest || body?.reklamation || body?.subBericht || body?.subFreigabe || body?.termin) {
         const { data: member } = await user.rpc("is_member");
         const { data: u } = await user.auth.getUser();
         if (!member || !u?.user) return json({ code: "approval_required", message: "Kein Zugriff." }, 403);
         if (body.reklamation) return json(await pushReklamation(db, String(body.reklamation)));
         if (body.subBericht) return json(await pushSubBericht(db, String(body.subBericht)));
         if (body.subFreigabe) return json(await pushSubFreigabe(db, String(body.subFreigabe)));
+        if (body.termin) return json(await pushTermin(db, String(body.termin), u.user.id));
         return json(body.pushTest ? await pushTest(db, u.user.id) : await pushAbholbereit(db, String(body.abholbereit)));
       }
       const { data: owner } = await user.rpc("is_owner");
@@ -203,23 +204,43 @@ async function pushSubBericht(db: any, id: string) {
   if (o.subBerichtGemeldetAm && o.subBerichtGemeldetAm >= o.abschluss.am) return { gesendet: 0, grund: "schon gemeldet" };
   await updDoc(db, "auftraege", id, { subBerichtGemeldetAm: Date.now() });
   const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
-  const von = rollen.info?.[o.berichtVonSub]?.firma || rollen.info?.[o.berichtVonSub]?.name || "Subunternehmer";
+  const wer = o.berichtVonSub || o.berichtVon || o.abschluss?.by;
+  const { data: prof } = await db.from("profiles").select("name").eq("id", wer || "00000000-0000-0000-0000-000000000000").maybeSingle();
+  const von = rollen.info?.[wer]?.firma || rollen.info?.[wer]?.name || prof?.name || (o.berichtVonSub ? "Subunternehmer" : "Mitarbeiter");
   return await pushSenden(db, await chefIds(db), {
-    titel: `Bericht zu prüfen: ${o.nr}`,
-    text: `${von} hat den Montagebericht abgeschlossen${o.bauvorhaben ? " – " + o.bauvorhaben : ""}. Bitte prüfen und freigeben.`,
+    titel: `Montage fertig – bitte prüfen: ${o.nr}`,
+    text: `${von} hat die Montage abgeschlossen und den Bericht abgegeben${o.bauvorhaben ? " – " + o.bauvorhaben : ""}. Antippen, prüfen und bestätigen.`,
     url: APP_URL + "#a-" + id,
   });
 }
 /** Chef hat den Bericht freigegeben → Subunternehmer: Rechnung schreiben */
 async function pushSubFreigabe(db: any, id: string) {
   const o = await getDoc(db, "auftraege", id);
-  if (!o?.subGeprueftAm || !o.berichtVonSub || Date.now() - o.subGeprueftAm > 15 * 60_000) return { gesendet: 0, grund: "keine neue Freigabe" };
+  const an = o?.berichtVonSub || o?.berichtVon || o?.abschluss?.by;
+  if (!o?.subGeprueftAm || !an || Date.now() - o.subGeprueftAm > 15 * 60_000) return { gesendet: 0, grund: "keine neue Bestätigung" };
   if (o.subFreigabeGemeldetAm && o.subFreigabeGemeldetAm >= o.subGeprueftAm) return { gesendet: 0, grund: "schon gemeldet" };
+  if ((await chefIds(db)).has(an)) return { gesendet: 0, grund: "eigener Bericht" };
   await updDoc(db, "auftraege", id, { subFreigabeGemeldetAm: Date.now() });
-  return await pushSenden(db, new Set([o.berichtVonSub]), {
-    titel: `Freigegeben: ${o.nr}`,
-    text: `JD Brüder hat deinen Bericht${o.bauvorhaben ? " (" + o.bauvorhaben + ")" : ""} geprüft. Du kannst jetzt deine Rechnung schreiben – Betrag siehe „Abrechnung“.`,
-    url: APP_URL + "#meine",
+  return await pushSenden(db, new Set([an]), {
+    titel: `Bestätigt: ${o.nr}`,
+    text: `JD Brüder hat deinen Montagebericht${o.bauvorhaben ? " (" + o.bauvorhaben + ")" : ""} geprüft und bestätigt.${o.berichtVonSub ? " Du kannst jetzt deine Rechnung schreiben." : ""}`,
+    url: APP_URL + "#a-" + id,
+  });
+}
+/** Auftrag terminiert oder neu zugeteilt → die Eingeteilten bekommen eine Nachricht (je Person und Termin einmal) */
+async function pushTermin(db: any, id: string, von: string) {
+  const o = await getDoc(db, "auftraege", id);
+  if (!o || !o.termin || o.terminStatus !== "fest" || o.storniert) return { gesendet: 0, grund: "kein Termin" };
+  const key = String(o.termin), gem = o.terminGemeldet || {};
+  const an = (o.monteure || []).filter((m: string) => m && m !== von && gem[m] !== key);
+  if (!an.length) return { gesendet: 0, grund: "niemand neu" };
+  const neu = { ...gem }; an.forEach((m: string) => (neu[m] = key));
+  await updDoc(db, "auftraege", id, { terminGemeldet: neu });
+  const tag = new Date(o.termin).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
+  return await pushSenden(db, new Set(an), {
+    titel: `Neuer Termin: ${o.nr}`,
+    text: `${tag}${o.bauvorhaben ? " · " + o.bauvorhaben : ""}${o.plzOrt ? ", " + o.plzOrt : ""}`,
+    url: APP_URL + "#a-" + id,
   });
 }
 async function pushTest(db: any, uid: string) {

@@ -519,6 +519,11 @@ function landOf(o){
 const abgerechnet=o=>!!(o.abgerechnet || S.fin[o.id]);
 // Montagebericht ist verschickt (Leerfahrt-Berichte zählen nicht – da muss neu geplant werden)
 const berichtVerschickt=o=>!!o.abschluss && o.berichtStatus==="gesendet";
+// Vom Chef bestätigt oder schon an meta gesendet → für niemanden mehr änderbar
+const berichtGesperrt=o=>!!o.bestaetigtAm || o.berichtStatus==="gesendet";
+// Mitarbeiter/Subunternehmer hat „Montage fertig“ gedrückt → für ihn abgegeben, nur noch ansehen
+const berichtAbgegeben=o=>!!o.abschluss && !can.planen();
+const berichtVonWem=o=>o.berichtVonSub||o.berichtVon||o.abschluss?.by;
 // Erledigt, aber die Abrechnung von meta fehlt noch
 const wartetAufAbrechnung=o=>berichtVerschickt(o) && !abgerechnet(o) && !o.storniert;
 // Vorleistung: frühere Leerfahrten dieses Auftrags (werden im nächsten Montagebericht mit aufgeführt)
@@ -536,7 +541,7 @@ const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).len
 const abhBereit=o=>o.prodStatus==="abholbereit" && !o.nichtVerplant;
 function phase(o){
   if(o.storniert) return "storniert";
-  if(abgerechnet(o) || berichtVerschickt(o)) return "erledigt"; // Bericht verschickt oder Abrechnung da
+  if(abgerechnet(o) || berichtVerschickt(o) || berichtAbgegeben(o)) return "erledigt"; // Bericht verschickt/abgegeben oder Abrechnung da
   if(terminiert(o)) return "arbeit";
   if(abhBereit(o)) return "abholbereit"; // Ware fertig – jetzt einplanen
   return "offen";
@@ -678,8 +683,10 @@ function orderChips(o){
   if(o.abschluss){
     const t=o.abschluss.typ;
     c.push(t==="ok"?`<span class="chip ok">✓ Montiert</span>`:`<span class="chip warn">✓ Montiert mit Reklamation</span>`);
-    if(o.berichtStatus==="pruefung") c.push(`<span class="chip warn">📥 Sub-Bericht prüfen</span>`);
-    if(o.berichtStatus==="bereit"&&!can.sub()) c.push(`<span class="chip warn">Bericht senden</span>`);
+    if(o.berichtStatus==="pruefung"&&can.planen()) c.push(`<span class="chip warn">📥 Bericht prüfen</span>`);
+    if(o.berichtStatus==="bereit"&&can.planen()) c.push(`<span class="chip warn">Bericht senden</span>`);
+    if(o.berichtStatus==="pruefung"&&!can.planen()) c.push(`<span class="chip info">⏳ wartet auf Bestätigung</span>`);
+    if(o.bestaetigtAm&&!can.planen()) c.push(`<span class="chip ok">✓ bestätigt</span>`);
     if(o.berichtStatus==="gesendet") c.push(`<span class="chip ok">Bericht gesendet</span>`);
     if(wartetAufAbrechnung(o)) c.push(`<span class="chip warn">⏳ Warten auf Abrechnung</span>`);
   } else {
@@ -724,6 +731,7 @@ function sichtbar(o){
   return true;
 }
 function viewListe(){
+  if(can.sub() && (S.filter==="offen"||S.filter==="abholbereit")) S.filter="arbeit"; // Subunternehmer sehen nur Terminiert/Erledigt
   let list=Object.values(S.orders).filter(sichtbar);
   const q=S.q.trim().toLowerCase();
   if(q) list=list.filter(o=>[o.nr,o.bauvorhaben,o.plzOrt,o.adresse,o.vorgang].join(" ").toLowerCase().includes(q));
@@ -741,7 +749,7 @@ function viewListe(){
   list.forEach(o=>{ const w=planWeek(o); const k=w.kw?wkKey(w.jahr,w.kw):0; (groups[k]=groups[k]||{w,items:[]}).items.push(o); });
   const keys=Object.keys(groups).map(Number).sort((a,b)=>S.filter==="erledigt"||S.filter==="storniert"?b-a:a-b);
   let h=`<div class="toolbar"><input class="i" id="q" placeholder="Nummer, Bauvorhaben, Ort suchen …" value="${esc(S.q)}"></div>
-  <div class="seg phasen" id="flt">${HAUPT_PHASEN.map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""} ${k==="abholbereit"?"ab":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
+  <div class="seg phasen" id="flt">${(can.sub()?HAUPT_PHASEN.filter(([k])=>k==="arbeit"||k==="erledigt"):HAUPT_PHASEN).map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""} ${k==="abholbereit"?"ab":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="seg laender" id="landFlt" style="margin-top:8px">${[["alle","Alle"],["de",LAENDER.de.join(" ")],["lu",LAENDER.lu.join(" ")]].map(([k,l])=>`<button data-land="${k}" class="${land===k?"on":""}">${l} <span class="n">${proLand[k]}</span></button>`).join("")}</div>
   <div class="row between" style="margin-top:8px"><label class="row small" style="gap:6px;cursor:pointer;width:max-content"><input type="checkbox" id="nurMeine" ${S.nurMeine?"checked":""} style="width:18px;height:18px"> Nur meine Aufträge</label>
   <button class="stlink ${S.filter==="storniert"?"on":""}" data-f="storniert">Storniert (${anzahl.storniert||0})</button></div>
@@ -755,8 +763,8 @@ function viewListe(){
     return h;
   }
   const pruef=Object.values(S.orders).filter(o=>o.berichtStatus==="pruefung");
-  if(can.planen() && pruef.length && S.filter!=="pruefung") h+=`<div class="banner warn" style="margin-top:10px;cursor:pointer" id="pruefBanner">📥 <b>${pruef.length} Bericht${pruef.length>1?"e":""} von Subunternehmern</b> zu prüfen. <u>Anzeigen</u></div>`;
-  if(S.filter==="pruefung") h+=`<div class="banner warn" style="margin-top:10px">Berichte von Subunternehmern zur Prüfung · <a href="#" id="abnBack">alle anzeigen</a></div>`;
+  if(can.planen() && pruef.length && S.filter!=="pruefung") h+=`<div class="banner warn" style="margin-top:10px;cursor:pointer" id="pruefBanner">📥 <b>${pruef.length} Bericht${pruef.length>1?"e":""}</b> zu prüfen und zu bestätigen. <u>Anzeigen</u></div>`;
+  if(S.filter==="pruefung") h+=`<div class="banner warn" style="margin-top:10px">Berichte zur Prüfung · <a href="#" id="abnBack">alle anzeigen</a></div>`;
   const faellig=Object.values(S.orders).filter(o=>sichtbar(o)&&meinAuftrag(o)&&abnahmeFaellig(o));
   if(faellig.length && S.filter!=="abnahme") h+=`<div class="banner bad" style="margin-top:10px;cursor:pointer" id="abnBanner">⏰ <b>${faellig.length} Sichtabnahme${faellig.length>1?"n":""}</b> seit über einer Woche offen${faellig.some(o=>o.berichtGesendetAm)?" (Bericht schon verschickt)":""} – bitte beim Kunden nachhaken. <u>Anzeigen</u></div>`;
   if(S.filter==="abnahme") h+=`<div class="banner warn" style="margin-top:10px">Aufträge mit offener Sichtabnahme · <a href="#" id="abnBack">alle anzeigen</a></div>`;
@@ -904,8 +912,9 @@ function viewDetail(id){
   h+=erl?`<div id="unterlagenCard">${fold("unter","Unterlagen &amp; Zeichnungen",`${fk("unterlagen").length} Datei(en)`,unterInhalt)}</div>`:`<div class="card" id="unterlagenCard"><h3>Unterlagen &amp; Zeichnungen</h3>${unterInhalt}</div>`;
 
   // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Sichtabnahme → Versand
-  if(erl){
-    if(o.abschluss||o.bericht) h+=`<button class="card fold foldbtn" id="berichtAnsehen" style="width:100%;text-align:left;border:0;cursor:pointer"><b>📄 Montagebericht</b><span class="small mute">ansehen – fertig, nicht mehr änderbar</span></button>`;
+  if(erl || berichtGesperrt(o) || berichtAbgegeben(o)){
+    const stand=o.bestaetigtAm?`bestätigt am ${fmtDT(o.bestaetigtAm)} – nicht mehr änderbar`:o.berichtStatus==="gesendet"?"an meta gesendet – nicht mehr änderbar":o.berichtStatus==="pruefung"?"abgegeben – wartet auf Bestätigung durch JD Brüder":"fertig – nicht mehr änderbar";
+    if(o.abschluss||o.bericht) h+=`<button class="card fold foldbtn" id="berichtAnsehen" style="width:100%;text-align:left;border:0;cursor:pointer"><b>📄 Montagebericht</b><span class="small mute">ansehen · ${stand}</span></button>`;
   } else if(can.einsatz() && !frueh){
     h+=einsatzCard(o,fk);
     const st=schritt(o);
@@ -920,18 +929,19 @@ function viewDetail(id){
 
   // Bericht-Versand
   if(o.berichtStatus==="pruefung"){
-    h+=`<div class="card" style="border-left:5px solid var(--accent)"><h3>Bericht Subunternehmer</h3>
+    h+=`<div class="card" style="border-left:5px solid var(--accent)"><h3>${can.planen()?"Bericht prüfen":"Montagebericht"}</h3>
      ${can.planen()?(()=>{ const sl=S.lohn[lohnDocId(o.id,o.berichtVonSub)]; const sc=sl?calcLohn(sl,S.preise):null; const meta=can.finanzen()&&S.fin[o.id]?Number(S.fin[o.id].summe)||0:null;
-       return `<div class="banner warn">Bericht von <b>${esc(nameOf(o.berichtVonSub))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Sichtabnahme). Erst nach deiner Freigabe geht er an meta und der Subunternehmer darf seine Rechnung schreiben.</div>
+       return `<div class="banner warn">Bericht von <b>${esc(nameOf(berichtVonWem(o)))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Sichtabnahme). Du kannst oben noch alles ändern. Nach deiner Bestätigung ist der Bericht <b>gesperrt</b>${o.berichtVonSub?", und der Subunternehmer darf seine Rechnung schreiben":""}.</div>
        ${sc?`<div class="grid3" style="text-align:center;margin-bottom:10px"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Sub berechnet</div><b>${fmtEUR(sc.total)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">meta zahlt</div><b>${meta!=null?fmtEUR(meta):"–"}</b></div><div style="background:${meta!=null&&meta-sc.total<0?"var(--badbg)":"var(--okbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b>${meta!=null?fmtEUR(r2(meta-sc.total)):"–"}</b></div></div>
        <div class="small mute" style="margin-bottom:8px">${sc.lines.map(z=>`${z.menge!==""?String(z.menge).replace(".",",")+"× ":""}${esc(z.label)} ${fmtEUR(z.gp)}`).join(" · ")} – Mengen kannst du unter „Positionsergänzung“ korrigieren.</div>`:""}
-       <button class="btn ok block" id="subFrei">✓ Geprüft – freigeben &amp; an meta senden</button>`; })():`<div class="banner info">Dein Bericht liegt bei JD Brüder zur Prüfung. Nach der Freigabe kannst du deine Rechnung schreiben.</div>`}</div>`;
+       <button class="btn ok block" id="subFrei">✓ Alles korrekt – Bericht bestätigen</button>`; })():`<div class="banner info">✓ Dein Bericht ist abgegeben und liegt bei JD Brüder zur Prüfung. Ändern geht jetzt nicht mehr. Du bekommst eine Nachricht, sobald er bestätigt ist${can.sub()?" – dann kannst du deine Rechnung schreiben":""}.</div>`}</div>`;
   } else if((erl||frueh) && o.berichtStatus==="gesendet"){
     // erledigt und an meta gesendet – nichts mehr zu tun
-  } else if(o.berichtStatus && can.sub()){
-    h+=`<div class="card"><h3>Bericht</h3><div class="banner ok">Von JD Brüder geprüft${o.berichtStatus==="gesendet"?" und an meta übermittelt":""} ✓</div></div>`;
+  } else if(o.berichtStatus && !can.planen()){
+    h+=`<div class="card"><h3>Montagebericht</h3>${o.bestaetigtAm||o.subGeprueftAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(o.bestaetigtAm||o.subGeprueftAm)}${o.berichtStatus==="gesendet"?" und an meta übermittelt":""}. Nicht mehr änderbar.${can.sub()?" Du kannst jetzt deine Rechnung schreiben.":""}</div>`:o.berichtStatus==="gesendet"?`<div class="banner ok">✓ An meta übermittelt. Nicht mehr änderbar.</div>`:`<div class="banner info">Bericht ist fertig und wartet auf JD Brüder.</div>`}</div>`;
   } else if(o.berichtStatus){
     h+=`<div class="card"><h3>Bericht an meta</h3>
+     ${o.bestaetigtAm?`<div class="small" style="color:var(--ok);margin-bottom:6px">✓ Bestätigt am ${fmtDT(o.bestaetigtAm)} – Bericht ist gesperrt</div>`:""}
      ${o.berichtStatus==="gesendet"?`<div class="banner ok">Gesendet am ${fmtDT(o.berichtGesendetAm)} an ${esc(o.berichtAn||"")}</div>`:`<div class="banner warn">Bericht ist fertig und wartet auf Versand${can.senden()?"":" durch den Chef"}.</div>`}
      ${o.berichtStatus!=="gesendet"&&!abnahmeOk(o)&&o.berichtTyp!=="leerfahrt"?`<div class="small mute" style="margin-bottom:8px">Die Sichtabnahme steht noch aus – der Bericht kann trotzdem schon verschickt werden. Eine Woche nach dem Versand erinnert die App, falls dann noch keine Sichtabnahme vorliegt.</div>`:""}
      ${can.senden()?`<button class="btn pri block" id="sendBericht">✉︎ ${o.berichtStatus==="gesendet"?"Erneut senden":"Bericht abschicken"}</button>`:""}
@@ -968,6 +978,7 @@ async function terminDialog(id){
       const d=m.querySelector("#td").value; if(!d) return toast("Bitte ein Datum wählen");
       const mon=[...m.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
       await upd(orderPath(id),{termin:new Date(d+"T08:00:00").getTime(),terminStatus:"fest",monteure:mon});
+      S.sync?.run({termin:id}).catch(()=>{}); // Eingeteilte bekommen eine Nachricht
       close(); toast(`Terminiert für ${new Date(d).toLocaleDateString("de-DE")} ✓`);
     };
     m.querySelector("#st") && (m.querySelector("#st").onclick=()=>{ close(); setTimeout(()=>stornoDialog(id),50); });
@@ -1215,7 +1226,7 @@ function einsatzCard(o,fk){
      ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}
      <button class="btn ok block" id="montageFertig" style="margin-top:14px;min-height:56px;font-size:16px">■ Timer stoppen – Montage abgeschlossen</button>`;
   } else {
-    h+=`${istFertig(o)?`<div class="banner ${o.abschluss.typ==="ok"?"ok":"warn"}">Abgeschlossen am ${fmtDT(o.abschluss.am)} von ${esc(nameOf(o.abschluss.by))}${o.abschluss.typ==="rekla"?" – mit Reklamation":""}. ${can.planen()?`<button class="btn sm ghost" id="reopen" style="margin-left:6px">Wieder öffnen</button>`:""}</div>`:`<div class="banner ok">✓ Montage beendet${e.fertigAm?" am "+fmtDT(e.fertigAm):""}. Jetzt den Montagebericht ausfüllen.</div>`}
+    h+=`${istFertig(o)?`<div class="banner ${o.abschluss.typ==="ok"?"ok":"warn"}">Abgeschlossen am ${fmtDT(o.abschluss.am)} von ${esc(nameOf(o.abschluss.by))}${o.abschluss.typ==="rekla"?" – mit Reklamation":""}. ${can.planen()&&!berichtGesperrt(o)?`<button class="btn sm ghost" id="reopen" style="margin-left:6px">Wieder öffnen</button>`:""}</div>`:`<div class="banner ok">✓ Montage beendet${e.fertigAm?" am "+fmtDT(e.fertigAm):""}. Jetzt den Montagebericht ausfüllen.</div>`}
      <div class="row between"><div><div class="small mute">Arbeitszeit <span class="small">(nur intern, nicht im Bericht)</span></div><div class="timer" style="font-size:26px">${fmtDur(totalMs(o))}</div></div>${istFertig(o)?"":`<button class="btn pri" id="toBericht">📝 Montagebericht</button>`}</div>
      ${tageListe(o)}
      ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}`;
@@ -2416,7 +2427,7 @@ function bindDetail(id){
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
   $("#terminieren") && ($("#terminieren").onclick=()=>terminDialog(id));
   $("#terminSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{terminStatus:b.dataset.t}));
-  const td=$("#terminDatum"); if(td) td.onchange=()=>upd(P,{termin:td.value?new Date(td.value+"T08:00:00").getTime():null, terminStatus:td.value?"fest":o.terminStatus||"zu_terminieren"});
+  const td=$("#terminDatum"); if(td) td.onchange=async()=>{ await upd(P,{termin:td.value?new Date(td.value+"T08:00:00").getTime():null, terminStatus:td.value?"fest":o.terminStatus||"zu_terminieren"}); if(td.value) S.sync?.run({termin:id}).catch(()=>{}); };
   const kwi=$("#kwInput"); if(kwi) kwi.onchange=()=>{ const v=parseInt(kwi.value,10); if(v>0&&v<54) upd(P,{kw:v, jahr:o.jahr||NOW.jahr}); };
   $("#prodSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{prodStatus:b.dataset.p, prodGeaendertAm:Date.now(), prodVon:myId()}));
   document.querySelectorAll("[data-rm-m]").forEach(b=>b.onclick=()=>upd(P,{monteure:(o.monteure||[]).filter(x=>x!==b.dataset.rmM)}));
@@ -2495,10 +2506,10 @@ function bindDetail(id){
   $("#newRekla") && ($("#newRekla").onclick=()=>reklaDialog(id,{}));
   $("#reopen") && ($("#reopen").onclick=async()=>{ if(await confirmBox("Auftrag wieder öffnen?","Der Abschluss wird zurückgenommen.","Öffnen")) upd(P,{abschluss:null}); });
   $("#sendBericht") && ($("#sendBericht").onclick=()=>berichtDialog(id));
-  $("#subFrei") && ($("#subFrei").onclick=async()=>{ if(!await confirmBox("Bericht freigeben?","Der Subunternehmer bekommt die Freigabe für seine Rechnung. Danach öffnet sich der Versand des Montageberichts an meta (ohne Preise).","Freigeben","ok")) return;
-    await upd(P,{berichtStatus:"bereit",subGeprueftAm:Date.now(),subGeprueftVon:myId()});
+  $("#subFrei") && ($("#subFrei").onclick=async()=>{ if(!await confirmBox("Bericht bestätigen?",`Ist alles korrekt? Danach ist der Bericht <b>gesperrt</b> – auch du kannst nichts mehr ändern. ${esc(nameOf(berichtVonWem(o)))} bekommt die Bestätigung${o.berichtVonSub?" und darf die Rechnung schreiben":""}. Danach öffnet sich der Versand an meta (ohne Preise).`,"Bestätigen","ok")) return;
+    const jetzt=Date.now(), bp={berichtStatus:"bereit",bestaetigtAm:jetzt,bestaetigtVon:myId(),subGeprueftAm:jetzt,subGeprueftVon:myId()}; await upd(P,bp); S.orders[id]={...S.orders[id],...bp}; render();
     S.sync?.run({subFreigabe:id}).catch(()=>{}); // Subunternehmer benachrichtigen
-    toast("Freigegeben ✓"); if(can.senden()) setTimeout(()=>berichtDialog(id),300); });
+    toast("Bestätigt ✓ – Bericht ist gesperrt"); if(can.senden()) setTimeout(()=>berichtDialog(id),300); });
   $("#signNow") && ($("#signNow").onclick=()=>signDialog(id));
   $("#reqAbn") && ($("#reqAbn").onclick=()=>abnahmeDialog(id));
   $("#noAbn") && ($("#noAbn").onclick=async()=>{ if(await confirmBox("Nicht an Kunden senden?","Die Sichtabnahme wird nicht an das Bauvorhaben geschickt. Du kannst das später noch ändern.","Ja, nicht senden")) upd(P,{abnahmeKeinVersand:true}); });
@@ -2620,22 +2631,23 @@ async function pickPerson(id){
   await loadProfiles(cands);
   modal(`<h2>Monteure einteilen</h2>${cands.length?cands.map(c=>`<label class="person" style="cursor:pointer"><input type="checkbox" value="${esc(c)}" ${(o.monteure||[]).includes(c)?"checked":""} style="width:20px;height:20px"><span class="av">${esc(initials(c))}</span><b>${esc(nameOf(c))}</b></label>`).join(""):`<div class="mute">Noch keine Leute angelegt – unter Einstellungen → Team hinzufügen.</div>`}
   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Übernehmen</button></div>`,(m,close)=>{
-    m.querySelector("#ok").onclick=async()=>{ const sel=[...m.querySelectorAll("input:checked")].map(i=>i.value); await upd(orderPath(id),{monteure:sel}); close(); };
+    m.querySelector("#ok").onclick=async()=>{ const sel=[...m.querySelectorAll("input:checked")].map(i=>i.value); await upd(orderPath(id),{monteure:sel}); if(o.termin&&o.terminStatus==="fest") S.sync?.run({termin:id}).catch(()=>{}); close(); };
   });
 }
 async function abschluss(id,typ){
   const o=S.orders[id];
   const fk=k=>Object.values(S.fotos).filter(x=>x.kat===k);
   const f=fehlendeAngaben(o,fk), hart=f.filter(x=>!x.soft);
-  const ok=await confirmBox("Montage abschließen?", (f.length?`<b>Bitte prüfen:</b>${missList(f)}${hart.length?`<div style="margin-top:6px">Du kannst die fehlenden Angaben auch danach noch ergänzen.</div>`:""}`:"")+`<div style="margin-top:8px">Danach ist der Bericht bereit für den Versand.</div>`, hart.length?"Trotzdem abschließen":"Abschließen", hart.length?"warn":"ok");
+  const chef=can.planen();
+  const ok=await confirmBox(chef?"Montage abschließen?":"Bericht abgeben?", (f.length?`<b>Bitte prüfen:</b>${missList(f)}${hart.length&&chef?`<div style="margin-top:6px">Du kannst die fehlenden Angaben auch danach noch ergänzen.</div>`:""}`:"")+(chef?`<div style="margin-top:8px">Danach ist der Bericht bereit für den Versand.</div>`:`<div style="margin-top:8px"><b>Danach kannst du nichts mehr ändern.</b> JD Brüder prüft den Bericht und bestätigt ihn – du bekommst eine Nachricht.</div>`), hart.length?(chef?"Trotzdem abschließen":"Trotzdem abgeben"):(chef?"Abschließen":"Bericht abgeben"), hart.length?"warn":"ok");
   if(!ok) return;
   const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
-  const p={zeiten:z,abschluss:{typ,am:now,by:myId()},berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:typ};
+  const p={zeiten:z,abschluss:{typ,am:now,by:myId()},berichtStatus:chef?"bereit":"pruefung",berichtVonSub:can.sub()?myId():null,berichtVon:myId(),berichtTyp:typ};
   if(o.einsatz && !o.einsatz.fertigAm) p.einsatz={fertigAm:now};
   if(o.bericht?.arbeitszeitMin==null && z.length) p.bericht={arbeitszeitMin:Math.round(z.reduce((s,x)=>s+(x.e-x.s),0)/60000)};
-  await upd(orderPath(id),p);
-  if(can.sub()) S.sync?.run({subBericht:id}).catch(()=>{}); // Chefs: Bericht zu prüfen
-  toast(can.sub()?"Abgeschlossen ✓ – JD Brüder prüft jetzt deinen Bericht":"Montage abgeschlossen ✓");
+  await upd(orderPath(id),p); S.orders[id]={...S.orders[id],...p,einsatz:{...(o.einsatz||{}),...(p.einsatz||{})},bericht:{...(o.bericht||{}),...(p.bericht||{})}}; render();
+  if(!chef) S.sync?.run({subBericht:id}).catch(()=>{}); // Chefs: Bericht zu prüfen
+  toast(chef?"Montage abgeschlossen ✓":"Bericht abgegeben ✓ – JD Brüder prüft ihn jetzt",3500);
 }
 function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
   const o=S.orders[id];
@@ -2670,8 +2682,8 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
         await upd(orderPath(id),{leerfahrten:lf,zeiten:[],terminStatus:"zu_terminieren",berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:"leerfahrt"});
       } else if(abs){
         const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=Date.now();
-        await upd(orderPath(id),{zeiten:z,abschluss:{typ:"rekla",am:Date.now(),by:myId()},berichtStatus:can.sub()?"pruefung":"bereit",berichtVonSub:can.sub()?myId():null,berichtTyp:"rekla"});
-        if(can.sub()) S.sync?.run({subBericht:id}).catch(()=>{});
+        await upd(orderPath(id),{zeiten:z,abschluss:{typ:"rekla",am:Date.now(),by:myId()},berichtStatus:can.planen()?"bereit":"pruefung",berichtVonSub:can.sub()?myId():null,berichtVon:myId(),berichtTyp:"rekla"});
+        if(!can.planen()) S.sync?.run({subBericht:id}).catch(()=>{});
       }
       close(); toast(leerfahrt?"Leerfahrt gespeichert":"Reklamation gespeichert");
     };
