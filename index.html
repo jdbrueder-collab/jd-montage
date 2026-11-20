@@ -408,7 +408,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="803418d9b537";</script>
+<script>window.JD_BUILD="7b76fbdb74fa";</script>
 </head>
 <body>
 <header class="top">
@@ -661,7 +661,7 @@ function geraetDialog(){
 
 /* ============ Ansicht wechseln: Geschäftsleitung sieht die App wie Mitarbeiter, Sub oder meta ============ */
 const ANSICHTEN=[["chef","Chef"],["monteur","Mitarbeiter"],["sub","Subunternehmer"],["meta","meta"]];
-const vorschauSubs=()=>Object.keys(S.roles||{}).filter(k=>S.roles[k]==="sub").sort((a,b)=>(a==="test-sub")-(b==="test-sub"));
+const vorschauSubs=()=>Object.keys(S.roles||{}).filter(k=>S.roles[k]==="sub").sort((a,b)=>(b==="test-sub")-(a==="test-sub")); // zuerst der Test-Sub, damit Tests keine echten Subs betreffen
 function ansichtAnwenden(){
   const E=S.echt; S.isOwner=E.isOwner; S.role=E.role; S.me=E.me;
   if(!E.isOwner || S.ansicht==="chef" || !ANSICHTEN.some(([k])=>k===S.ansicht)){ S.ansicht="chef"; return; }
