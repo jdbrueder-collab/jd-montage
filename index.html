@@ -426,7 +426,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="66582f39b38c";</script>
+<script>window.JD_BUILD="de29f5e32ca4";</script>
 </head>
 <body>
 <header class="top">
@@ -1271,7 +1271,8 @@ function anteilKarte(o){
     <div class="small mute" style="margin:4px 0 10px">Deine Preisliste – trag bei jeder Position die Menge ein. JD Brüder bekommt daraus deine fertige Montageabrechnung.</div>
     ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:a.abgegebenAm?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
     ${!P?`<div class="banner warn">Für dich ist noch keine Preisliste hinterlegt – JD Brüder richtet sie ein.</div>`:""}
-    <div id="preisliste">`;
+    ${zu?abrechnungTabelle({...d,uid:me},P):`<div id="preisliste">`}`;
+  if(zu) return h+`</div>`;
   h+=S.lohnPos.map(x=>zeile(x.label,x.einheit,P?nn(pr[x.k]):"","data-lq",x.k,d.mengen?.[x.k])).join("");
   h+=zeile("km selbst gefahren","km",P?nn(P.kmSelbst):"","data-lf","kmSelbst",d.kmSelbst);
   h+=zeile("km mitgefahren","km",P?nn(P.kmMit):"","data-lf","kmMit",d.kmMit);
@@ -1284,6 +1285,7 @@ function anteilKarte(o){
 }
 // Fertige Montageabrechnung: nur die ausgefüllten Positionen
 function abrechnungTabelle(l,P){
+  if(l && !P){ const z=S.lohnPos.filter(x=>nn(l.mengen?.[x.k])); return z.length?`<table class="abr"><thead><tr><th>Position</th><th>Menge</th></tr></thead><tbody>${z.map(x=>`<tr><td>${esc(x.label)}</td><td>${String(l.mengen[x.k]).replace(".",",")} ${esc(x.einheit||"")}</td></tr>`).join("")}</tbody></table>`:`<div class="small mute">Noch nichts eingetragen.</div>`; }
   const c=l?calcLohn({...l},P):null; if(!c||!c.lines.length) return `<div class="small mute">Noch nichts eingetragen.</div>`;
   return `<table class="abr"><thead><tr><th>Position</th><th>Menge</th><th>Preis</th><th>Betrag</th></tr></thead><tbody>${c.lines.map(z=>`<tr><td>${esc(z.label)}</td><td>${z.menge!==""?String(z.menge).replace(".",","):""}</td><td>${z.ep!==""?fmtEUR(z.ep):""}</td><td>${fmtEUR(z.gp)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="3">Gesamt</td><td>${fmtEUR(c.total)}</td></tr></tfoot></table>`;
@@ -2138,8 +2140,8 @@ function lohnCard(o){
     return `<div class="pl-z ${nn(v)?"voll":""}" data-ep="${ep}"><div class="pl-l">${esc(x.label)}<span>${esc(x.einheit||"")}${ep!==""?" · "+fmtEUR(ep):""}</span></div><input class="i pl-q" data-lq="${esc(x.k)}" inputmode="decimal" value="${esc(v)}" placeholder="0" ${editable?"":"disabled"}><div class="pl-gp">${nn(v)&&ep!==""?fmtEUR(r2(nn(v)*ep)):""}</div></div>`; };
   return `<div class="card"><details id="lohnDet" ${offen?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionsergänzung</b><div class="small mute">${anz?`${anz} Position${anz>1?"en":""} eingetragen`:"Mengen der montierten Positionen eintragen"}${c&&P?` · ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
-   <div class="pl-liste">${S.lohnPos.map(zeile).join("")}</div>
-   ${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}
+   ${editable?`<div class="pl-liste">${S.lohnPos.map(zeile).join("")}</div>
+   ${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}
   </div></details></div>`;
 }
 async function saveLohn(o,uid,patch){
@@ -2403,7 +2405,7 @@ function tageText(o){
 }
 function summeMengen(o){
   const tot={};
-  Object.values(S.lohn).filter(l=>l.auftragId===o.id).forEach(l=>Object.entries(l.mengen||{}).forEach(([k,v])=>{ const q=nn(v); if(q) tot[k]=(tot[k]||0)+q; }));
+  Object.values(S.lohn).filter(l=>l.auftragId===o.id && !(o.gemeinsam && (S.roles[l.uid]==="sub" || o.subAnteil?.[l.uid]))).forEach(l=>Object.entries(l.mengen||{}).forEach(([k,v])=>{ const q=nn(v); if(q) tot[k]=(tot[k]||0)+q; }));
   return tot;
 }
 const fmtZahl=v=>String(v).replace(".",",");
@@ -2501,11 +2503,12 @@ async function renderVordruck(o){
   const [bg1,bg2]=await Promise.all([loadImg(BG1),loadImg(BG2)]);
   const mk=bg=>{ const c=document.createElement("canvas"); c.width=bg.width; c.height=bg.height; const x=c.getContext("2d"); x.drawImage(bg,0,0); return [c,x,bg.width/910]; };
   const font=(sz,b)=>`${b?"700 ":""}${sz}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
-  const T=(ctx,k,t,x,y,sz=16,maxW=0,b=false,align="left")=>{ if(!t) return; ctx.fillStyle=INK; ctx.textAlign=align; ctx.textBaseline="alphabetic"; let s=sz*k; ctx.font=font(s,b); while(maxW && ctx.measureText(t).width>maxW*k && s>9*k){ s-=1; ctx.font=font(s,b); } ctx.fillText(t,x*k,y*k); };
-  const X=(ctx,k,cx,cy)=>{ const d=7*k; ctx.strokeStyle=INK; ctx.lineWidth=2.6*k; ctx.beginPath(); ctx.moveTo(cx*k-d,cy*k-d); ctx.lineTo(cx*k+d,cy*k+d); ctx.moveTo(cx*k+d,cy*k-d); ctx.lineTo(cx*k-d,cy*k+d); ctx.stroke(); };
+  const T=(ctx,k,t,x,y,sz=16,maxW=0,b=false,align="left")=>{ if(!t) return; [x,y]=(ctx._map||((a,c)=>[a,c]))(x,y); ctx.fillStyle=INK; ctx.textAlign=align; ctx.textBaseline="alphabetic"; let s=sz*k; ctx.font=font(s,b); while(maxW && ctx.measureText(t).width>maxW*k && s>9*k){ s-=1; ctx.font=font(s,b); } ctx.fillText(t,x*k,y*k); };
+  const X=(ctx,k,cx,cy)=>{ [cx,cy]=(ctx._map||((a,c)=>[a,c]))(cx,cy); const d=7*k; ctx.strokeStyle=INK; ctx.lineWidth=2.6*k; ctx.beginPath(); ctx.moveTo(cx*k-d,cy*k-d); ctx.lineTo(cx*k+d,cy*k+d); ctx.moveTo(cx*k+d,cy*k-d); ctx.lineTo(cx*k-d,cy*k+d); ctx.stroke(); };
   const lines=(ctx,k,text,x,ys,maxW,sz=15.5)=>{ ctx.font=font(sz*k); const L=wrap(ctx,text,maxW*k); ys.forEach((y,i)=>{ if(L[i]!==undefined){ let t=L[i]; if(i===ys.length-1 && L.length>ys.length) t+=" …"; T(ctx,k,t,x,y,sz,maxW); } }); };
   // Seite 1: Montagebericht
   const [c1,a,k1]=mk(bg1);
+  a._map=(x,y)=>[x+4.7,y*1.0094+9.3]; // an die meta-Vorlage angepasst (Kästchen und Zeilen)
   T(a,k1,v.datum,146,105,15,128);
   T(a,k1,o.nr,163,227,22,140,true,"center");
   const artPos={lieferung:[268,142],fertigmontage:[268,170],teilmontage:[268,198],restmontage:[268,226],rekla:[268,254]};
@@ -2519,6 +2522,7 @@ async function renderVordruck(o){
   T(a,k1,v.uebern,106,1216,15,22,false,"center");
   // Seite 2: Zustandsfeststellung / Sichtabnahmebescheinigung
   const [c2,b,k2]=mk(bg2);
+  b._map=(x,y)=>y<950?[x+15,y*1.015+5.5]:[x+7,y-4]; // oberer Teil der Abnahmebescheinigung; Firma/Name/Unterschrift passen schon
   T(b,k2,v.monteurAbn,82,208,16,300); T(b,k2,o.nr,442,208,17,215,true); T(b,k2,v.fertigAm||v.datum,718,207,15,132);
   T(b,k2,adresseOf(o),82,350,16,765);
   X(b,k2,...({wc:[88,447],schraenke:[366,446],sonst:[587,444]}[v.leistung]||[88,447]));
@@ -2838,7 +2842,7 @@ function viewGeld(){
   { const subs=Object.keys(S.roles).filter(k=>S.roles[k]==="sub");
     if(subs.length) h+=`<div class="card"><h3>Subunternehmer · ${m.toLocaleDateString("de-DE",{month:"long"})}</h3>${subs.map(u=>{ const ls=Object.values(S.lohn).filter(l=>l.uid===u); const mon=ls.filter(l=>{ const d=new Date(l.am||0); return d.getMonth()===m.getMonth()&&d.getFullYear()===m.getFullYear(); }); const sm=r2(mon.reduce((a,l)=>a+((calcLohn(l,S.preise)||{}).total||0),0)); const pr=Object.values(S.orders).filter(o=>o.berichtStatus==="pruefung"&&o.berichtVonSub===u).length;
       return `<details class="person" style="display:block"><summary style="display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none"><span class="av">${esc(initials(u))}</span><div style="flex:1"><b>${esc(nameOf(u))}</b><div class="small mute">${mon.length} Bericht(e)${pr?` · <span style="color:var(--warn)">${pr} zu prüfen</span>`:""} · Liste: ${esc((S.preise?.listen?.[S.preise?.zuordnung?.[u]]||{}).name||"Standard")}</div></div><b>${fmtEUR(sm)}</b></summary>
-      <div style="padding:6px 0 0 38px">${ls.sort((a,b)=>(b.am||0)-(a.am||0)).slice(0,30).map(l=>{ const o=S.orders[l.auftragId]||{}; const c=calcLohn(l,S.preise); return `<a href="#a-${esc(l.auftragId)}" class="row between small" style="text-decoration:none;color:inherit;padding:5px 0;border-top:1px solid var(--line)"><span><b>${esc(o.nr||l.nr)}</b> ${esc(o.bauvorhaben||"")} · ${l.am?new Date(l.am).toLocaleDateString("de-DE"):""}${o.berichtStatus==="pruefung"?` <span class="chip warn">prüfen</span>`:""}</span><b>${fmtEUR(c?.total||0)}</b></a>`; }).join("")||`<div class="small mute">Noch keine Berichte.</div>`}</div></details>`; }).join("")}</div>`; }
+      <div style="padding:6px 0 0 38px">${ls.sort((a,b)=>(b.am||0)-(a.am||0)).slice(0,30).map(l=>{ const o=S.orders[l.auftragId]||{}; const c=calcLohn(l,S.preise); return `<a href="#a-${esc(l.auftragId)}" class="row between small" style="text-decoration:none;color:inherit;padding:5px 0;border-top:1px solid var(--line)"><span><b>${esc(o.nr||l.nr)}</b> ${esc(o.bauvorhaben||"")} · ${l.am?new Date(l.am).toLocaleDateString("de-DE"):""}${o.berichtStatus==="pruefung"?` <span class="chip warn">prüfen</span>`:""}${c?.lines?.length?`<span class="mute" style="display:block">${c.lines.map(z=>`${z.menge!==""?String(z.menge).replace(".",",")+"× ":""}${esc(z.label)}`).join(" · ")}</span>`:""}</span><b>${fmtEUR(c?.total||0)}</b></a>`; }).join("")||`<div class="small mute">Noch keine Berichte.</div>`}</div></details>`; }).join("")}</div>`; }
   if(S.preise){
     const byU={}; Object.values(S.lohn).forEach(l=>{ const d=new Date(l.am||0); if(d.getMonth()!==m.getMonth()||d.getFullYear()!==m.getFullYear()) return; if(S.roles[l.uid]==="sub") return; const c=calcLohn(l,S.preise); if(!c) return; (byU[l.uid]=byU[l.uid]||{sum:0,n:0}); byU[l.uid].sum+=c.total; byU[l.uid].n++; });
     const ks=Object.keys(byU);
@@ -3639,7 +3643,7 @@ function berichtText(o){
     sonderFertig(b).forEach(s=>L.push(`- Sonderarbeit: ${sonderZeile(s)}`));
     if(b.bemerkung) L.push(`- Bemerkungen: ${b.bemerkung}`);
     vorleistungZeilen(o).forEach(z=>L.push(`- ${z}`));
-    if(o.unterschrift) L.push(`- Sichtabnahme unterschrieben von: ${o.unterschrift.name||"-"} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
+    if(o.unterschrift) L.push(`- Sichtabnahme unterschrieben von: ${o.unterschrift.name||vd(o).abnahmeName||"-"}${vd(o).firma?` (${vd(o).firma})`:""} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
     else if(o.abnahmePapier) L.push(`- Sichtabnahme: auf Papier unterschrieben`);
     else L.push(`- Sichtabnahme: steht noch aus`);
   }

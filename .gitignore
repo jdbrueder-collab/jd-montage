@@ -6,3 +6,5 @@ migration/
 .claude/
 backup/
 dev/live-snapshot.json
+dev/blobs/
+beispiele/

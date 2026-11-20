@@ -35,12 +35,22 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(html); return
         if self.path.startswith("/_blob/"):
             bid = self.path.split("/_blob/", 1)[1].split("?")[0]
+            lokal = ROOT / "dev" / "blobs" / bid
+            if lokal.is_file() and lokal.stat().st_size:  # z. B. die meta-Vordrucke (dev/blobs, nicht im Repo)
+                data = lokal.read_bytes(); typ = "image/png" if data[:4] == bytes([0x89, 0x50, 0x4E, 0x47]) else "image/jpeg"
+                self.send_response(200); self.send_header("Content-Type", typ); self.send_header("Content-Length", str(len(data))); self.end_headers()
+                self.wfile.write(data); return
             typ, data = BLOBS.get(bid, ("image/png", BLANK))
             self.send_response(200); self.send_header("Content-Type", typ); self.send_header("Content-Length", str(len(data))); self.end_headers()
             self.wfile.write(data); return
         return super().do_GET()
 
     def do_POST(self):
+        if self.path.startswith("/_save/"):  # nur Testsystem: Datei in dev/blobs ablegen
+            name = Path(self.path.split("/_save/", 1)[1]).name
+            n = int(self.headers.get("Content-Length", 0)); data = self.rfile.read(n)
+            (ROOT / "dev" / "blobs" / name).write_bytes(data)
+            self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b"ok"); return
         if self.path == "/_upload":
             n = int(self.headers.get("Content-Length", 0)); data = self.rfile.read(n)
             bid = uuid.uuid4().hex
