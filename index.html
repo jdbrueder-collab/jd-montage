@@ -309,10 +309,6 @@ details.fold .foldin{margin-top:12px}
 html[data-geraet=ios] body,html[data-geraet=ios] button,html[data-geraet=ios] input,html[data-geraet=ios] select,html[data-geraet=ios] textarea{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif}
 html[data-geraet=ios] input.i,html[data-geraet=ios] select.i,html[data-geraet=ios] textarea.i{font-size:16px}
 html[data-geraet=ios] *{-webkit-tap-highlight-color:transparent}
-html[data-geraet=ios] nav.bottom{background:rgba(249,249,251,.88);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-top:.5px solid rgba(0,0,0,.18)}
-html[data-geraet=ios] nav.bottom a{font-size:10.5px;font-weight:600;padding:7px 2px 4px}
-html[data-geraet=ios] nav.bottom a .ic{width:25px;height:25px;margin:0 auto 1px}
-html[data-geraet=ios] nav.bottom a.on{color:#007aff}
 html[data-geraet=ios] .modal{border-radius:14px 14px 0 0;padding-top:22px;position:relative}
 html[data-geraet=ios] .modal::before{content:"";position:absolute;top:7px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:#c7c7cc}
 html[data-geraet=ios] .btn.pri{background:#007aff}
@@ -324,15 +320,42 @@ html[data-geraet=android] input.i,html[data-geraet=android] select.i,html[data-g
 html[data-geraet=android] .btn{border-radius:999px}
 html[data-geraet=android] .btn.sm{border-radius:999px}
 html[data-geraet=android] .card,html[data-geraet=android] .li-gr{border-radius:16px}
-html[data-geraet=android] nav.bottom{background:#f3f4f9;border-top:0;box-shadow:0 -1px 3px rgba(0,0,0,.08)}
-html[data-geraet=android] nav.bottom a{padding:10px 2px 12px;font-size:12px;font-weight:600}
-html[data-geraet=android] nav.bottom a .ic{width:24px;height:24px;margin:0 auto 4px;padding:4px 18px;box-sizing:content-box;border-radius:16px;transition:background .2s}
-html[data-geraet=android] nav.bottom a.on .ic{background:#d9e2ff;color:#001a41}
-html[data-geraet=android] nav.bottom a.on{color:#001a41}
 html[data-geraet=android] .modal{border-radius:28px 28px 0 0;padding-top:24px;position:relative}
 html[data-geraet=android] .modal::before{content:"";position:absolute;top:10px;left:50%;width:32px;height:4px;margin-left:-16px;border-radius:2px;background:#79747e;opacity:.4}
 html[data-geraet=android] .toast{left:16px;right:16px;transform:none;border-radius:6px;text-align:left;background:#313033}
 html[data-geraet=android] .fp,html[data-geraet=android] .tun-p{border-radius:8px}
+
+/* ===== Abzeichen: überall gleich ===== */
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#e5484d;color:#fff;font-size:11px;font-weight:750;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:0;box-sizing:border-box;vertical-align:middle;flex:none}
+.tun-p .badge{margin-left:6px}
+details.sk>summary .badge{margin-left:auto}
+.foldin>h3 .badge,.card h3 .badge{margin-left:4px}
+.msg-b{position:relative;display:inline-flex;align-items:center;gap:3px;font-size:13px;padding:0 2px}
+.msg-b .badge{min-width:16px;height:16px;font-size:10px;padding:0 4px}
+/* ===== Fußleiste: schwebend, rund, aktives Symbol hinterlegt ===== */
+nav.bottom{left:0;right:0;bottom:0;background:transparent!important;border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding:0 12px calc(10px + env(safe-area-inset-bottom));pointer-events:none}
+nav.bottom .nav-in{pointer-events:auto;display:flex;width:100%;max-width:520px;margin:0 auto;background:rgba(255,255,255,.86);-webkit-backdrop-filter:saturate(180%) blur(18px);backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(16,24,40,.06);border-radius:24px;box-shadow:0 10px 30px rgba(16,24,40,.14),0 2px 6px rgba(16,24,40,.06);padding:6px}
+nav.bottom a{flex:1;max-width:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px 5px;border-radius:18px;color:#8a94a6;text-decoration:none;-webkit-tap-highlight-color:transparent;transition:transform .12s}
+nav.bottom a:active{transform:scale(.94)}
+nav.bottom .nav-ic{position:relative;display:flex;align-items:center;justify-content:center;width:52px;height:30px;border-radius:15px;transition:background .2s,color .2s}
+nav.bottom .nav-ic .ic{width:22px;height:22px;margin:0;stroke-width:1.9;display:block}
+nav.bottom .nav-ic .badge{position:absolute;top:-4px;left:30px;box-shadow:0 0 0 2px #fff}
+nav.bottom .nav-l{font-size:11px;font-weight:600;line-height:1.1;white-space:nowrap}
+nav.bottom a.on{color:var(--brand)}
+nav.bottom a.on .nav-ic{background:var(--infobg);color:var(--brand)}
+nav.bottom a.on .nav-ic .ic{stroke-width:2.3}
+nav.bottom a.on .nav-l{font-weight:750}
+main{padding-bottom:calc(112px + env(safe-area-inset-bottom))!important}
+.toast{bottom:calc(100px + env(safe-area-inset-bottom))!important}
+/* iPhone: Apple-Blau; Android: Material-Töne */
+html[data-geraet=ios] nav.bottom a.on,html[data-geraet=ios] nav.bottom a.on .nav-ic{color:#007aff}
+html[data-geraet=ios] nav.bottom a.on .nav-ic{background:#e6f0ff}
+html[data-geraet=ios] nav.bottom .nav-l{font-size:10.5px}
+html[data-geraet=android] nav.bottom .nav-in{background:rgba(243,244,249,.94);border-radius:28px}
+html[data-geraet=android] nav.bottom a.on,html[data-geraet=android] nav.bottom a.on .nav-ic{color:#001a41}
+html[data-geraet=android] nav.bottom a.on .nav-ic{background:#d9e2ff}
+html[data-geraet=android] nav.bottom .nav-ic .badge{box-shadow:0 0 0 2px #f3f4f9}
+@media(min-width:900px){nav.bottom .nav-in{max-width:560px}}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -577,6 +600,9 @@ function dokViewer(src, art="bild", titel=""){
 // PDFs (Unterlagen, Zeichnungen) im Betrachter statt in einem neuen Tab öffnen
 document.addEventListener("click",e=>{ const a=e.target.closest("a[data-pdf]"); if(!a || e.target.closest("button")) return; e.preventDefault(); dokViewer(a.dataset.pdf,"pdf",a.title); });
 
+// Einheitliches Abzeichen (rote Zahl) – Leiste, „Zu tun“, Nachrichten, Setup
+const badge=n=>`<span class="badge">${n>99?"99+":n}</span>`;
+
 /* ============ Gerät (iPhone / Android / Computer) ============ */
 const GERAETE={ios:"iPhone",android:"Android",pc:"Computer"};
 function meinGeraet(){
@@ -719,20 +745,21 @@ const langDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"long",day:"2
 
 /* ---------- „Zu tun“: was jetzt ansteht, je Rolle ---------- */
 const SPEZIAL={
-  pruefung:{t:"Berichte prüfen",cls:"warn",p:n=>`📥 ${n} prüfen`,f:o=>o.berichtStatus==="pruefung"},
-  msg:{t:"Neue Nachrichten",cls:"msg",p:n=>`💬 ${n} neu`,f:o=>binBeteiligt(o)&&ungelesen(o.id)>0},
-  ueber:{t:"Überfällige Termine – Montage nicht abgeschlossen",cls:"bad",p:n=>`⚠ ${n} überfällig`,f:o=>ueberfaellig(o)},
-  ohneTeam:{t:"Termin, aber niemand eingeteilt",cls:"warn",p:n=>`👷 ${n} ohne Team`,f:o=>phase(o)==="arbeit"&&!istFertig(o)&&!(o.monteure||[]).length},
-  unbest:{t:"Termin noch nicht bestätigt",cls:"info",p:n=>can.planen()?`❔ ${n} unbestätigt`:`👍 ${n} bestätigen`,
+  pruefung:{t:"Berichte prüfen",cls:"warn",p:()=>`📥 Bericht prüfen`,f:o=>o.berichtStatus==="pruefung"},
+  msg:{t:"Neue Nachrichten",cls:"msg",p:()=>`💬 Nachrichten`,f:o=>binBeteiligt(o)&&ungelesen(o.id)>0},
+  ueber:{t:"Überfällige Termine – Montage nicht abgeschlossen",cls:"bad",p:()=>`⚠ Überfällig`,f:o=>ueberfaellig(o)},
+  ohneTeam:{t:"Termin, aber niemand eingeteilt",cls:"warn",p:()=>`👷 Ohne Team`,f:o=>phase(o)==="arbeit"&&!istFertig(o)&&!(o.monteure||[]).length},
+  unbest:{t:"Termin noch nicht bestätigt",cls:"info",p:()=>can.planen()?`❔ Unbestätigt`:`👍 Termin bestätigen`,
     f:o=>can.planen()?(o.monteure||[]).some(m=>terminOffenFuer(o,m)):terminOffenFuerMich(o)},
-  abnahme:{t:"Sichtabnahme seit über einer Woche offen",cls:"bad",p:n=>`⏰ ${n} Sichtabnahme`,f:o=>meinAuftrag(o)&&abnahmeFaellig(o)},
-  heute:{t:"Heute",cls:"ok",p:n=>`📅 ${n} heute`,f:o=>terminTag(o)===tagHeute()&&(o.monteure||[]).includes(myId())&&!istFertig(o)},
-  berichtOffen:{t:"Montage vorbei – Bericht noch offen",cls:"warn",p:n=>`✍️ ${n} Bericht offen`,f:o=>(o.monteure||[]).includes(myId())&&ueberfaellig(o)}
+  abnahme:{t:"Sichtabnahme seit über einer Woche offen",cls:"bad",p:()=>`⏰ Sichtabnahme`,f:o=>meinAuftrag(o)&&abnahmeFaellig(o)},
+  heute:{t:"Heute",cls:"ok",p:()=>`📅 Heute`,f:o=>terminTag(o)===tagHeute()&&(o.monteure||[]).includes(myId())&&!istFertig(o)},
+  berichtOffen:{t:"Montage vorbei – Bericht noch offen",cls:"warn",p:()=>`✍️ Bericht offen`,f:o=>(o.monteure||[]).includes(myId())&&ueberfaellig(o)}
 };
 function zuTun(){
   const alle=Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert);
   const keys=can.planen()?["pruefung","msg","ueber","ohneTeam","unbest","abnahme"]:["heute","unbest","berichtOffen","msg"];
-  return keys.map(k=>[k,alle.filter(SPEZIAL[k].f).length]).filter(([,n])=>n);
+  // Nachrichten: Zahl der ungelesenen Nachrichten (wie an den Karten), sonst Zahl der Aufträge
+  return keys.map(k=>[k,k==="msg"?alle.reduce((n,o)=>n+(binBeteiligt(o)?ungelesen(o.id):0),0):alle.filter(SPEZIAL[k].f).length]).filter(([,n])=>n);
 }
 
 /* ============ Boot ============ */
@@ -816,8 +843,8 @@ function renderNav(){
   items.push(["rekla","⚠️","Reklam.",meineR]);
   if(can.sub()) items.push(["meine","💶","Abrechnung"]);
   if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
-  items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length:0]); // Setup: Konto, Benachrichtigungen, Abmelden (Chef: alle Einstellungen)
-  $("#nav").innerHTML=iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}"><span class="ic">${ic}</span>${l}${n?`<span class="dot">${n}</span>`:""}</a>`).join(""));
+  items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length+Object.values(S.zugang||{}).filter(z=>!z.code).length:0]); // Setup: Konto, Benachrichtigungen, Abmelden (Chef: alle Einstellungen)
+  $("#nav").innerHTML=`<div class="nav-in">${iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}" aria-label="${esc(l)}${n?`, ${n} offen`:""}"><span class="nav-ic">${ic}${n?badge(n):""}</span><span class="nav-l">${l}</span></a>`).join(""))}</div>`;
 }
 
 function render(scrollTop){
@@ -943,7 +970,7 @@ function statusPills(o, imKal){
   }
   const rk=offeneReklas(o.id).length; if(rk) p.push(["bad",`⚠ ${rk} Rekla`]);
   if((o.leerfahrten||[]).length && !istFertig(o)) p.push(["warn","↩ Leerfahrt"]);
-  if(binBeteiligt(o)){ const un=ungelesen(o.id); if(un) p.push(["msg",`💬 ${un}`]); }
+  if(binBeteiligt(o)){ const un=ungelesen(o.id); if(un) p.push(["msg",un]); }
   return p;
 }
 // Kürzel der Eingeteilten: grün = Termin bestätigt, umrandet = noch nicht bestätigt
@@ -960,7 +987,7 @@ function liKarte(o, imKal){
     <div class="row between" style="flex-wrap:nowrap;gap:4px"><b class="li-nr">${esc(o.nr)}</b><span class="small">${landOf(o)==="lu"?"🇱🇺":""}${o.kabinen&&o.kabinen!=="0"?` <span class="mute">${esc(o.kabinen)} Kab.</span>`:""}</span></div>
     <div class="kal-bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
     ${o.plzOrt?`<div class="small mute kal-ort">${esc(o.plzOrt)}</div>`:""}
-    ${p.length||av?`<div class="li-fuss">${av}${p.map(([c,t])=>`<span class="kal-st ${c}">${t}</span>`).join("")}</div>`:""}</a>`;
+    ${p.length||av?`<div class="li-fuss">${av}${p.map(([c,t])=>c==="msg"?`<span class="msg-b" title="${t} neue Nachricht${t>1?"en":""}">💬${badge(t)}</span>`:`<span class="kal-st ${c}">${t}</span>`).join("")}</div>`:""}</a>`;
 }
 // Liste in Wochen-Kästen (wie die Tage im Kalender)
 function gruppen(list){
@@ -1041,7 +1068,7 @@ function viewListe(){
   list=list.filter(imBereich);
   const tun=zuTun();
   let h=`<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>
-  ${tun.length||(!pushAktiv()&&pushUnterstuetzt())||(meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe)?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}</button>`).join("")}${!pushAktiv()&&pushUnterstuetzt()?`<button class="tun-p" id="pushHinweis">🔔 Benachrichtigungen einschalten</button>`:""}${meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe?`<button class="tun-p" id="iosHinweis">📲 Für Benachrichtigungen: App auf den Home-Bildschirm</button>`:""}</div>`:""}
+  ${tun.length||(!pushAktiv()&&pushUnterstuetzt())||(meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe)?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}${badge(n)}</button>`).join("")}${!pushAktiv()&&pushUnterstuetzt()?`<button class="tun-p" id="pushHinweis">🔔 Benachrichtigungen einschalten</button>`:""}${meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe?`<button class="tun-p" id="iosHinweis">📲 Für Benachrichtigungen: App auf den Home-Bildschirm</button>`:""}</div>`:""}
   <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
     ${can.sub()?"":`<button class="fp ${S.nurMeine?"on":""}" id="nurMeine">👷 Meine</button>`}
@@ -2601,7 +2628,7 @@ const codeText=c=>String(c||"").replace(/(\d{3})(\d{3})/,"$1 $2");
 function zugangCard(){
   const list=Object.values(S.zugang||{}).sort((a,b)=>(b.am||b.codeAm||0)-(a.am||a.codeAm||0));
   const wartend=list.filter(z=>!z.code).length;
-  return `<div class="card" ${wartend?`style="border-left:5px solid var(--accent)"`:""}><h3>Zugänge &amp; Codes${wartend?` <span class="chip gold">${wartend} neu</span>`:""}</h3>
+  return `<div class="card" ${wartend?`style="border-left:5px solid var(--accent)"`:""}><h3>Zugänge &amp; Codes${wartend?` ${badge(wartend)}`:""}</h3>
     <div class="small mute" style="margin-bottom:8px">Neue Leute öffnen den App-Link und melden sich mit ihrer E-Mail an. Hier legst du fest, als was sie reinkommen, erzeugst den Code und gibst ihn <b>persönlich</b> weiter. Der Code gilt 7 Tage.</div>
     ${list.map(z=>{ const abgel=z.code&&Date.now()>(z.codeBis||0), gesperrt=(z.versuche||0)>=5; const rolle=z.rolle||z.wunsch||"monteur";
       return `<div class="person" style="flex-wrap:wrap"><span class="av">${esc((z.name||z.email||"?").slice(0,1).toUpperCase())}</span><div style="flex:1;min-width:170px"><b>${esc(z.name||z.email)}</b>${z.firma?` <span class="small mute">· ${esc(z.firma)}</span>`:""}
@@ -2668,7 +2695,7 @@ function viewSetup(){
     <div class="grid2" style="margin-top:10px"><button class="btn" id="meVorschau">👁 Vorschau</button><button class="btn" id="meTest">✉︎ Test an mich</button></div>
   </div>`; })():""}
   ${S.isOwner?zugangCard():""}
-  ${S.isOwner&&Object.keys(S.anfragen).length?`<div class="card" style="border-left:5px solid var(--accent)"><h3>Neue Anmeldungen – Freigabe nötig</h3>
+  ${S.isOwner&&Object.keys(S.anfragen).length?`<div class="card" style="border-left:5px solid var(--accent)"><h3>Neue Anmeldungen – Freigabe nötig ${badge(Object.keys(S.anfragen).length)}</h3>
     ${Object.values(S.anfragen).map(a=>`<div class="person"><span class="av">${esc((a.firma||a.name||"?").slice(0,1).toUpperCase())}</span><div style="flex:1;min-width:150px"><b>${esc(a.firma||a.name||nameOf(a.id))}</b><div class="small mute">${esc(a.name||"")}${a.tel?" · "+esc(a.tel):""} · möchte als ${esc(ROLLEN[a.wunsch]||a.wunsch)} · ${fmtDT(a.am)}</div></div>
       <select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-arole="${esc(a.id)}">${Object.entries(ROLLEN).map(([k,l])=>`<option value="${k}" ${a.wunsch===k?"selected":""}>${l}</option>`).join("")}</select>
       <button class="btn sm ok" data-aok="${esc(a.id)}">Freigeben</button><button class="btn sm ghost" data-ano="${esc(a.id)}">Ablehnen</button></div>`).join("")}</div>`:""}
@@ -3227,11 +3254,11 @@ function setupKnoepfe(app){
   [...grid.children].forEach(card=>{
     const h3=card.firstElementChild; if(!card.classList.contains("card")||!h3||h3.tagName!=="H3") return;
     const titel=h3.textContent.trim(), m=SETUP_KN.find(([rx])=>rx.test(titel))||[null,titel,"list"];
-    const key="setup:"+m[1], badge=[...h3.querySelectorAll(".chip")].map(c=>c.outerHTML).join("");
+    const key="setup:"+m[1], abz=[...h3.querySelectorAll(".chip,.badge")].map(c=>c.outerHTML).join("");
     const wichtig=/Anmeldungen/.test(titel);
     const d=document.createElement("details"); d.className="card fold sk"; d.dataset.fold=key;
     if(S.fold[key]??wichtig) d.open=true;
-    d.innerHTML=`<summary>${ic(m[2])}<b>${esc(m[1])}</b>${badge}</summary>`;
+    d.innerHTML=`<summary>${ic(m[2])}<b>${esc(m[1])}</b>${abz}</summary>`;
     if(/\(/.test(titel)) h3.textContent=titel.replace(/^[^(]*/,"").trim(); else h3.remove();
     const inn=document.createElement("div"); inn.className="foldin";
     while(card.firstChild) inn.appendChild(card.firstChild);
