@@ -11,12 +11,19 @@
   let installEvent = null;
   window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvent = e; document.querySelectorAll("[data-jd-install]").forEach(b => b.classList.remove("hide")); });
   const istInstalliert = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-  function geraet() {
+  function erkannt() {
     const ua = navigator.userAgent;
     if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "ios";
     if (/Android/.test(ua)) return "android";
     return "pc";
   }
+  // Gerät: selbst gewählt (bei der Anmeldung oder unter Setup → Mein Konto), sonst erkannt
+  const GERAETE = { ios: "iPhone", android: "Android", pc: "Computer" };
+  function gewaehlt() { try { const g = localStorage.getItem("jdGeraet"); return GERAETE[g] ? g : ""; } catch (e) { return ""; } }
+  function geraet() { return gewaehlt() || erkannt(); }
+  window.jdGeraet = geraet;
+  window.jdGeraetSetzen = g => { try { localStorage.setItem("jdGeraet", g); } catch (e) {} document.documentElement.dataset.geraet = g; };
+  document.documentElement.dataset.geraet = geraet();
   function installHtml() {
     const g = geraet();
     const inApp = /FBAN|FBAV|Instagram|WhatsApp|GSA\/|Line\//.test(navigator.userAgent);
@@ -26,6 +33,7 @@
       <div class="small mute">Dann öffnest du die Montage-App mit einem Tipp wie jede andere App – ohne Link suchen.</div>
       ${inApp ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ Du hast den Link in einer anderen App geöffnet (z. B. WhatsApp). Öffne ihn zuerst im Browser: oben/unten auf ⋯ bzw. ⋮ tippen → „Im Browser öffnen“.</div>` : ""}
       <button class="btn pri block ${installEvent ? "" : "hide"}" data-jd-install style="margin-top:10px">📲 Jetzt installieren</button>
+      ${g === "ios" ? `<div class="small" style="margin-top:8px">🔔 Auf dem iPhone kommen Benachrichtigungen <b>nur</b>, wenn die App auf dem Home-Bildschirm liegt und von dort geöffnet wird (ab iOS 16.4).</div>` : ""}
       ${teil("ios", "iPhone / iPad", ["Link in <b>Safari</b> öffnen.", "Unten auf <b>Teilen</b> tippen (Viereck mit Pfeil nach oben ⬆️).", "Etwas nach unten scrollen → <b>„Zum Home-Bildschirm“</b>.", "Oben rechts <b>„Hinzufügen“</b> – fertig, das Symbol „JD Montage“ ist da."])}
       ${teil("android", "Android-Handy", ["Link in <b>Chrome</b> öffnen.", "Oben rechts auf <b>⋮</b> (drei Punkte) tippen.", "<b>„App installieren“</b> oder <b>„Zum Startbildschirm hinzufügen“</b> wählen.", "<b>„Installieren“</b> bestätigen – das Symbol „JD Montage“ ist da."])}
       ${teil("pc", "Computer (Chrome / Edge)", ["Rechts in der Adresszeile auf das <b>Installieren-Symbol</b> klicken (Bildschirm mit Pfeil).", "Oder Menü <b>⋮</b> → „Streamen, speichern und teilen“ → <b>„Seite als App installieren“</b> (Edge: ⋯ → „Apps“ → „Diese Seite als App installieren“).", "<b>„Installieren“</b> – die App liegt dann auf dem Desktop bzw. in der Taskleiste.", "Mac mit Safari: Menü <b>Ablage → „Zum Dock hinzufügen“</b>."])}`;
@@ -60,15 +68,25 @@
         <div class="card"><h2 style="margin:0 0 6px">JD Brüder Montage</h2>
         <div id="lv"></div>
         <div id="lm" class="small" style="color:var(--bad);min-height:18px;margin-top:6px" role="alert"></div></div>
-        ${istInstalliert() ? "" : `<div class="card" style="margin-top:12px">${installHtml()}</div>`}</div>`;
+        ${istInstalliert() ? "" : `<div class="card" id="jdInstKarte" style="margin-top:12px">${installHtml()}</div>`}</div>`;
       document.body.appendChild(d); installBinden(d);
       const $ = s => d.querySelector(s), msg = t => ($("#lm").textContent = t || "");
       let email = ""; try { email = localStorage.getItem("jdLoginMail") || ""; } catch (e) {}
       let modus = "persoenlich"; // „mail“ = Code kam per Mail
       const knopf = (id, text) => `<button class="btn pri block" id="${id}" style="margin-top:12px">${text}</button>`;
       const busy = async (b, fn) => { b.disabled = true; msg(""); try { await fn(); } catch (e) { msg(e.message || String(e)); } b.disabled = false; };
+      const zeigeGeraet = () => {
+        const e = erkannt(), g = gewaehlt() || e;
+        const k = (id, sym, titel, text) => `<button class="btn block geraet-k ${g === id ? "on" : ""}" data-g="${id}"><span class="gk-sym">${sym}</span><span style="text-align:left;flex:1"><b>${titel}</b><span class="small mute" style="display:block;font-weight:500">${text}${e === id ? " · erkannt" : ""}</span></span></button>`;
+        $("#lv").innerHTML = `<p class="mute small">Welches Gerät nutzt du? Die App passt sich daran an.</p>
+          <div style="display:grid;gap:8px;margin-top:8px">
+          ${k("ios", "📱", "iPhone", "Ansicht und Benachrichtigungen fürs iPhone")}
+          ${k("android", "🤖", "Android", "Samsung, Pixel, Xiaomi …")}
+          ${k("pc", "💻", "Computer", "Windows-PC oder Mac")}</div>`;
+        d.querySelectorAll("[data-g]").forEach(b => b.onclick = () => { window.jdGeraetSetzen(b.dataset.g); const ic = d.querySelector("#jdInstKarte"); if (ic) { ic.innerHTML = installHtml(); installBinden(ic); } zeigeMail(); });
+      };
       const zeigeMail = () => {
-        $("#lv").innerHTML = `<p class="mute small">Melde dich mit deiner E-Mail-Adresse an.</p>
+        $("#lv").innerHTML = `<p class="mute small">Melde dich mit deiner E-Mail-Adresse an. <a href="#" id="lg">${GERAETE[geraet()]} · ändern</a></p>
           <label class="f" for="le">E-Mail</label><input class="i" id="le" type="email" autocomplete="email" inputmode="email" value="${hEsc(email)}">${knopf("lb", "Weiter")}`;
         const go = () => busy($("#lb"), async () => {
           const e = $("#le").value.trim().toLowerCase();
@@ -84,6 +102,7 @@
           else zeigeAnfrage();
         });
         $("#lb").onclick = go; $("#le").onkeydown = e => { if (e.key === "Enter") go(); }; $("#le").focus();
+        $("#lg").onclick = e => { e.preventDefault(); zeigeGeraet(); };
       };
       const zeigeAnfrage = () => {
         $("#lv").innerHTML = `<p class="small" style="margin:0 0 4px"><b>${hEsc(email)}</b> ist noch nicht freigeschaltet.</p>
@@ -125,7 +144,7 @@
         $("#lx").onclick = e => { e.preventDefault(); zeigeMail(); }; $("#lt").focus();
       };
       const fertig = s => { d.remove(); resolve(s); };
-      zeigeMail();
+      if (gewaehlt()) zeigeMail(); else zeigeGeraet();
     });
   }
 
@@ -143,11 +162,7 @@
     let { data: { session } } = await sb.auth.getSession();
     if (!session) session = await loginScreen();
     await saveToken(session);
-    const out = document.createElement("button");
-    out.className = "btn sm"; out.textContent = "Abmelden"; out.title = session.user.email;
-    out.style.cssText = "background:rgba(255,255,255,.16);color:#fff";
-    out.onclick = () => window.jdLogout();
-    document.querySelector("header.top")?.appendChild(out);
+    window.jdEmail = session.user.email; // Abmelden steht jetzt unter Setup → Mein Konto
     // Einmal nach der Anmeldung zeigen, wie die App auf den Startbildschirm kommt
     setTimeout(() => window.jdInstallHilfe(false), 1500);
     if ("serviceWorker" in navigator) {

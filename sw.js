@@ -1,6 +1,6 @@
 /* Service Worker: macht die App installierbar, hält die App-Dateien offline vor
    und lädt Fotos (_blob/<id>) mit dem Login-Token aus dem privaten Supabase-Speicher. */
-const VERSION = "jd-montage-v4";
+const VERSION = "jd-montage-v5";
 const SHELL = ["./", "index.html", "claude-shim.js", "config.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL))); self.skipWaiting(); });
@@ -46,8 +46,9 @@ self.addEventListener("fetch", e => {
 self.addEventListener("push", e => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch (err) { d = { titel: "JD Brüder Montage", text: e.data ? e.data.text() : "" }; }
   e.waitUntil(self.registration.showNotification(d.titel || "JD Brüder Montage", {
-    body: d.text || "", icon: "icon-192.png", badge: "icon-192.png", tag: d.url || "jd", renotify: true, data: { url: d.url || "./" }
-  }));
+    body: d.text || "", icon: "icon-192.png", badge: "icon-192.png", tag: d.url || "jd", renotify: true, data: { url: d.url || "./" },
+    timestamp: Date.now(), vibrate: [180, 80, 180]
+  }).then(() => self.navigator.setAppBadge ? self.navigator.setAppBadge().catch(() => {}) : null));
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();

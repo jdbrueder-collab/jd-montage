@@ -167,6 +167,19 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .msg-schnell{display:flex;gap:6px;overflow-x:auto;margin-top:10px;scrollbar-width:none}
 .msg-schnell::-webkit-scrollbar{display:none}
 .tbest{border:2px solid var(--accent)}
+.setup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}
+@media(min-width:720px){.setup-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.setup-grid>details.sk{margin:0;padding:12px}
+.setup-grid>details.sk[open]{grid-column:1/-1;padding:14px 16px}
+details.sk>summary{justify-content:flex-start;gap:8px;min-height:24px}
+details.sk>summary .ic{width:18px;height:18px;flex:none;color:var(--brand2)}
+details.sk>summary b{font-size:14px;white-space:normal;line-height:1.2;flex:1;min-width:0;overflow-wrap:anywhere}
+details.sk>summary .chip{flex:none}
+details.sk:not([open])>summary::after{display:none}
+details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:0 0 6px}
+.konto-k{display:grid;gap:8px;margin-top:12px}
+.konto-k .btn{display:flex;align-items:center;gap:8px;justify-content:flex-start;width:100%}
+@media(min-width:720px){.konto-k{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}}
 .kal-monat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
 .kal-wt{text-align:center;font-size:11.5px;font-weight:700;color:var(--mute);padding:2px 0}
 .kal-zelle{min-height:64px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px;cursor:pointer;overflow:hidden}
@@ -287,15 +300,45 @@ details.fold .foldin{margin-top:12px}
 .seg.laender button.on .cc{color:#fff}
 .seg.laender .n{color:inherit;opacity:.7;margin-left:3px}
 .nvrow{display:flex;justify-content:flex-end;margin:-4px 0 10px}
+
+/* ===== Gerät: Auswahl ===== */
+.geraet-k{justify-content:flex-start;gap:12px;min-height:58px;padding:10px 14px;background:var(--card);border:1.5px solid var(--line)}
+.geraet-k.on{border-color:var(--brand2);background:var(--infobg)}
+.gk-sym{font-size:24px;width:30px;text-align:center}
+/* ===== iPhone: wie iOS – 16px in Feldern (kein Hineinzoomen), Tab-Leiste mit Home-Balken, Blätter mit Griff ===== */
+html[data-geraet=ios] body,html[data-geraet=ios] button,html[data-geraet=ios] input,html[data-geraet=ios] select,html[data-geraet=ios] textarea{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif}
+html[data-geraet=ios] input.i,html[data-geraet=ios] select.i,html[data-geraet=ios] textarea.i{font-size:16px}
+html[data-geraet=ios] *{-webkit-tap-highlight-color:transparent}
+html[data-geraet=ios] nav.bottom{background:rgba(249,249,251,.88);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-top:.5px solid rgba(0,0,0,.18)}
+html[data-geraet=ios] nav.bottom a{font-size:10.5px;font-weight:600;padding:7px 2px 4px}
+html[data-geraet=ios] nav.bottom a .ic{width:25px;height:25px;margin:0 auto 1px}
+html[data-geraet=ios] nav.bottom a.on{color:#007aff}
+html[data-geraet=ios] .modal{border-radius:14px 14px 0 0;padding-top:22px;position:relative}
+html[data-geraet=ios] .modal::before{content:"";position:absolute;top:7px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:#c7c7cc}
+html[data-geraet=ios] .btn.pri{background:#007aff}
+html[data-geraet=ios] .toast{border-radius:14px;background:rgba(30,30,32,.92);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+html[data-geraet=ios] header.top{border-bottom:.5px solid rgba(0,0,0,.15)}
+/* ===== Android: wie Material 3 – runde Knöpfe, Leiste mit Pille hinter dem aktiven Symbol, Snackbar ===== */
+html[data-geraet=android] body,html[data-geraet=android] button,html[data-geraet=android] input,html[data-geraet=android] select,html[data-geraet=android] textarea{font-family:Roboto,"Google Sans","Noto Sans",system-ui,sans-serif}
+html[data-geraet=android] input.i,html[data-geraet=android] select.i,html[data-geraet=android] textarea.i{font-size:16px;border-radius:12px}
+html[data-geraet=android] .btn{border-radius:999px}
+html[data-geraet=android] .btn.sm{border-radius:999px}
+html[data-geraet=android] .card,html[data-geraet=android] .li-gr{border-radius:16px}
+html[data-geraet=android] nav.bottom{background:#f3f4f9;border-top:0;box-shadow:0 -1px 3px rgba(0,0,0,.08)}
+html[data-geraet=android] nav.bottom a{padding:10px 2px 12px;font-size:12px;font-weight:600}
+html[data-geraet=android] nav.bottom a .ic{width:24px;height:24px;margin:0 auto 4px;padding:4px 18px;box-sizing:content-box;border-radius:16px;transition:background .2s}
+html[data-geraet=android] nav.bottom a.on .ic{background:#d9e2ff;color:#001a41}
+html[data-geraet=android] nav.bottom a.on{color:#001a41}
+html[data-geraet=android] .modal{border-radius:28px 28px 0 0;padding-top:24px;position:relative}
+html[data-geraet=android] .modal::before{content:"";position:absolute;top:10px;left:50%;width:32px;height:4px;margin-left:-16px;border-radius:2px;background:#79747e;opacity:.4}
+html[data-geraet=android] .toast{left:16px;right:16px;transform:none;border-radius:6px;text-align:left;background:#313033}
+html[data-geraet=android] .fp,html[data-geraet=android] .tun-p{border-radius:8px}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="logo">JD Brüder<small>Montage</small></div>
   <div class="sp"></div>
-  <span id="roleChip" class="chip"></span>
-  <button id="pushBtn" class="btn sm hide" title="Benachrichtigungen" aria-label="Benachrichtigungen"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
-  <button id="syncBtn" class="btn sm hide"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Mails</button>
 </header>
 <main id="app"><div class="empty"><span class="spin"></span><br><br>App wird geladen …</div></main>
 <nav class="bottom" id="nav"></nav>
@@ -518,6 +561,24 @@ function dokViewer(src, art="bild", titel=""){
 // PDFs (Unterlagen, Zeichnungen) im Betrachter statt in einem neuen Tab öffnen
 document.addEventListener("click",e=>{ const a=e.target.closest("a[data-pdf]"); if(!a || e.target.closest("button")) return; e.preventDefault(); dokViewer(a.dataset.pdf,"pdf",a.title); });
 
+/* ============ Gerät (iPhone / Android / Computer) ============ */
+const GERAETE={ios:"iPhone",android:"Android",pc:"Computer"};
+function meinGeraet(){
+  if(window.jdGeraet) return window.jdGeraet();
+  try{ const g=localStorage.getItem("jdGeraet"); if(GERAETE[g]) return g; }catch(e){}
+  const ua=navigator.userAgent; return /iPhone|iPad|iPod/.test(ua)?"ios":/Android/.test(ua)?"android":"pc";
+}
+function geraetSetzen(g){ if(window.jdGeraetSetzen) window.jdGeraetSetzen(g); else { try{ localStorage.setItem("jdGeraet",g); }catch(e){} document.documentElement.dataset.geraet=g; } }
+document.documentElement.dataset.geraet=meinGeraet();
+const istInstalliertApp=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+function geraetDialog(){
+  const g=meinGeraet();
+  modal(`<h2>Mein Gerät</h2><div class="small mute">Die App passt Ansicht und Benachrichtigungen daran an.</div>
+   <div style="display:grid;gap:8px;margin-top:12px">${[["ios","📱","iPhone"],["android","🤖","Android"],["pc","💻","Computer"]].map(([k,s,t])=>`<button class="btn block geraet-k ${g===k?"on":""}" data-gw="${k}"><span class="gk-sym">${s}</span><b style="flex:1;text-align:left">${t}</b>${g===k?"✓":""}</button>`).join("")}</div>`,(m,close)=>{
+    m.querySelectorAll("[data-gw]").forEach(b=>b.onclick=()=>{ geraetSetzen(b.dataset.gw); close(); render(); toast(`Ansicht für ${GERAETE[b.dataset.gw]} ✓`); });
+  });
+}
+
 /* ============ Rollen ============ */
 const can = {
   finanzen:()=>S.isOwner,
@@ -729,19 +790,18 @@ function go(h){ if(location.hash==="#"+h) render(true); else location.hash=h; }
 function renderNav(){
   const r=route().v;
   const offR=Object.values(S.reklas).filter(x=>x.offen).length;
-  if(S.role==="hersteller" && !S.isOwner){ $("#nav").innerHTML=""; $("#roleChip").textContent="meta"; $("#syncBtn").classList.add("hide"); $("#pushBtn")?.classList.add("hide"); return; }
-  if(S.role==="pending"){ $("#nav").innerHTML=""; $("#roleChip").textContent=""; $("#syncBtn").classList.add("hide"); return; }
+  if(S.role==="hersteller" && !S.isOwner){ $("#nav").innerHTML=""; return; }
+  if(S.role==="pending"){ $("#nav").innerHTML=""; return; }
   const meineR=can.sub()?Object.values(S.reklas).filter(x=>x.offen&&sichtbar(S.orders[x.auftragId]||{})).length:offR;
-  const items=[["auftraege","📋","Aufträge",S.loaded?zuTun().filter(([k])=>k!=="abnahme").reduce((n,[,c])=>n+c,0):0]];
+  const tunZahl=S.loaded?zuTun().filter(([k])=>k!=="abnahme").reduce((n,[,c])=>n+c,0):0;
+  try{ if(S.loaded && navigator.setAppBadge){ (tunZahl?navigator.setAppBadge(tunZahl):navigator.clearAppBadge()).catch(()=>{}); } }catch(e){}
+  const items=[["auftraege","📋","Aufträge",tunZahl]];
   if(can.fahrten()) items.push(["fahrten","🚗","Fahrten"]);
   items.push(["rekla","⚠️","Reklam.",meineR]);
   if(can.sub()) items.push(["meine","💶","Abrechnung"]);
   if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
-  if(can.setup()) items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length:0]);
+  items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length:0]); // Setup: Konto, Benachrichtigungen, Abmelden (Chef: alle Einstellungen)
   $("#nav").innerHTML=iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}"><span class="ic">${ic}</span>${l}${n?`<span class="dot">${n}</span>`:""}</a>`).join(""));
-  $("#roleChip").textContent = S.isOwner ? "Chef · Admin" : (ROLLEN[S.role]||"");
-  $("#syncBtn").classList.toggle("hide", !can.mails());
-  const pb=$("#pushBtn"); if(pb){ pb.classList.toggle("hide", !can.einsatz()); pb.classList.toggle("on", pushAktiv()); }
 }
 
 function render(scrollTop){
@@ -754,7 +814,7 @@ function render(scrollTop){
   if(r.v!=="detail" && S.fotoUnsub){ S.fotoUnsub(); S.fotoUnsub=null; S.fotoFor=null; }
   let html="";
   if(S.loadErr) html+=`<div class="banner bad">${esc(S.loadErr)}</div>`;
-  if(S.role==="pending"){ app.innerHTML=S.rolesLoaded?viewPending():`<div class="empty"><span class="spin"></span></div>`; bindPending(); return; }
+  if(S.role==="pending"){ app.innerHTML=S.rolesLoaded?viewPending()+`<div style="margin-top:16px">${kontoKarte()}</div>`:`<div class="empty"><span class="spin"></span></div>`; bindPending(); bindKonto(); return; }
   if(S.role==="hersteller" && !S.isOwner){ app.innerHTML=iconize(html+viewMeta()); bindMeta(); bind({v:"meta"}); if(scrollTop) window.scrollTo(0,0); return; }
   if(r.v==="detail") html+=viewDetail(r.id);
   else if(r.v==="fahrten" && can.fahrten()) html+=viewFahrten();
@@ -762,9 +822,10 @@ function render(scrollTop){
   else if(r.v==="rekla") html+=viewRekla();
   else if(r.v==="geld" && can.finanzen()) html+=viewGeld();
   else if(r.v==="meine" && can.sub()) html+=viewSubAbrechnung();
-  else if(r.v==="setup" && can.setup()) html+=viewSetup();
+  else if(r.v==="setup") html+=`<h2 style="margin:0 0 10px;font-size:20px">Setup</h2><div class="setup-grid">${kontoKarte()}${can.setup()?viewSetup():""}</div>`;
   else html+=viewListe();
   app.innerHTML=iconize(html);
+  if(r.v==="setup") setupKnoepfe(app);
   bind(r);
   if(scrollTop) window.scrollTo(0,0);
 }
@@ -964,7 +1025,7 @@ function viewListe(){
   list=list.filter(imBereich);
   const tun=zuTun();
   let h=`<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>
-  ${tun.length||(!pushAktiv()&&pushUnterstuetzt())?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}</button>`).join("")}${!pushAktiv()&&pushUnterstuetzt()?`<button class="tun-p" id="pushHinweis">🔔 Benachrichtigungen einschalten</button>`:""}</div>`:""}
+  ${tun.length||(!pushAktiv()&&pushUnterstuetzt())||(meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe)?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}</button>`).join("")}${!pushAktiv()&&pushUnterstuetzt()?`<button class="tun-p" id="pushHinweis">🔔 Benachrichtigungen einschalten</button>`:""}${meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe?`<button class="tun-p" id="iosHinweis">📲 Für Benachrichtigungen: App auf den Home-Bildschirm</button>`:""}</div>`:""}
   <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
     ${can.sub()?"":`<button class="fp ${S.nurMeine?"on":""}" id="nurMeine">👷 Meine</button>`}
@@ -1008,7 +1069,8 @@ function viewMeta(){
   return `<h2 style="margin:4px 0 2px;font-size:20px">Auftragsliste für JD Brüder</h2>
   <div class="small mute" style="margin-bottom:10px">${offen} offen · ${list.length-offen} abholbereit</div>
   ${list.length>8||q?`<div class="toolbar"><input class="i" id="q" placeholder="Auftragsnummer suchen …" value="${esc(S.q)}" inputmode="search"></div>`:""}
-  <div style="margin-top:10px">${list.length?list.map(metaKarte).join(""):`<div class="empty">Keine Aufträge.</div>`}</div>`;
+  <div style="margin-top:10px">${list.length?list.map(metaKarte).join(""):`<div class="empty">Keine Aufträge.</div>`}</div>
+  <div style="margin-top:20px">${kontoKarte()}</div>`;
 }
 function bindMeta(){
   document.querySelectorAll("[data-mab]").forEach(b=>b.onclick=()=>metaAbholbereitDialog(b.dataset.mab));
@@ -2566,8 +2628,7 @@ function zugangNeuDialog(){
 }
 function viewSetup(){
   const s=S.settings; const ids=Object.keys(S.roles);
-  let h=`<h2 style="margin:0 0 10px;font-size:20px">Einstellungen</h2>
-  <div class="card"><h3>Betrieb</h3>
+  let h=`<div class="card"><h3>Betrieb</h3>
     <label class="f">Firmenadresse (Start für die Kilometer)</label><input class="i" data-s="firmenAdresse" value="${esc(s.firmenAdresse||"")}" placeholder="Straße, PLZ Ort">
     <div class="grid2"><div><label class="f">Monteur auf dem Vordruck</label><input class="i" data-s="monteurName" value="${esc(s.monteurName||"JD Brüder GbR")}"></div><div><label class="f">Monteursnummer</label><input class="i" data-s="monteurNr" value="${esc(s.monteurNr||"286")}"></div></div>
     <label class="f">Unsere Antwort-Adresse (für unterschriebene Sichtabnahmen)</label><input class="i" data-s="antwortEmail" value="${esc(s.antwortEmail||"jd.brueder.meta@gmail.com")}">
@@ -2647,6 +2708,7 @@ function bind(r){
     else { if(!SPEZIAL[S.filter] && S.filter!=="storniert") S.letzterBereich=S.filter; S.filter=f; if(normal) S.letzterBereich=f; }
     render(true); });
   $("#pushHinweis") && ($("#pushHinweis").onclick=pushDialog);
+  $("#iosHinweis") && ($("#iosHinweis").onclick=()=>window.jdInstallHilfe(true));
   $("#nurMeine") && ($("#nurMeine").onclick=()=>{ S.nurMeine=!S.nurMeine; render(); });
   app.querySelectorAll(".fzeile [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
@@ -2669,7 +2731,8 @@ function bind(r){
   if(r.v==="detail") bindDetail(r.id);
   if(r.v==="fahrten") bindFahrten();
   $("#geldMonat") && ($("#geldMonat").onchange=()=>{ S.geldMonat=+$("#geldMonat").value; render(); });
-  if(r.v==="setup") bindSetup();
+  if(r.v==="setup" && can.setup()) bindSetup();
+  bindKonto();
   if(r.v==="meine") bindSubAbrechnung();
 }
 
@@ -3086,7 +3149,7 @@ async function syncMails(){
   if(!can.mails()) return;
   let logEl=null; const lines=[]; const log=t=>{ lines.push(t); if(logEl){ logEl.textContent=lines.join(String.fromCharCode(10)); logEl.scrollTop=1e9; } };
   modal(`<h2>Mails von meta abrufen</h2><div class="small mute">Läuft auch automatisch alle 15 Minuten im Hintergrund. Suche: ${esc(S.settings.gmailQuery||DEFAULT_QUERY)}</div><div class="log" id="lg"></div><button class="btn block" data-close style="margin-top:12px">Schließen</button>`,m=>{ logEl=m.querySelector("#lg"); });
-  const btn=$("#syncBtn"); btn.disabled=true;
+  const btn=$("#kMails")||{}; btn.disabled=true;
   if(!S.sync){ log("⚠ Abruf auf dem Server ist hier nicht verfügbar."); btn.disabled=false; return; }
   log("Mails werden auf dem Server abgerufen – Aufträge, PDFs und Deckblätter …");
   try{ const r=await S.sync.run({quelle:"manuell"}); (r.log||[]).forEach(log); if(r.weitere) log("Es gibt noch mehr Mails – einfach nochmal abrufen oder auf den nächsten automatischen Abruf warten."); }
@@ -3139,6 +3202,52 @@ async function pushAusschalten(){
   if(id){ try{ await S.db.doc("push/"+id).delete(); }catch(e){} }
   localStorage.removeItem("jdPushId");
 }
+/* ---------- Setup → Konto: Rolle, Benachrichtigungen, Mails, App installieren, Abmelden ---------- */
+// Setup: jeder Bereich ist ein kleiner Knopf, der beim Antippen aufgeht (immer nur einer offen)
+const SETUP_KN=[[/Mein Konto/,"Mein Konto","user"],[/Betrieb/,"Betrieb","settings"],[/Fahrtkosten/,"Fahrtkosten","car"],[/Erinnerung/,"Erinnerung","bell"],
+  [/Anmeldungen/,"Neue Anmeldungen","inbox"],[/Team/,"Team","user"],[/Zugänge/,"Zugänge","mail"],[/Preisliste/,"Preislisten","euro"],[/Hinweise/,"Hinweise","file"]];
+function setupKnoepfe(app){
+  const grid=app.querySelector(".setup-grid"); if(!grid) return;
+  [...grid.children].forEach(card=>{
+    const h3=card.firstElementChild; if(!card.classList.contains("card")||!h3||h3.tagName!=="H3") return;
+    const titel=h3.textContent.trim(), m=SETUP_KN.find(([rx])=>rx.test(titel))||[null,titel,"list"];
+    const key="setup:"+m[1], badge=[...h3.querySelectorAll(".chip")].map(c=>c.outerHTML).join("");
+    const wichtig=/Anmeldungen/.test(titel);
+    const d=document.createElement("details"); d.className="card fold sk"; d.dataset.fold=key;
+    if(S.fold[key]??wichtig) d.open=true;
+    d.innerHTML=`<summary>${ic(m[2])}<b>${esc(m[1])}</b>${badge}</summary>`;
+    if(/\(/.test(titel)) h3.textContent=titel.replace(/^[^(]*/,"").trim(); else h3.remove();
+    const inn=document.createElement("div"); inn.className="foldin";
+    while(card.firstChild) inn.appendChild(card.firstChild);
+    d.appendChild(inn); d.style.cssText=card.style.cssText; card.replaceWith(d);
+  });
+  const alle=grid.querySelectorAll("details.sk"); // nur ein Bereich (Mitarbeiter/Sub): gleich offen
+  if(alle.length===1 && S.fold[alle[0].dataset.fold]===undefined) alle[0].open=true;
+  grid.querySelectorAll("details.sk").forEach(d=>d.addEventListener("toggle",()=>{ S.fold[d.dataset.fold]=d.open;
+    if(d.open){ grid.querySelectorAll("details.sk[open]").forEach(x=>{ if(x!==d){ x.open=false; S.fold[x.dataset.fold]=false; } }); setTimeout(()=>d.scrollIntoView({block:"nearest",behavior:"smooth"}),30); } }));
+}
+function kontoKarte(){
+  const rolle=S.isOwner?"Chef · Admin":(S.role==="hersteller"?"meta":(ROLLEN[S.role]||"noch nicht freigegeben"));
+  const mail=window.jdEmail||S.me?.email||"";
+  const push=can.einsatz() || S.isOwner;
+  return `<div class="card konto"><h3>Mein Konto</h3>
+    <div class="row between" style="flex-wrap:nowrap;gap:10px"><div style="min-width:0"><div style="font-weight:700">${esc(S.me?.name||mail||"Angemeldet")}</div>${mail?`<div class="small mute" style="overflow:hidden;text-overflow:ellipsis">${esc(mail)}</div>`:""}</div><span class="chip">${esc(rolle)}</span></div>
+    <div class="konto-k">
+      <button class="btn" id="kGeraet">📱 Mein Gerät <span class="small mute" style="margin-left:auto">${GERAETE[meinGeraet()]}</span></button>
+      ${push?`<button class="btn" id="kPush">🔔 Benachrichtigungen <span class="small ${pushAktiv()?"":"mute"}" style="margin-left:auto;${pushAktiv()?"color:var(--ok)":""}">${pushAktiv()?"an":"aus"}</span></button>`:""}
+      ${can.mails()?`<button class="btn" id="kMails">🔄 Mails von meta abrufen</button>`:""}
+      ${window.jdInstallHilfe?`<button class="btn" id="kInst">📲 App auf den Startbildschirm</button>`:""}
+      <button class="btn" id="kAus" style="color:var(--bad)">Abmelden</button>
+    </div></div>`;
+}
+function bindKonto(){
+  $("#kPush") && ($("#kPush").onclick=pushDialog);
+  $("#kGeraet") && ($("#kGeraet").onclick=geraetDialog);
+  $("#kMails") && ($("#kMails").onclick=syncMails);
+  $("#kInst") && ($("#kInst").onclick=()=>window.jdInstallHilfe(true));
+  $("#kAus") && ($("#kAus").onclick=async()=>{ if(!await confirmBox("Abmelden?","Du musst dich danach mit deiner E-Mail-Adresse neu anmelden.","Abmelden")) return;
+    if(window.jdLogout) window.jdLogout(); else toast("Abmelden geht nur in der echten App"); });
+}
 function pushDialog(){
   const ios=/iPhone|iPad/i.test(navigator.userAgent), standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
   const an=pushAktiv();
@@ -3149,9 +3258,9 @@ function pushDialog(){
    <div class="grid2" style="margin-top:12px">${an?`<button class="btn" id="pOff">Ausschalten</button><button class="btn pri" id="pTest">Test senden</button>`:`<button class="btn" data-close>Später</button><button class="btn pri" id="pOn" ${pushUnterstuetzt()?"":"disabled"}>Einschalten</button>`}</div>`,(m,close)=>{
     const st=m.querySelector("#pst");
     const test=async()=>{ st.innerHTML=`<span class="spin"></span> Test wird gesendet …`; try{ const r=await S.sync.run({pushTest:true}); st.textContent=r.gesendet?"✓ Test gesendet – die Nachricht sollte gleich erscheinen.":"Nicht gesendet: "+(r.grund||"kein Gerät gefunden"); }catch(e){ st.textContent="Nicht gesendet: "+(e.message||e.code); } };
-    m.querySelector("#pOn") && (m.querySelector("#pOn").onclick=async()=>{ st.innerHTML=`<span class="spin"></span> wird eingeschaltet …`; try{ await pushEinschalten(); renderNav(); await test(); }catch(e){ st.textContent=e.message||String(e); } });
+    m.querySelector("#pOn") && (m.querySelector("#pOn").onclick=async()=>{ st.innerHTML=`<span class="spin"></span> wird eingeschaltet …`; try{ await pushEinschalten(); render(); await test(); }catch(e){ st.textContent=e.message||String(e); } });
     m.querySelector("#pTest") && (m.querySelector("#pTest").onclick=test);
-    m.querySelector("#pOff") && (m.querySelector("#pOff").onclick=async()=>{ await pushAusschalten(); renderNav(); close(); toast("Benachrichtigungen ausgeschaltet"); });
+    m.querySelector("#pOff") && (m.querySelector("#pOff").onclick=async()=>{ await pushAusschalten(); render(); close(); toast("Benachrichtigungen ausgeschaltet"); });
   });
 }
 
@@ -3244,8 +3353,6 @@ function berichtDialog(id){
   });
 }
 
-$("#syncBtn").onclick=syncMails;
-$("#pushBtn").onclick=pushDialog;
 boot();
 </script>
 </body>
