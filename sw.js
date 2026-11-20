@@ -1,6 +1,6 @@
 /* Service Worker: macht die App installierbar, hält die App-Dateien offline vor
    und lädt Fotos (_blob/<id>) mit dem Login-Token aus dem privaten Supabase-Speicher. */
-const VERSION = "jd-montage-v5";
+const VERSION = "jd-montage-v6";
 const SHELL = ["./", "index.html", "claude-shim.js", "config.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL))); self.skipWaiting(); });
@@ -36,7 +36,7 @@ self.addEventListener("fetch", e => {
   const m = u.pathname.match(/\/_blob\/([^/]+)$/);
   if (m) return e.respondWith(blob(e.request, decodeURIComponent(m[1])));
   // App-Dateien: erst Netz (immer aktuell), offline aus dem Zwischenspeicher
-  e.respondWith(fetch(e.request).then(r => {
+  e.respondWith(fetch(e.request.url, { cache: "no-cache", credentials: "same-origin" }).then(r => {
     if (r.ok) { const c = r.clone(); caches.open(VERSION).then(s => s.put(e.request, c)); }
     return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: true })));

@@ -41,5 +41,10 @@ for old, new in REPLACE:
     assert old in html, f"nicht gefunden: {old}"
     html = html.replace(old, new)
 assert "/_blob/" not in html.replace('"_blob/', "")
+# Versionskennung: ändert sich mit App, Anmelde-Hülle und Service Worker → App zeigt „neue Version da“
+import hashlib, json
+build = hashlib.sha1((html + (here / "claude-shim.js").read_text(encoding="utf-8") + (here / "sw.js").read_text(encoding="utf-8")).encode("utf-8")).hexdigest()[:12]
+html = html.replace("</head>", f'<script>window.JD_BUILD="{build}";</script>' + chr(10) + '</head>', 1)
+(here / "version.json").write_text(json.dumps({"build": build}), encoding="utf-8")
 (here / "index.html").write_text(html, encoding="utf-8")
 print("index.html gebaut")

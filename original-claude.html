@@ -373,12 +373,21 @@ html[data-geraet=android] nav.bottom .nav-ic .badge{box-shadow:0 0 0 2px #f3f4f9
 .km-gross{font-size:20px!important;font-weight:700;text-align:center;letter-spacing:.5px}
 .ziel-w{display:flex;gap:6px;flex-wrap:wrap}
 .fb-z.privat{opacity:.7}.fb-z.offen{box-shadow:inset 3px 0 0 var(--ok),var(--sh)}
+
+/* ===== Aktualisieren-Knopf oben rechts ===== */
+.kopf-btn{position:relative;width:40px;height:40px;flex:none;border:0;border-radius:12px;background:var(--greybg);color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.kopf-btn .ic{width:20px;height:20px}
+.kopf-btn:active{transform:scale(.94)}
+.kopf-btn.dreht .ic{animation:sp .8s linear infinite}
+.kopf-btn.neu{background:var(--infobg);color:var(--info)}
+.kopf-btn.neu::after{content:"";position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#e5484d;box-shadow:0 0 0 2px #fff}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="logo">JD Brüder<small>Montage</small></div>
   <div class="sp"></div>
+  <button id="aktualisieren" class="kopf-btn" title="Aktualisieren – neuesten Stand laden" aria-label="Aktualisieren"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></button>
 </header>
 <main id="app"><div class="empty"><span class="spin"></span><br><br>App wird geladen …</div></main>
 <nav class="bottom" id="nav"></nav>
@@ -3549,6 +3558,23 @@ function berichtDialog(id){
     };
   });
 }
+
+/* ============ Aktualisieren: neuesten Stand laden ============ */
+async function jetztAktualisieren(){
+  const b=$("#aktualisieren"); if(b){ b.classList.add("dreht"); b.disabled=true; }
+  try{ const reg=await navigator.serviceWorker?.getRegistration(); await reg?.update(); }catch(e){}
+  try{ await Promise.all(["index.html","claude-shim.js","config.js","sw.js"].map(u=>fetch(u,{cache:"reload"}).catch(()=>{}))); }catch(e){}
+  location.reload();
+}
+// Gibt es eine neuere Version? (version.json wird beim Bauen geschrieben) → roter Punkt am Knopf
+async function versionPruefen(){
+  if(!window.JD_BUILD) return;
+  try{ const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"}); if(!r.ok) return; const v=(await r.json()).build;
+    if(v && v!==window.JD_BUILD){ $("#aktualisieren")?.classList.add("neu"); if(!S.versionGemeldet){ S.versionGemeldet=true; toast("Neue Version da – oben rechts auf ↻ tippen",4500); } } }catch(e){}
+}
+$("#aktualisieren").onclick=jetztAktualisieren;
+setTimeout(versionPruefen,8000); setInterval(versionPruefen,10*60000);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") versionPruefen(); });
 
 boot();
 </script>
