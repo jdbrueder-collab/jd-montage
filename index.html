@@ -130,6 +130,43 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .kal-av{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--brand2);color:#fff;font-size:10px;font-weight:700}
 .kal-st{font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--infobg);color:var(--info)}
 .kal-st.ok{background:var(--okbg);color:var(--ok)}.kal-st.bad{background:var(--badbg);color:var(--bad)}.kal-st.warn{background:var(--warnbg);color:var(--warn)}
+/* schlichte Listen (gleicher Stil wie der Kalender) */
+.toolbar .btn{min-height:46px}
+.tun{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.tun-p{flex:none;border:0;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;background:var(--greybg);color:var(--grey);white-space:nowrap}
+.tun-p.warn{background:var(--warnbg);color:var(--warn)}.tun-p.bad{background:var(--badbg);color:var(--bad)}.tun-p.info,.tun-p.msg{background:var(--infobg);color:var(--info)}.tun-p.ok{background:var(--okbg);color:var(--ok)}
+.tun-p.on{box-shadow:inset 0 0 0 2px currentColor}
+.fzeile{display:flex;gap:6px;margin-top:8px;align-items:center;overflow-x:auto;scrollbar-width:none}
+.fzeile::-webkit-scrollbar{display:none}
+.fp{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:650;color:var(--grey);cursor:pointer;white-space:nowrap;min-height:32px}
+.fp .n{font-weight:700;opacity:.75;margin-left:2px}
+.fp.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.spez-kopf{display:flex;align-items:center;gap:8px;margin:12px 2px 0;font-size:15px}
+.spez-kopf .btn{margin-left:auto;min-width:40px}
+.li-gr{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
+.li-gr.heute{border:2px solid var(--brand2)}.li-gr.heute .kal-kopf{color:var(--brand2)}
+.kal-kopf .rot{color:var(--bad)}.kal-kopf .jetzt{color:var(--accent)}
+.li-grid{display:grid;gap:0 8px}
+@media(min-width:720px){.li-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}}
+.li-w{min-width:0}
+.kal-o.li{font-size:13.5px}
+.li-nr{font-size:14.5px;letter-spacing:.2px}
+.kal-o.abh{border-left-color:var(--ok)}.kal-o.offen{border-left-color:#98a2b3}
+.kal-o.storno{border-left-color:var(--bad);opacity:.7}.kal-o.storno .kal-bv{text-decoration:line-through}
+.li-fuss{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;align-items:center}
+.kal-st.gold{background:#fff4d6;color:#8a5a00}.kal-st.abh{background:var(--okbg);color:var(--ok)}.kal-st.msg{background:var(--info);color:#fff}
+.kal-st:not(.ok):not(.bad):not(.warn):not(.info):not(.gold):not(.abh):not(.msg){background:var(--card);color:var(--grey)}
+.kal-av.ok{background:var(--ok)}
+.kal-av.wartet{background:var(--card);color:var(--brand2);box-shadow:inset 0 0 0 1.5px var(--brand2)}
+.li-akt{display:block;margin:3px 0 0 auto;border:0;background:none;color:var(--grey);font-size:12px;font-weight:650;cursor:pointer;padding:2px 4px}
+/* Nachrichten */
+.msgs{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.msg{align-self:flex-start;max-width:85%;background:var(--greybg);border-radius:12px 12px 12px 4px;padding:7px 10px;font-size:14px;white-space:pre-wrap;word-break:break-word}
+.msg.ich{align-self:flex-end;background:var(--infobg);border-radius:12px 12px 4px 12px}
+.msg-k{font-size:11px;font-weight:700;color:var(--mute);margin-bottom:2px}
+.msg-schnell{display:flex;gap:6px;overflow-x:auto;margin-top:10px;scrollbar-width:none}
+.msg-schnell::-webkit-scrollbar{display:none}
+.tbest{border:2px solid var(--accent)}
 .kal-monat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
 .kal-wt{text-align:center;font-size:11.5px;font-weight:700;color:var(--mute);padding:2px 0}
 .kal-zelle{min-height:64px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px;cursor:pointer;overflow:hidden}
@@ -394,7 +431,7 @@ const S = {
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
   profiles:{},pendingRender:false,anfragen:{},zugang:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
-  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{}
+  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},nachrichten:{}
 };
 
 function toast(msg,ms=2600){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms); }
@@ -593,6 +630,49 @@ function phase(o){
   if(abhBereit(o)) return "abholbereit"; // Ware fertig – jetzt einplanen
   return "offen";
 }
+// Bereiche je Rolle: Subunternehmer nur Terminiert/Erledigt, Mitarbeiter ohne „Nicht verplant“
+const meinePhasen=()=>can.sub()?HAUPT_PHASEN.filter(([k])=>k==="arbeit"||k==="erledigt"):can.planen()?HAUPT_PHASEN:HAUPT_PHASEN.filter(([k])=>k!=="offen");
+
+/* ---------- Nachrichten pro Auftrag (Chef ↔ Eingeteilte) ---------- */
+// „gelesen“ merkt sich das Gerät; Nachrichten von vor dem ersten Öffnen gelten als gelesen
+function gelesen(){
+  if(!S._gel){ try{ S._gel=JSON.parse(localStorage.getItem("jdGelesen")||"null"); }catch(e){}
+    if(!S._gel||typeof S._gel!=="object"){ S._gel={seit:Date.now()}; try{ localStorage.setItem("jdGelesen",JSON.stringify(S._gel)); }catch(e){} } }
+  return S._gel;
+}
+function alsGelesen(id){ const g=gelesen(); if(!ungelesen(id)) return; g[id]=Date.now(); try{ localStorage.setItem("jdGelesen",JSON.stringify(g)); }catch(e){} }
+const nachrichtenVon=id=>Object.values(S.nachrichten||{}).filter(n=>n.auftragId===id).sort((a,b)=>a.am-b.am);
+function ungelesen(id){ const g=gelesen(), ab=Math.max(g[id]||0,g.seit||0); return nachrichtenVon(id).filter(n=>n.von!==myId()&&n.am>ab).length; }
+const binBeteiligt=o=>can.planen()||(o.monteure||[]).includes(myId());
+const ungelesenGesamt=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&binBeteiligt(o)).reduce((n,o)=>n+ungelesen(o.id),0);
+// Termin: hat der Eingeteilte ihn bestätigt? (gilt nur für genau dieses Datum)
+const terminKey=o=>o.termin?String(o.termin):"";
+const terminBestaetigt=(o,uid)=>!!o.termin && o.terminOk?.[uid]===terminKey(o);
+const tagHeute=()=>tagKey(new Date());
+const terminTag=o=>o.termin?tagKey(new Date(o.termin)):"";
+const terminOffenFuer=(o,uid)=>o.terminStatus==="fest" && !!o.termin && (o.monteure||[]).includes(uid) && !terminBestaetigt(o,uid) && !istFertig(o) && !o.storniert && terminTag(o)>=tagHeute();
+const terminOffenFuerMich=o=>terminOffenFuer(o,myId());
+const ueberfaellig=o=>phase(o)==="arbeit" && !istFertig(o) && !running(o) && !!o.termin && terminTag(o)<tagHeute();
+const kurzDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"}).replace(".,",",");
+const langDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"});
+
+/* ---------- „Zu tun“: was jetzt ansteht, je Rolle ---------- */
+const SPEZIAL={
+  pruefung:{t:"Berichte prüfen",cls:"warn",p:n=>`📥 ${n} prüfen`,f:o=>o.berichtStatus==="pruefung"},
+  msg:{t:"Neue Nachrichten",cls:"msg",p:n=>`💬 ${n} neu`,f:o=>binBeteiligt(o)&&ungelesen(o.id)>0},
+  ueber:{t:"Überfällige Termine – Montage nicht abgeschlossen",cls:"bad",p:n=>`⚠ ${n} überfällig`,f:o=>ueberfaellig(o)},
+  ohneTeam:{t:"Termin, aber niemand eingeteilt",cls:"warn",p:n=>`👷 ${n} ohne Team`,f:o=>phase(o)==="arbeit"&&!istFertig(o)&&!(o.monteure||[]).length},
+  unbest:{t:"Termin noch nicht bestätigt",cls:"info",p:n=>can.planen()?`❔ ${n} unbestätigt`:`👍 ${n} bestätigen`,
+    f:o=>can.planen()?(o.monteure||[]).some(m=>terminOffenFuer(o,m)):terminOffenFuerMich(o)},
+  abnahme:{t:"Sichtabnahme seit über einer Woche offen",cls:"bad",p:n=>`⏰ ${n} Sichtabnahme`,f:o=>meinAuftrag(o)&&abnahmeFaellig(o)},
+  heute:{t:"Heute",cls:"ok",p:n=>`📅 ${n} heute`,f:o=>terminTag(o)===tagHeute()&&(o.monteure||[]).includes(myId())&&!istFertig(o)},
+  berichtOffen:{t:"Montage vorbei – Bericht noch offen",cls:"warn",p:n=>`✍️ ${n} Bericht offen`,f:o=>(o.monteure||[]).includes(myId())&&ueberfaellig(o)}
+};
+function zuTun(){
+  const alle=Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert);
+  const keys=can.planen()?["pruefung","msg","ueber","ohneTeam","unbest","abnahme"]:["heute","unbest","berichtOffen","msg"];
+  return keys.map(k=>[k,alle.filter(SPEZIAL[k].f).length]).filter(([,n])=>n);
+}
 
 /* ============ Boot ============ */
 async function boot(){
@@ -619,6 +699,7 @@ async function boot(){
     loadProfiles(Object.values(o).flatMap(x=>[...(x.monteure||[]),x.abschluss?.by].filter(Boolean)));
     scheduleRender();
   }, err);
+  db.collection("nachrichten").onSnapshot(snap=>{ const a={}; snap.docs.forEach(d=>a[d.id]={id:d.id,...d.data()}); S.nachrichten=a; loadProfiles(Object.values(a).map(x=>x.von)); scheduleRender(); },()=>{});
   db.collection("reklamationen").onSnapshot(snap=>{ const r={}; snap.docs.forEach(d=>r[d.id]={id:d.id,...d.data()}); S.reklas=r; loadProfiles(Object.values(r).map(x=>x.von)); scheduleRender(); }, ()=>{});
   db.doc("einstellungen/allgemein").onSnapshot(d=>{ S.settings=d.exists?d.data():{}; maybeStoreOwner(); scheduleRender(); }, ()=>{});
   db.doc("einstellungen/rollen").onSnapshot(d=>{
@@ -667,7 +748,7 @@ function renderNav(){
   if(S.role==="hersteller" && !S.isOwner){ $("#nav").innerHTML=""; $("#roleChip").textContent="meta"; $("#syncBtn").classList.add("hide"); $("#pushBtn")?.classList.add("hide"); return; }
   if(S.role==="pending"){ $("#nav").innerHTML=""; $("#roleChip").textContent=""; $("#syncBtn").classList.add("hide"); return; }
   const meineR=can.sub()?Object.values(S.reklas).filter(x=>x.offen&&sichtbar(S.orders[x.auftragId]||{})).length:offR;
-  const items=[["auftraege","📋","Aufträge"]];
+  const items=[["auftraege","📋","Aufträge",S.loaded?zuTun().filter(([k])=>k!=="abnahme").reduce((n,[,c])=>n+c,0):0]];
   if(can.fahrten()) items.push(["fahrten","🚗","Fahrten"]);
   items.push(["rekla","⚠️","Reklam.",meineR]);
   if(can.sub()) items.push(["meine","💶","Abrechnung"]);
@@ -676,10 +757,11 @@ function renderNav(){
   $("#nav").innerHTML=iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}"><span class="ic">${ic}</span>${l}${n?`<span class="dot">${n}</span>`:""}</a>`).join(""));
   $("#roleChip").textContent = S.isOwner ? "Chef · Admin" : (ROLLEN[S.role]||"");
   $("#syncBtn").classList.toggle("hide", !can.mails());
-  const pb=$("#pushBtn"); if(pb){ pb.classList.toggle("hide", !(can.planen()||can.sub())); pb.classList.toggle("on", pushAktiv()); }
+  const pb=$("#pushBtn"); if(pb){ pb.classList.toggle("hide", !can.einsatz()); pb.classList.toggle("on", pushAktiv()); }
 }
 
 function render(scrollTop){
+  { const r0=route(); if(r0.v==="detail" && S.orders[r0.id]) alsGelesen(r0.id); }
   renderNav();
   const app=$("#app");
   if(S.loadErr && !S.loaded){ app.innerHTML=`<div class="empty">${esc(S.loadErr)}</div>`; return; }
@@ -763,16 +845,6 @@ function orderChips(o){
     else if(st==="versendet") c.push(`<span class="chip">Rechnung versendet – Zahlung offen</span>`); }
   return c.join("");
 }
-function orderCard(o){
-  const hl = !istFertig(o) && !o.storniert && o.terminStatus!=="fest" && !o.nichtVerplant && (o.prodStatus==="abholbereit"||o.prodStatus==="produziert");
-  const abh=abhBereit(o) && !istFertig(o) && !o.storniert;
-  return `<a class="order ${istFertig(o)?"done":""} ${hl?"hl":""} ${abh?"abh":""} ${o.storniert?"storno":""}" href="#a-${esc(o.id)}">
-    <div class="row between"><span class="nr">${esc(o.nr)}</span><span class="small mute">${o.kabinen?esc(o.kabinen)+" Kabinen":""}</span></div>
-    <div class="bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
-    <div class="small mute">${esc(o.plzOrt||o.adresse||"")}</div>
-    ${hl?`<div class="small" style="color:#8a5a00;font-weight:650;margin-top:4px">→ Ware ist fertig – kann terminiert werden</div>`:""}
-    <div class="chips">${orderChips(o)}</div></a>`;
-}
 function sichtbar(o){
   if(can.sub()) return (o.monteure||[]).includes(myId());
   return true;
@@ -781,18 +853,69 @@ function sichtbar(o){
 const tagKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const montagVon=d=>{ const m=new Date(d.getFullYear(),d.getMonth(),d.getDate()); m.setDate(m.getDate()-((m.getDay()+6)%7)); return m; };
 const WT=["Mo","Di","Mi","Do","Fr","Sa","So"];
-function kalKarte(o, heute){
-  const fertig=istFertig(o), laeuft=running(o), tag=o.termin?tagKey(new Date(o.termin)):"";
-  const ueber=!fertig && !laeuft && tag && tag<heute;
-  const reklas=offeneReklas(o.id).length;
-  const mon=(o.monteure||[]).map(m=>`<span class="kal-av" title="${esc(nameOf(m))}">${esc(initials(m))}</span>`).join("");
-  return `<a class="kal-o ${fertig?"fertig":laeuft?"laeuft":ueber?"ueber":""}" href="#a-${esc(o.id)}">
-    <div class="row between" style="flex-wrap:nowrap;gap:4px"><b>${esc(o.nr)}</b><span class="small">${landOf(o)==="lu"?"🇱🇺":""}${o.kabinen?` <span class="mute">${esc(o.kabinen)} Kab.</span>`:""}</span></div>
+function statusPills(o, imKal){
+  if(o.storniert) return [["bad","storniert"]];
+  const p=[], chef=can.planen(), ph=phase(o);
+  if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o)) p.push(["gold","NEU"]);
+  if(istFertig(o) || ph==="erledigt"){
+    if(chef){
+      if(o.berichtStatus==="pruefung") p.push(["warn","📥 prüfen"]);
+      else if(o.berichtStatus==="bereit" && !berichtVerschickt(o) && !abgerechnet(o)) p.push(["warn","Bericht senden"]);
+      else if(abgerechnet(o)) p.push(["ok","💶 abgerechnet"]);
+      else if(berichtVerschickt(o)) p.push(["ok","✓ gesendet"]);
+      else p.push(["ok","✓ fertig"]);
+      if(can.finanzen() && S.fin[o.id]){ const st=S.fin[o.id].rechnungStatus||"offen"; if(st==="offen"||st==="freigegeben") p.push(["warn","✏️ Rechnung"]); else if(st==="erstellt") p.push(["warn","Rechnung versenden"]); }
+      if(abnahmeFaellig(o)) p.push(["bad","⏰ Sichtabnahme"]);
+    } else p.push(o.bestaetigtAm?["ok",can.sub()?"✓ bestätigt · Rechnung schreiben":"✓ bestätigt"]:o.abschluss?["info","⏳ wartet auf Bestätigung"]:["ok","✓ erledigt"]);
+  } else if(ph==="arbeit"){
+    if(running(o)) p.push(["info","⏱ läuft"]);
+    else if(o.einsatz?.bereit==="nein" && !o.einsatz?.nmb?.weiter) p.push(["bad","⛔ nicht montagebereit"]);
+    else if(ueberfaellig(o)) p.push(["bad","überfällig"]);
+    else if(o.einsatz?.fahrzeug && !o.einsatz?.startAm) p.push(["info","🚐 unterwegs"]);
+    if(!imKal) p.push(o.termin?["",kurzDatum(o.termin)]:["warn","ohne Datum"]);
+    if(chef && !(o.monteure||[]).length) p.push(["warn","👷 ohne Team"]);
+    if(!chef && terminOffenFuerMich(o)) p.push(["warn","👍 bestätigen"]);
+  } else if(ph==="abholbereit") p.push(["abh",o.abholbereitBestaetigt?"✓ abholbereit · meta":"✓ abholbereit"]);
+  else {
+    if(o.quelle==="mail-dispo" && !o.zusage) p.push(["gold","📨 Anfrage"]);
+    if(o.prodStatus==="abholbereit" && o.nichtVerplant) p.push(["","↩ von Hand verschoben"]);
+  }
+  const rk=offeneReklas(o.id).length; if(rk) p.push(["bad",`⚠ ${rk} Rekla`]);
+  if((o.leerfahrten||[]).length && !istFertig(o)) p.push(["warn","↩ Leerfahrt"]);
+  if(binBeteiligt(o)){ const un=ungelesen(o.id); if(un) p.push(["msg",`💬 ${un}`]); }
+  return p;
+}
+// Kürzel der Eingeteilten: grün = Termin bestätigt, umrandet = noch nicht bestätigt
+function avatare(o){
+  const fest=o.terminStatus==="fest" && !!o.termin && !istFertig(o) && !o.storniert;
+  return (o.monteure||[]).map(m=>{ const ok=terminBestaetigt(o,m);
+    return `<span class="kal-av ${fest?(ok?"ok":"wartet"):""}" title="${esc(nameOf(m))}${fest?(ok?" – Termin bestätigt":" – Termin noch nicht bestätigt"):""}">${esc(initials(m))}</span>`; }).join("");
+}
+function liKarte(o, imKal){
+  const ph=phase(o), fertig=istFertig(o)||ph==="erledigt";
+  const cls=o.storniert?"storno":fertig?"fertig":running(o)?"laeuft":ueberfaellig(o)?"ueber":ph==="abholbereit"?"abh":ph==="offen"?"offen":"";
+  const p=statusPills(o, imKal), av=avatare(o);
+  return `<a class="kal-o ${imKal?"":"li"} ${cls}" href="#a-${esc(o.id)}">
+    <div class="row between" style="flex-wrap:nowrap;gap:4px"><b class="li-nr">${esc(o.nr)}</b><span class="small">${landOf(o)==="lu"?"🇱🇺":""}${o.kabinen&&o.kabinen!=="0"?` <span class="mute">${esc(o.kabinen)} Kab.</span>`:""}</span></div>
     <div class="kal-bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
     ${o.plzOrt?`<div class="small mute kal-ort">${esc(o.plzOrt)}</div>`:""}
-    <div class="row" style="gap:4px;margin-top:5px;flex-wrap:wrap;align-items:center">${mon}
-      ${fertig?`<span class="kal-st ok">✓ fertig</span>`:laeuft?`<span class="kal-st info">⏱ läuft</span>`:ueber?`<span class="kal-st bad">überfällig</span>`:""}
-      ${o.berichtStatus==="pruefung"&&can.planen()?`<span class="kal-st warn">📥 prüfen</span>`:""}${reklas?`<span class="kal-st bad">⚠ ${reklas}</span>`:""}</div></a>`;
+    ${p.length||av?`<div class="li-fuss">${av}${p.map(([c,t])=>`<span class="kal-st ${c}">${t}</span>`).join("")}</div>`:""}</a>`;
+}
+// Liste in Wochen-Kästen (wie die Tage im Kalender)
+function gruppen(list){
+  const groups={};
+  list.forEach(o=>{ const w=planWeek(o); const k=w.kw?wkKey(w.jahr,w.kw):0; (groups[k]=groups[k]||{w,items:[]}).items.push(o); });
+  const absteigend=S.filter==="erledigt"||S.filter==="storniert";
+  const keys=Object.keys(groups).map(Number).sort((a,b)=>absteigend?b-a:a-b);
+  const nowK=wkKey(NOW.jahr,NOW.kw);
+  const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Nicht verplant“</button>`:"";
+  return keys.map(k=>{ const g=groups[k];
+    g.items.sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
+    let range=""; if(k){ const m=mondayOf(g.w.jahr,g.w.kw); const f=new Date(m); f.setDate(f.getDate()+4); range=`${m.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${f.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`; }
+    const tag=k===nowK?"diese Woche":(k&&k<nowK&&(S.filter==="offen"||S.filter==="abholbereit")?"vergangen":"");
+    return `<section class="li-gr ${k===nowK?"heute":""}"><div class="kal-kopf"><span>${k?`KW ${g.w.kw}${g.w.jahr!==NOW.jahr?"/"+g.w.jahr:""}`:"Ohne KW"}${range?` <span class="mute" style="font-weight:600">· ${range}</span>`:""}${tag?` · <span class="${tag==="vergangen"?"rot":"jetzt"}">${tag}</span>`:""}</span><span>${g.items.length}</span></div>
+      <div class="li-grid">${g.items.map(o=>`<div class="li-w">${liKarte(o)}${nvKnopf(o)}</div>`).join("")}</div></section>`;
+  }).join("");
 }
 function kalender(list){
   const k=S.kal||(S.kal={ansicht:"woche",start:montagVon(new Date()).getTime()});
@@ -800,7 +923,6 @@ function kalender(list){
   const mitTag={}, ohne=[];
   list.forEach(o=>{ if(o.termin){ const t=tagKey(new Date(o.termin)); (mitTag[t]=mitTag[t]||[]).push(o); } else ohne.push(o); });
   Object.values(mitTag).forEach(a=>a.sort((x,y)=>String(x.nr).localeCompare(String(y.nr),"de",{numeric:true})));
-  const ueber=list.filter(o=>o.termin && !istFertig(o) && !running(o) && tagKey(new Date(o.termin))<heute && montagVon(new Date(o.termin)).getTime()<montagVon(new Date()).getTime());
   let h=`<div class="kal-nav">
     <button class="btn sm" data-kal="zurueck" aria-label="Zurück">‹</button>`;
   const start=new Date(k.start);
@@ -815,7 +937,6 @@ function kalender(list){
   h+=`<button class="btn sm" data-kal="vor" aria-label="Weiter">›</button></div>
    <div class="row between" style="margin-bottom:8px;gap:8px"><div class="seg" id="kalSeg" style="width:auto"><button data-kalv="woche" class="${k.ansicht!=="monat"?"on":""}">Woche</button><button data-kalv="monat" class="${k.ansicht==="monat"?"on":""}">Monat</button></div>
    <button class="btn sm ghost" data-kal="heute">Heute</button></div>`;
-  if(ueber.length) h+=`<div class="banner bad small" style="cursor:pointer" data-kal-ueber="${ueber[0].termin}">⚠ <b>${ueber.length} Termin${ueber.length>1?"e":""}</b> in vergangenen Wochen noch nicht abgeschlossen: ${ueber.slice(0,6).map(o=>esc(o.nr)).join(", ")}${ueber.length>6?" …":""} – <u>anzeigen</u></div>`;
   if(k.ansicht==="monat"){
     const m0=new Date(start.getFullYear(),start.getMonth(),1), ab=montagVon(m0);
     h+=`<div class="kal-monat">${WT.map(t=>`<div class="kal-wt">${t}</div>`).join("")}`;
@@ -831,61 +952,49 @@ function kalender(list){
     const zeig=tage.filter((d,i)=>i<5 || (mitTag[tagKey(d)]||[]).length); // Sa/So nur, wenn dort etwas geplant ist
     h+=`<div class="kal-woche" style="--tage:${zeig.length}">${zeig.map(d=>{ const t=tagKey(d), a=mitTag[t]||[];
       return `<div class="kal-tag ${t===heute?"heute":""} ${a.length?"":"frei"}"><div class="kal-kopf"><span>${WT[(d.getDay()+6)%7]} ${d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}${t===heute?" · heute":""}</span>${a.length?`<span>${a.length}</span>`:""}</div>
-        ${a.map(o=>kalKarte(o,heute)).join("")||`<div class="kal-leer">frei</div>`}</div>`; }).join("")}</div>`;
+        ${a.map(o=>liKarte(o,true)).join("")||`<div class="kal-leer">frei</div>`}</div>`; }).join("")}</div>`;
+    const imBlick=zeig.flatMap(d=>mitTag[tagKey(d)]||[]);
+    if(!imBlick.length){ const bis=new Date(start); bis.setDate(bis.getDate()+6);
+      const nx=list.filter(o=>o.termin&&!istFertig(o)&&tagKey(new Date(o.termin))>tagKey(bis)).sort((a,b)=>a.termin-b.termin)[0];
+      if(nx) h+=`<button class="btn block ghost" style="margin-top:8px" data-kal-tag="${new Date(nx.termin).getTime()}">Nächster Termin: ${esc(langDatum(nx.termin))} · ${esc(nx.nr)} ›</button>`; }
+    if(imBlick.some(o=>(o.monteure||[]).length)) h+=`<div class="small mute" style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap"><span><span class="kal-av ok" style="width:14px;height:14px"></span> Termin bestätigt</span><span><span class="kal-av wartet" style="width:14px;height:14px"></span> noch nicht bestätigt</span></div>`;
   }
-  if(ohne.length) h+=`<div class="kw" style="margin-top:14px"><b>Terminiert, aber ohne Datum</b><span class="small mute">${ohne.length} Auftr.</span></div>${ohne.map(orderCard).join("")}`;
+  if(ohne.length) h+=`<section class="li-gr" style="margin-top:12px"><div class="kal-kopf"><span>Terminiert, aber ohne Datum</span><span>${ohne.length}</span></div><div class="li-grid">${ohne.map(o=>`<div class="li-w">${liKarte(o)}</div>`).join("")}</div></section>`;
   if(!list.length) h+=`<div class="empty">Keine terminierten Aufträge.</div>`;
   return h;
 }
 function viewListe(){
-  if(can.sub() && (S.filter==="offen"||S.filter==="abholbereit")) S.filter="arbeit"; // Subunternehmer sehen nur Terminiert/Erledigt
+  const erlaubt=meinePhasen().map(([k])=>k), spez=SPEZIAL[S.filter];
+  if(!spez && S.filter!=="storniert" && !erlaubt.includes(S.filter)) S.filter=erlaubt.includes("arbeit")&&!can.planen()?"arbeit":erlaubt[0];
   let list=Object.values(S.orders).filter(sichtbar);
-  const q=S.q.trim().toLowerCase();
+  // Mitarbeiter/Subunternehmer: keine Aufträge aus „Nicht verplant“ (auch nicht in der Suche)
+  if(!can.planen()) list=list.filter(o=>phase(o)!=="offen" && (phase(o)!=="storniert" || (o.monteure||[]).includes(myId())));
+  const q=S.q.trim().toLowerCase(), suche=!!q;
   if(q) list=list.filter(o=>[o.nr,o.bauvorhaben,o.plzOrt,o.adresse,o.vorgang].join(" ").toLowerCase().includes(q));
   if(S.nurMeine) list=list.filter(o=>(o.monteure||[]).includes(myId()));
-  const suche=!!q && PHASEN.some(([k])=>k===S.filter);
-  const imBereich=o=>!PHASEN.some(([k])=>k===S.filter) || suche || phase(o)===S.filter;
+  const imBereich=o=>suche || (spez ? !o.storniert && spez.f(o) : phase(o)===S.filter);
   const land=S.land||"alle";
   const proLand={alle:0,de:0,lu:0}; list.filter(imBereich).forEach(o=>{ proLand.alle++; proLand[landOf(o)]++; });
   if(land!=="alle") list=list.filter(o=>landOf(o)===land);
   const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
   list=list.filter(imBereich);
-  if(S.filter==="pruefung") list=list.filter(o=>o.berichtStatus==="pruefung");
-  if(S.filter==="abnahme") list=list.filter(o=>istFertig(o)&&abnahmeStatus(o)!=="ok"&&abnahmeStatus(o)!=="verzicht");
-  const groups={};
-  list.forEach(o=>{ const w=planWeek(o); const k=w.kw?wkKey(w.jahr,w.kw):0; (groups[k]=groups[k]||{w,items:[]}).items.push(o); });
-  const keys=Object.keys(groups).map(Number).sort((a,b)=>S.filter==="erledigt"||S.filter==="storniert"?b-a:a-b);
-  let h=`<div class="toolbar"><input class="i" id="q" placeholder="Nummer, Bauvorhaben, Ort suchen …" value="${esc(S.q)}"></div>
-  <div class="seg phasen" id="flt">${(can.sub()?HAUPT_PHASEN.filter(([k])=>k==="arbeit"||k==="erledigt"):HAUPT_PHASEN).map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""} ${k==="abholbereit"?"ab":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
-  <div class="seg laender" id="landFlt" style="margin-top:8px">${[["alle","Alle"],["de",LAENDER.de.join(" ")],["lu",LAENDER.lu.join(" ")]].map(([k,l])=>`<button data-land="${k}" class="${land===k?"on":""}">${l} <span class="n">${proLand[k]}</span></button>`).join("")}</div>
-  <div class="row between" style="margin-top:8px"><label class="row small" style="gap:6px;cursor:pointer;width:max-content"><input type="checkbox" id="nurMeine" ${S.nurMeine?"checked":""} style="width:18px;height:18px"> Nur meine Aufträge</label>
-  <button class="stlink ${S.filter==="storniert"?"on":""}" data-f="storniert">Storniert (${anzahl.storniert||0})</button></div>
-  ${suche?`<div class="banner info small" style="margin-top:8px">Suche in allen Bereichen.</div>`:""}
-  ${S.filter==="storniert"&&!suche?`<div class="small mute" style="margin-top:8px">Aufträge, die reingekommen sind, aber von meta wieder storniert wurden.</div>`:""}`;
-  if(can.planen()){
-    h+=`<div class="row" style="margin-top:10px"><button class="btn sm ghost" id="newOrder">＋ Auftrag von Hand anlegen</button></div>`;
-  }
+  const tun=zuTun();
+  let h=`<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>
+  ${tun.length||(!pushAktiv()&&pushUnterstuetzt())?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}</button>`).join("")}${!pushAktiv()&&pushUnterstuetzt()?`<button class="tun-p" id="pushHinweis">🔔 Benachrichtigungen einschalten</button>`:""}</div>`:""}
+  <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
+  <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
+    ${can.sub()?"":`<button class="fp ${S.nurMeine?"on":""}" id="nurMeine">👷 Meine</button>`}
+    ${can.planen()||anzahl.storniert?`<button class="fp ${S.filter==="storniert"?"on":""}" data-f="storniert" style="margin-left:auto">Storniert <span class="n">${anzahl.storniert||0}</span></button>`:""}</div>`;
+  if(spez && !suche) h+=`<div class="spez-kopf"><b>${esc(SPEZIAL[S.filter].t)}</b><span class="mute">${list.length}</span><button class="btn sm ghost" data-f="zurueck">✕</button></div>`;
+  if(suche) h+=`<div class="small mute" style="margin:10px 2px 0">Suche in allen Bereichen · ${list.length} Treffer</div>`;
+  if(S.filter==="storniert" && !suche) h+=`<div class="small mute" style="margin:10px 2px 0">Aufträge, die meta wieder storniert hat.</div>`;
   if(!Object.keys(S.orders).length){
     h+=`<div class="empty">Noch keine Aufträge.<br>${can.mails()?"Tippe oben auf „Mails abrufen“, um die Aufträge von meta zu holen.":"Sobald der Chef die Mails abruft, erscheinen sie hier."}</div>`;
     return h;
   }
-  const pruef=Object.values(S.orders).filter(o=>o.berichtStatus==="pruefung");
-  if(can.planen() && pruef.length && S.filter!=="pruefung") h+=`<div class="banner warn" style="margin-top:10px;cursor:pointer" id="pruefBanner">📥 <b>${pruef.length} Bericht${pruef.length>1?"e":""}</b> zu prüfen und zu bestätigen. <u>Anzeigen</u></div>`;
-  if(S.filter==="pruefung") h+=`<div class="banner warn" style="margin-top:10px">Berichte zur Prüfung · <a href="#" id="abnBack">alle anzeigen</a></div>`;
-  const faellig=Object.values(S.orders).filter(o=>sichtbar(o)&&meinAuftrag(o)&&abnahmeFaellig(o));
-  if(faellig.length && S.filter!=="abnahme") h+=`<div class="banner bad" style="margin-top:10px;cursor:pointer" id="abnBanner">⏰ <b>${faellig.length} Sichtabnahme${faellig.length>1?"n":""}</b> seit über einer Woche offen${faellig.some(o=>o.berichtGesendetAm)?" (Bericht schon verschickt)":""} – bitte beim Kunden nachhaken. <u>Anzeigen</u></div>`;
-  if(S.filter==="abnahme") h+=`<div class="banner warn" style="margin-top:10px">Aufträge mit offener Sichtabnahme · <a href="#" id="abnBack">alle anzeigen</a></div>`;
-  if(S.filter==="arbeit" && !suche){ h+=kalender(list); return h; } // Terminiert: als Kalender
-  if(!list.length) h+=`<div class="empty">Keine Aufträge in dieser Ansicht.</div>`;
-  const nowK=wkKey(NOW.jahr,NOW.kw);
-  keys.forEach(k=>{
-    const g=groups[k]; g.items.sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
-    const label = k? `KW ${g.w.kw}/${g.w.jahr}` : "Ohne KW";
-    const tag = k===nowK?`<span class="now">diese Woche</span>`:(k && k<nowK && (S.filter==="offen"||S.filter==="arbeit")?`<span class="now" style="color:var(--bad)">vergangen</span>`:"");
-    let range=""; if(k){ const m=mondayOf(g.w.jahr,g.w.kw); const f=new Date(m); f.setDate(f.getDate()+4); range=`${m.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${f.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`; }
-    h+=`<div class="kw"><b>${label}</b><span class="small mute">${range} · ${g.items.length} Auftr.</span>${tag}</div>`;
-    h+=g.items.map(o=>orderCard(o)+(S.filter==="abholbereit"&&!suche&&can.planen()&&phase(o)==="abholbereit"?`<div class="nvrow"><button class="btn sm ghost" data-nv="${esc(o.id)}">↩ Nach „Nicht verplant“ verschieben</button></div>`:"")).join("");
-  });
+  if(S.filter==="arbeit" && !suche && !spez){ h+=kalender(list); return h; } // Terminiert: als Kalender
+  if(!list.length) h+=`<div class="empty">${spez?"Alles erledigt 👍":"Keine Aufträge in dieser Ansicht."}</div>`;
+  h+=`<div style="margin-top:10px">${gruppen(list)}</div>`;
   return h;
 }
 
@@ -943,6 +1052,28 @@ function metaAbholbereitDialog(id){
   });
 }
 
+/* ---------- Nachrichten im Auftrag ---------- */
+function nachrichtenKarte(o){
+  const ns=nachrichtenVon(o.id), me=myId();
+  const an=can.planen()?((o.monteure||[]).length?(o.monteure||[]).map(nameOf).join(", "):"noch niemand eingeteilt – nur Chefs"):"JD Brüder";
+  const schnell=can.planen()?["Bitte kurz melden","Termin hat sich geändert – bitte prüfen","Danke 👍"]:["Bin unterwegs 🚐","Bin vor Ort","Komme später","Material fehlt","Bitte zurückrufen"];
+  const offen=S.msgOffen?.[o.id] ?? (ns.length>0);
+  return `<div class="card msgkarte" id="msgKarte"><div class="row between" style="flex-wrap:nowrap"><h3 style="margin:0">💬 Nachrichten${ns.length?` <span class="small mute" style="font-weight:600">${ns.length}</span>`:""}</h3>
+     ${!offen?`<button class="btn sm ghost" id="msgAuf">Schreiben</button>`:""}</div>
+   ${offen?`<div class="msgs">${ns.length?ns.slice(-40).map(n=>`<div class="msg ${n.von===me?"ich":""}"><div class="msg-k">${n.von===me?"Ich":esc(nameOf(n.von))} · ${fmtDT(n.am)}</div>${esc(n.text)}</div>`).join(""):`<div class="small mute">Noch keine Nachrichten. Geht an: <b>${esc(an)}</b> – mit Benachrichtigung aufs Handy.</div>`}</div>
+   <div class="msg-schnell">${schnell.map(t=>`<button class="fp" data-schnell="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+   <div class="row" style="gap:6px;margin-top:8px;flex-wrap:nowrap;align-items:flex-end"><textarea class="i" id="msgText" rows="1" placeholder="Nachricht an ${esc(an)} …" style="min-height:46px;resize:vertical"></textarea><button class="btn pri" id="msgSend">Senden</button></div>`
+   :`<div class="small mute" style="margin-top:4px">Frage oder Info an ${esc(an)} – kommt sofort aufs Handy.</div>`}</div>`;
+}
+async function nachrichtSenden(id, text){
+  text=String(text||"").trim(); if(!text) return false;
+  const nid=`${id}~${Date.now()}~${Math.random().toString(36).slice(2,6)}`;
+  const n={auftragId:id,von:myId(),am:Date.now(),text:text.slice(0,2000)};
+  S.nachrichten[nid]={id:nid,...n}; render();
+  try{ await setDoc("nachrichten/"+nid,n); S.sync?.run({nachricht:nid}).catch(()=>{}); return true; }
+  catch(e){ delete S.nachrichten[nid]; render(); return false; }
+}
+
 /* ---------- Detail ---------- */
 function viewDetail(id){
   const o=S.orders[id];
@@ -975,13 +1106,19 @@ function viewDetail(id){
      ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 ${esc(o.bauleiterTel)}</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument nachsehen</button>`:`<span class="btn" style="opacity:.5">📞 keine Nummer</span>`}</div>
      ${(addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel"))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
+  // Eingeteilte: Termin bestätigen
+  if(!erl && terminOffenFuerMich(o)) h+=`<div class="card tbest"><div style="font-weight:750;font-size:16px">📅 ${esc(langDatum(o.termin))} – passt der Termin?</div>
+     <div class="small mute" style="margin-top:2px">JD Brüder sieht deine Antwort sofort.</div>
+     <div class="grid2" style="margin-top:10px"><button class="btn ok" id="tOk">👍 Passt</button><button class="btn" id="tNein">✋ Passt nicht</button></div></div>`;
+  h+=nachrichtenKarte(o);
+
   // Planung: Datum eintragen (= terminiert), Auftrag zuteilen, ggf. stornieren
   if(!erl && !frueh) h+=`<div class="card"><h3>Planung</h3>
     <label class="f">Termin</label>
     ${can.planen()?`<input type="date" class="i" id="terminDatum" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">`:`<div style="font-weight:600">${o.termin?new Date(o.termin).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}):`<span class="mute">noch nicht terminiert</span>`}</div>`}
     ${o.prodStatus==="abholbereit"&&o.abholbereitBestaetigt?`<div class="small" style="margin-top:6px;color:var(--ok)">✓ Von meta als abholbereit bestätigt: <b>${esc(o.abholbereitBestaetigt.name)}</b>, ${fmtDT(o.abholbereitBestaetigt.am)}</div>`:""}
     <label class="f">Auftrag zuteilen</label>
-    <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip info">👷 ${esc(nameOf(m))}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand zugeteilt</span>`}
+    <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip ${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?"ok":"warn"):"info"}" title="${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?"Termin bestätigt":"Termin noch nicht bestätigt"):""}">👷 ${esc(nameOf(m))}${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?" ✓":" · ⏳"):""}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand zugeteilt</span>`}
     ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ zuteilen</button>`:""}</div>
     ${can.planen()&&!o.storniert?`<button class="btn sm ghost" id="stornoSetzen" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}
   </div>`;
@@ -2501,14 +2638,33 @@ function viewSetup(){
 }
 
 /* ============ Ereignisse ============ */
+function bindNachrichten(id){
+  const o=S.orders[id]; if(!o) return;
+  $("#msgAuf") && ($("#msgAuf").onclick=()=>{ (S.msgOffen=S.msgOffen||{})[id]=true; render(); setTimeout(()=>$("#msgText")?.focus(),50); });
+  const ta=$("#msgText"), sb=$("#msgSend");
+  const senden=async()=>{ if(!ta.value.trim()) return toast("Bitte erst etwas schreiben"); sb.disabled=true; const t=ta.value; ta.value=""; ta.blur(); if(!await nachrichtSenden(id,t)){ toast("Nicht gesendet – bitte nochmal"); } else toast("Gesendet ✓"); };
+  sb && (sb.onclick=senden);
+  ta && (ta.onkeydown=e=>{ if(e.key==="Enter" && !e.shiftKey && !/Android|iPhone|iPad/i.test(navigator.userAgent)){ e.preventDefault(); senden(); } });
+  document.querySelectorAll("[data-schnell]").forEach(b=>b.onclick=()=>{ if(!ta) return; ta.value=b.dataset.schnell; ta.focus(); });
+  const m=$("#msgKarte .msgs"); if(m) m.scrollTop=m.scrollHeight;
+  $("#tOk") && ($("#tOk").onclick=async()=>{ $("#tOk").disabled=true; const k=terminKey(o);
+    await upd(orderPath(id),{terminOk:{[myId()]:k}}); S.orders[id]={...S.orders[id],terminOk:{...(o.terminOk||{}),[myId()]:k}};
+    nachrichtSenden(id,`👍 Termin ${kurzDatum(o.termin)} passt.`); toast("Danke – JD Brüder sieht: Termin passt ✓",3000); });
+  $("#tNein") && ($("#tNein").onclick=()=>{ (S.msgOffen=S.msgOffen||{})[id]=true; render(); setTimeout(()=>{ const t=$("#msgText"); if(!t) return; t.value=`Termin ${kurzDatum(o.termin)} passt leider nicht, weil `; t.focus(); t.scrollIntoView({block:"center"}); },60); });
+}
 function bind(r){
   const app=$("#app");
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go("auftraege"));
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto]")) return; lightbox(t.dataset.zoom); });
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); },250); }; }
-  app.querySelectorAll("#flt [data-f], .stlink[data-f]").forEach(b=>b.onclick=()=>{ S.filter=S.filter===b.dataset.f&&b.dataset.f==="storniert"?"offen":b.dataset.f; render(); });
-  $("#nurMeine") && ($("#nurMeine").onchange=()=>{ S.nurMeine=$("#nurMeine").checked; render(); });
-  app.querySelectorAll("#landFlt [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
+  app.querySelectorAll("#flt [data-f], .fzeile [data-f], .tun [data-f], .spez-kopf [data-f]").forEach(b=>b.onclick=()=>{
+    const f=b.dataset.f, normal=HAUPT_PHASEN.some(([k])=>k===f);
+    if(f==="zurueck" || (S.filter===f && !normal)) S.filter=S.letzterBereich||meinePhasen()[0][0];
+    else { if(!SPEZIAL[S.filter] && S.filter!=="storniert") S.letzterBereich=S.filter; S.filter=f; if(normal) S.letzterBereich=f; }
+    render(true); });
+  $("#pushHinweis") && ($("#pushHinweis").onclick=pushDialog);
+  $("#nurMeine") && ($("#nurMeine").onclick=()=>{ S.nurMeine=!S.nurMeine; render(); });
+  app.querySelectorAll(".fzeile [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
   const no=$("#newOrder"); if(no) no.onclick=newOrderDialog;
   app.querySelectorAll("[data-kal]").forEach(b=>b.onclick=()=>{ const k=S.kal; if(!k) return; const d=new Date(k.start);
@@ -2519,16 +2675,13 @@ function bind(r){
   app.querySelectorAll("[data-kalv]").forEach(b=>b.onclick=()=>{ const k=S.kal; if(!k||k.ansicht===b.dataset.kalv) return; const d=new Date(k.start);
     k.ansicht=b.dataset.kalv; k.start=(k.ansicht==="monat"?new Date(d.getFullYear(),d.getMonth(),1):montagVon(d.getMonth()===new Date().getMonth()&&d.getFullYear()===new Date().getFullYear()?new Date():d)).getTime(); render(); });
   app.querySelectorAll("[data-kal-tag]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalTag)).getTime()}; render(); });
-  app.querySelectorAll("[data-kal-ueber]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalUeber)).getTime()}; render(); });
   app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
     const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Nicht verplant“`,3000); });
   app.querySelectorAll("[data-nv-zurueck]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); const o=S.orders[b.dataset.nvZurueck]; if(!o) return;
     await upd(orderPath(o.id),{nichtVerplant:null}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:null}; render(); toast(`${o.nr} steht wieder unter „Abholbereit“`,3000); });
-  $("#abnBanner") && ($("#abnBanner").onclick=()=>{ S.filter="abnahme"; render(); });
-  $("#pruefBanner") && ($("#pruefBanner").onclick=()=>{ S.filter="pruefung"; render(); });
-  $("#abnBack") && ($("#abnBack").onclick=e=>{ e.preventDefault(); S.filter="offen"; render(); });
   app.querySelectorAll("[data-rk-toggle]").forEach(b=>b.onclick=async()=>{ const rk=S.reklas[b.dataset.rkToggle]; await upd("reklamationen/"+rk.id,{offen:!rk.offen, erledigtAm:rk.offen?Date.now():null, erledigtVon:rk.offen?myId():null}); toast(rk.offen?"Reklamation erledigt ✓":"Wieder geöffnet"); });
   app.querySelectorAll("[data-rk-ans]").forEach(b=>b.onclick=()=>{ const rk=S.reklas[b.dataset.rkAns]; modal(`<h2>Antwort / Notiz</h2><textarea class="i" id="ans">${esc(rk.antwort||"")}</textarea><div class="grid2" style="margin-top:12px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd("reklamationen/"+rk.id,{antwort:m.querySelector("#ans").value.trim()}); close(); }; }); });
+  if(r.v==="detail") bindNachrichten(r.id);
   if(r.v==="detail") bindDetail(r.id);
   if(r.v==="fahrten") bindFahrten();
   $("#geldMonat") && ($("#geldMonat").onchange=()=>{ S.geldMonat=+$("#geldMonat").value; render(); });
@@ -3006,7 +3159,7 @@ function pushDialog(){
   const ios=/iPhone|iPad/i.test(navigator.userAgent), standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
   const an=pushAktiv();
   modal(`<h2>🔔 Benachrichtigungen</h2>
-   <div class="small mute">${can.sub()?"Du bekommst eine Nachricht aufs Handy, sobald JD Brüder deinen Bericht <b>freigegeben</b> hat und du deine Rechnung schreiben kannst.":"Du bekommst eine Nachricht aufs Handy, sobald meta einen Auftrag als <b>abholbereit</b> bestätigt, jemand eine <b>Reklamation</b> erfasst oder ein Subunternehmer einen <b>Bericht zur Prüfung</b> schickt."} Antippen öffnet den Auftrag.</div>
+   <div class="small mute">${!can.planen()?`Du bekommst eine Nachricht aufs Handy bei <b>neuen Terminen</b>, <b>Nachrichten</b> von JD Brüder und sobald dein <b>Bericht bestätigt</b> ist${can.sub()?" (dann kannst du die Rechnung schreiben)":""}.`:"Du bekommst eine Nachricht aufs Handy, sobald meta einen Auftrag als <b>abholbereit</b> bestätigt, jemand eine <b>Reklamation</b> erfasst, ein Bericht <b>zur Prüfung</b> kommt oder dir jemand im Auftrag <b>schreibt</b>."} Antippen öffnet den Auftrag.</div>
    ${!pushUnterstuetzt()?`<div class="banner warn" style="margin-top:10px">${ios&&!standalone?"Auf dem iPhone geht das nur aus der installierten App: In Safari auf <b>Teilen</b> → <b>Zum Home-Bildschirm</b> tippen, die App dort öffnen und hier erneut tippen.":"Dieser Browser unterstützt keine Benachrichtigungen. Bitte die App auf dem Handy öffnen (Chrome oder installierte App)."}</div>`:""}
    <div id="pst" class="small" style="margin-top:10px">${an?"✓ Auf diesem Gerät eingeschaltet.":""}</div>
    <div class="grid2" style="margin-top:12px">${an?`<button class="btn" id="pOff">Ausschalten</button><button class="btn pri" id="pTest">Test senden</button>`:`<button class="btn" data-close>Später</button><button class="btn pri" id="pOn" ${pushUnterstuetzt()?"":"disabled"}>Einschalten</button>`}</div>`,(m,close)=>{

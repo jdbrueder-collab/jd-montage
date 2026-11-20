@@ -54,6 +54,25 @@
   let store;
   try { store = params.has("reset") ? null : JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { store = null; }
   if (!store) store = seed();
+  // ?reset&live: echte Aufträge aus dev/live-snapshot.json (lokal, nicht im Repo) statt der Beispieldaten
+  if (params.has("reset") && params.has("live")) {
+    try {
+      const x = new XMLHttpRequest(); x.open("GET", "/dev/live-snapshot.json", false); x.send();
+      const snap = JSON.parse(x.responseText), base = seed();
+      store = {};
+      Object.keys(base).forEach(k => { if (!k.startsWith("auftraege/")) store[k] = base[k]; });
+      let n = 0;
+      Object.entries(snap).forEach(([k, v]) => {
+        if (k === "einstellungen/rollen" || k.startsWith("lohn")) return;
+        if (k === "einstellungen/allgemein") { store[k] = { ...v, testEmail: "test@example.com" }; return; }
+        if (k.startsWith("auftraege/")) {
+          v = { ...v, monteure: (v.monteure || []).map(() => ME) };
+          if (v.terminStatus === "fest" && !v.monteure.length) { v.monteure = [[SUB, MON, ME][n % 3]]; n++; }
+        }
+        store[k] = v;
+      });
+    } catch (e) { console.warn("live-snapshot fehlt", e); }
+  }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {} };
   save();
   if (params.has("reset")) { params.delete("reset"); history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params : "") + location.hash); }
@@ -109,7 +128,7 @@
   // Simulierter Server-Abruf: legt eine Anfrage der Disposition mit Dokumente.pdf an
   const sync = {
     async run(body = {}) {
-      if (body.pushTest || body.abholbereit || body.reklamation || body.subBericht || body.subFreigabe) { console.log("[TEST] Benachrichtigung (nicht gesendet):", body); window.__push = (window.__push || []).concat([body]); return { gesendet: 1, geraete: 1 }; }
+      if (body.pushTest || body.abholbereit || body.reklamation || body.subBericht || body.subFreigabe || body.termin || body.nachricht) { console.log("[TEST] Benachrichtigung (nicht gesendet):", body); window.__push = (window.__push || []).concat([body]); return { gesendet: 1, geraete: 1 }; }
       if (body.erinnerung) { console.log("[TEST] Erinnerung NICHT gesendet (Testumgebung) an", body.an); return { gesendet: true, an: [body.an], offen: 3 }; }
       const pdf = new Blob(["%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 595 842]/Parent 2 0 R>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF"], { type: "application/pdf" });
       const a = await assets.upload(pdf);

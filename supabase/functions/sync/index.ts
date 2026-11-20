@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       });
       const body = await req.json().catch(() => ({}));
       // Benachrichtigungen: meta meldet „abholbereit“, oder Test an die eigenen Geräte (alle freigegebenen Nutzer)
-      if (body?.abholbereit || body?.pushTest || body?.reklamation || body?.subBericht || body?.subFreigabe || body?.termin) {
+      if (body?.abholbereit || body?.pushTest || body?.reklamation || body?.subBericht || body?.subFreigabe || body?.termin || body?.nachricht) {
         const { data: member } = await user.rpc("is_member");
         const { data: u } = await user.auth.getUser();
         if (!member || !u?.user) return json({ code: "approval_required", message: "Kein Zugriff." }, 403);
@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
         if (body.subBericht) return json(await pushSubBericht(db, String(body.subBericht)));
         if (body.subFreigabe) return json(await pushSubFreigabe(db, String(body.subFreigabe)));
         if (body.termin) return json(await pushTermin(db, String(body.termin), u.user.id));
+        if (body.nachricht) return json(await pushNachricht(db, String(body.nachricht), u.user.id));
         return json(body.pushTest ? await pushTest(db, u.user.id) : await pushAbholbereit(db, String(body.abholbereit)));
       }
       const { data: owner } = await user.rpc("is_owner");
@@ -239,8 +240,27 @@ async function pushTermin(db: any, id: string, von: string) {
   const tag = new Date(o.termin).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
   return await pushSenden(db, new Set(an), {
     titel: `Neuer Termin: ${o.nr}`,
-    text: `${tag}${o.bauvorhaben ? " · " + o.bauvorhaben : ""}${o.plzOrt ? ", " + o.plzOrt : ""}`,
+    text: `${tag}${o.bauvorhaben ? " · " + o.bauvorhaben : ""}${o.plzOrt ? ", " + o.plzOrt : ""} – bitte in der App bestätigen`,
     url: APP_URL + "#a-" + id,
+  });
+}
+/** Nachricht im Auftrag → Chefs und Eingeteilte (ohne Absender) bekommen sie aufs Handy */
+async function pushNachricht(db: any, nid: string, von: string) {
+  const n = await getDoc(db, "nachrichten", nid);
+  if (!n || n.von !== von || !n.auftragId) return { gesendet: 0, grund: "unbekannt" };
+  if (n.gemeldetAm || Date.now() - (n.am || 0) > 15 * 60_000) return { gesendet: 0, grund: "schon gemeldet" };
+  const o = await getDoc(db, "auftraege", n.auftragId);
+  if (!o) return { gesendet: 0, grund: "kein Auftrag" };
+  await updDoc(db, "nachrichten", nid, { gemeldetAm: Date.now() });
+  const an = new Set<string>([...(await chefIds(db)), ...((o.monteure || []) as string[])]);
+  an.delete(von);
+  const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
+  const { data: prof } = await db.from("profiles").select("name").eq("id", von).maybeSingle();
+  const wer = rollen.info?.[von]?.firma || rollen.info?.[von]?.name || prof?.name || "JD Brüder";
+  return await pushSenden(db, an, {
+    titel: `💬 ${o.nr} · ${wer}`,
+    text: String(n.text || "").slice(0, 180),
+    url: APP_URL + "#a-" + n.auftragId,
   });
 }
 async function pushTest(db: any, uid: string) {

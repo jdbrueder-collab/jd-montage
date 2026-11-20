@@ -5,3 +5,4 @@ supabase/.temp/
 migration/
 .claude/
 backup/
+dev/live-snapshot.json
