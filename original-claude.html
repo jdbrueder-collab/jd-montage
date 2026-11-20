@@ -381,6 +381,16 @@ html[data-geraet=android] nav.bottom .nav-ic .badge{box-shadow:0 0 0 2px #f3f4f9
 .kopf-btn.dreht .ic{animation:sp .8s linear infinite}
 .kopf-btn.neu{background:var(--infobg);color:var(--info)}
 .kopf-btn.neu::after{content:"";position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#e5484d;box-shadow:0 0 0 2px #fff}
+
+/* ===== Vorschau (Ansicht wechseln) ===== */
+.vorschau{background:#1d2939;color:#fff;border-radius:14px;padding:10px 12px;margin-bottom:12px}
+.vorschau-k{display:flex;gap:4px;margin-top:8px;background:rgba(255,255,255,.1);border-radius:10px;padding:3px}
+.vorschau-k button{flex:1;border:0;background:transparent;color:#d0d5dd;font-weight:650;font-size:12.5px;padding:7px 2px;border-radius:8px;cursor:pointer}
+.vorschau-k button.on{background:#fff;color:#1d2939}
+/* ===== gemeinsamer Auftrag ===== */
+.gem-k{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:10px 12px;background:var(--greybg);border-radius:12px;cursor:pointer}
+.gem-k input{width:22px;height:22px;flex:none;margin-top:1px}
+.anteil{padding:10px 0;border-bottom:1px solid var(--line)}.anteil:last-of-type{border-bottom:0}
 </style>
 </head>
 <body>
@@ -507,7 +517,8 @@ const S = {
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
   profiles:{},pendingRender:false,anfragen:{},zugang:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
-  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},nachrichten:{}
+  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},nachrichten:{},
+  echt:{isOwner:false,me:null,role:"pending"},ansicht:new URLSearchParams(location.search).get("ansicht")||"chef"
 };
 
 function toast(msg,ms=2600){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms); }
@@ -631,6 +642,39 @@ function geraetDialog(){
   });
 }
 
+/* ============ Ansicht wechseln: Geschäftsleitung sieht die App wie Mitarbeiter, Sub oder meta ============ */
+const ANSICHTEN=[["chef","Chef"],["monteur","Mitarbeiter"],["sub","Subunternehmer"],["meta","meta"]];
+const vorschauSubs=()=>Object.keys(S.roles||{}).filter(k=>S.roles[k]==="sub").sort((a,b)=>(a==="test-sub")-(b==="test-sub"));
+function ansichtAnwenden(){
+  const E=S.echt; S.isOwner=E.isOwner; S.role=E.role; S.me=E.me;
+  if(!E.isOwner || S.ansicht==="chef" || !ANSICHTEN.some(([k])=>k===S.ansicht)){ S.ansicht="chef"; return; }
+  S.isOwner=false;
+  if(S.ansicht==="meta"){ S.role="hersteller"; return; }
+  if(S.ansicht==="sub"){ const u=S.vorschauSub&&S.roles[S.vorschauSub]==="sub"?S.vorschauSub:vorschauSubs()[0];
+    if(!u){ S.ansicht="chef"; S.isOwner=true; S.role=E.role; setTimeout(()=>toast("Noch kein Subunternehmer angelegt (Setup → Zugänge)",3500),50); return; }
+    S.role="sub"; S.me={...(E.me||{}),id:u,name:nameOf(u)}; return; }
+  S.role="monteur";
+}
+function ansichtWechseln(a){
+  S.ansicht=a; try{ const u=new URL(location.href); if(a==="chef") u.searchParams.delete("ansicht"); else u.searchParams.set("ansicht",a); history.replaceState(null,"",u.pathname+u.search+u.hash); }catch(e){}
+  ansichtAnwenden(); S.filter=a==="chef"?"offen":"arbeit"; S.q="";
+  if(location.hash!=="#auftraege") location.hash="auftraege"; else render(true);
+  toast(a==="chef"?"Zurück in der Chef-Ansicht":`Ansicht: ${ANSICHTEN.find(x=>x[0]===a)[1]}${a==="sub"&&S.me?.name?" ("+S.me.name+")":""}`,2500);
+}
+function vorschauLeiste(){
+  if(!S.echt.isOwner || S.ansicht==="chef") return "";
+  const subs=vorschauSubs();
+  return `<div class="vorschau"><div class="row between" style="flex-wrap:nowrap;gap:8px"><b>👁 Vorschau</b><span class="small" style="opacity:.8">so sieht es ${S.ansicht==="sub"?esc(S.me?.name||"der Sub"):ANSICHTEN.find(x=>x[0]===S.ansicht)[1]}</span></div>
+    <div class="vorschau-k">${ANSICHTEN.map(([k,l])=>`<button class="${S.ansicht===k?"on":""}" data-ansicht="${k}">${l}</button>`).join("")}</div>
+    ${S.ansicht==="sub"&&subs.length>1?`<select class="i" id="vorschauSub" style="margin-top:6px;min-height:36px">${subs.map(u=>`<option value="${esc(u)}" ${u===myId()?"selected":""}>${esc(u===myId()?(S.me?.name||u):nameOf(u))}</option>`).join("")}</select>`:""}</div>`;
+}
+function ansichtDialog(){
+  modal(`<h2>👁 Ansicht wechseln</h2><div class="small mute">Sieh dir die App so an, wie sie deine Leute und meta sehen. Du bleibst als Chef angemeldet – alles, was du tippst, wird wirklich gespeichert. Am besten mit einem Testauftrag.</div>
+   <div style="display:grid;gap:8px;margin-top:12px">${ANSICHTEN.map(([k,l])=>`<button class="btn block geraet-k ${S.ansicht===k?"on":""}" data-ansicht="${k}"><b style="flex:1;text-align:left">${l}</b>${S.ansicht===k?"✓":""}</button>`).join("")}</div>`,(m,close)=>{
+    m.querySelectorAll("[data-ansicht]").forEach(b=>b.onclick=()=>{ close(); ansichtWechseln(b.dataset.ansicht); });
+  });
+}
+
 /* ============ Rollen ============ */
 const can = {
   finanzen:()=>S.isOwner,
@@ -703,7 +747,8 @@ const berichtVerschickt=o=>!!o.abschluss && o.berichtStatus==="gesendet";
 // Vom Chef bestätigt oder schon an meta gesendet → für niemanden mehr änderbar
 const berichtGesperrt=o=>!!o.bestaetigtAm || o.berichtStatus==="gesendet";
 // Mitarbeiter/Subunternehmer hat „Montage fertig“ gedrückt → für ihn abgegeben, nur noch ansehen
-const berichtAbgegeben=o=>!!o.abschluss && !can.planen();
+const berichtAbgegeben=o=>!can.planen() && (o.gemeinsam&&can.sub()?!!o.subAnteil?.[myId()]?.abgegebenAm:!!o.abschluss);
+const anteilOffen=o=>!!o.gemeinsam && Object.values(o.subAnteil||{}).some(a=>a?.abgegebenAm&&!a.bestaetigtAm);
 const berichtVonWem=o=>o.berichtVonSub||o.berichtVon||o.abschluss?.by;
 // Erledigt, aber die Abrechnung von meta fehlt noch
 const wartetAufAbrechnung=o=>berichtVerschickt(o) && !abgerechnet(o) && !o.storniert;
@@ -722,6 +767,7 @@ const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).len
 const abhBereit=o=>o.prodStatus==="abholbereit" && !o.nichtVerplant;
 function phase(o){
   if(o.storniert) return "storniert";
+  if(o.gemeinsam && can.sub()) return o.subAnteil?.[myId()]?.abgegebenAm?"erledigt":terminiert(o)?"arbeit":abhBereit(o)?"abholbereit":"offen"; // gemeinsamer Auftrag: Sub ist fertig, wenn sein Anteil abgegeben ist
   if(abgerechnet(o) || berichtVerschickt(o) || berichtAbgegeben(o)) return "erledigt"; // Bericht verschickt/abgegeben oder Abrechnung da
   if(terminiert(o)) return "arbeit";
   if(abhBereit(o)) return "abholbereit"; // Ware fertig – jetzt einplanen
@@ -755,7 +801,7 @@ const langDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"long",day:"2
 
 /* ---------- „Zu tun“: was jetzt ansteht, je Rolle ---------- */
 const SPEZIAL={
-  pruefung:{t:"Berichte prüfen",cls:"warn",p:()=>`Prüfen`,f:o=>o.berichtStatus==="pruefung"},
+  pruefung:{t:"Berichte und Anteile prüfen",cls:"warn",p:()=>`Prüfen`,f:o=>o.berichtStatus==="pruefung"||anteilOffen(o)},
   msg:{t:"Neue Nachrichten",cls:"msg",p:()=>`Nachrichten`,f:o=>binBeteiligt(o)&&ungelesen(o.id)>0},
   ueber:{t:"Überfällige Termine – Montage nicht abgeschlossen",cls:"bad",p:()=>`Überfällig`,f:o=>ueberfaellig(o)},
   ohneTeam:{t:"Termin, aber niemand eingeteilt",cls:"warn",p:()=>`Ohne Team`,f:o=>phase(o)==="arbeit"&&!istFertig(o)&&!(o.monteure||[]).length},
@@ -785,6 +831,7 @@ async function boot(){
   if(user){
     try{ S.isOwner = !!(await user.isOwner()); }catch(e){}
     try{ S.me = await user.me(); }catch(e){}
+    S.echt={isOwner:S.isOwner,me:S.me,role:S.isOwner?"chef":"pending"}; // echte Rolle – die Ansicht kann der Inhaber wechseln
   }
   const timer=setTimeout(()=>{ if(!S.loaded){ S.loadErr="Daten konnten noch nicht geladen werden – bitte Internet prüfen."; render(); } },10000);
   const err = e => { clearTimeout(timer); S.loadErr = e.code==="revoked" ? "Kein Zugriff mehr auf die Daten." : "Datenverbindung unterbrochen ("+e.code+"). Seite neu öffnen."; render(); };
@@ -802,7 +849,7 @@ async function boot(){
   db.doc("einstellungen/allgemein").onSnapshot(d=>{ S.settings=d.exists?d.data():{}; maybeStoreOwner(); scheduleRender(); }, ()=>{});
   db.doc("einstellungen/rollen").onSnapshot(d=>{
     S.roles=(d.exists?d.data().map:null)||{}; S.rolesInfo=(d.exists?d.data().info:null)||{};
-    S.role = S.isOwner ? "chef" : (S.roles[myId()] || "pending"); S.rolesLoaded=true;
+    S.echt.role = S.echt.isOwner ? "chef" : (S.roles[S.echt.me?.id] || "pending"); ansichtAnwenden(); S.rolesLoaded=true;
     if(S.isOwner && S.preise){ const chefs=Object.keys(S.roles).filter(k=>S.roles[k]==="chef").sort().join(","); if(chefs!==[...(S.preise.sichtbarFuer||[])].sort().join(",")) savePreise({}).catch(()=>{}); }
     loadProfiles(Object.keys(S.roles)); scheduleRender();
   }, ()=>{});
@@ -865,7 +912,7 @@ function render(scrollTop){
   if(!S.loaded){ app.innerHTML=`<div class="empty"><span class="spin"></span><br><br>Aufträge werden geladen …</div>`; return; }
   const r=route();
   if(r.v!=="detail" && S.fotoUnsub){ S.fotoUnsub(); S.fotoUnsub=null; S.fotoFor=null; }
-  let html="";
+  let html=vorschauLeiste();
   if(S.loadErr) html+=`<div class="banner bad">${esc(S.loadErr)}</div>`;
   if(S.role==="pending"){ app.innerHTML=S.rolesLoaded?viewPending()+`<div style="margin-top:16px">${kontoKarte()}</div>`:`<div class="empty"><span class="spin"></span></div>`; bindPending(); bindKonto(); return; }
   if(S.role==="hersteller" && !S.isOwner){ app.innerHTML=iconize(html+viewMeta()); bindMeta(); bind({v:"meta"}); if(scrollTop) window.scrollTo(0,0); return; }
@@ -953,6 +1000,10 @@ const montagVon=d=>{ const m=new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const WT=["Mo","Di","Mi","Do","Fr","Sa","So"];
 function statusPills(o, imKal){
   if(o.storniert) return [["bad","storniert"]];
+  if(o.gemeinsam && can.sub()){ const an=o.subAnteil?.[myId()]||{}, q=[];
+    if(an.bestaetigtAm) q.push(["ok","✓ bestätigt · Rechnung schreiben"]); else if(an.abgegebenAm) q.push(["info","⏳ wartet auf Bestätigung"]);
+    else { q.push(["","🤝 mit JD Brüder"]); if(!imKal&&o.termin) q.push(["",kurzDatum(o.termin)]); if(terminOffenFuerMich(o)) q.push(["warn","👍 bestätigen"]); }
+    const un=ungelesen(o.id); if(un) q.push(["msg",un]); return q; }
   const p=[], chef=can.planen(), ph=phase(o);
   if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o)) p.push(["gold","NEU"]);
   if(istFertig(o) || ph==="erledigt"){
@@ -978,6 +1029,7 @@ function statusPills(o, imKal){
     if(o.quelle==="mail-dispo" && !o.zusage) p.push(["gold","📨 Anfrage"]);
     if(o.prodStatus==="abholbereit" && o.nichtVerplant) p.push(["","↩ von Hand verschoben"]);
   }
+  if(chef && o.gemeinsam) p.push(anteilOffen(o)?["warn","🤝 Anteil prüfen"]:["","🤝 mit Sub"]);
   const rk=offeneReklas(o.id).length; if(rk) p.push(["bad",`⚠ ${rk} Rekla`]);
   if((o.leerfahrten||[]).length && !istFertig(o)) p.push(["warn","↩ Leerfahrt"]);
   if(binBeteiligt(o)){ const un=ungelesen(o.id); if(un) p.push(["msg",un]); }
@@ -1173,6 +1225,47 @@ async function nachrichtSenden(id, text){
   catch(e){ delete S.nachrichten[nid]; render(); return false; }
 }
 
+/* ---------- Gemeinsamer Auftrag: Anteil des Subunternehmers ---------- */
+function anteilKarte(o){
+  const me=myId(), a=o.subAnteil?.[me]||{}, zu=!!a.abgegebenAm;
+  const f=(k,l,ph,mode="decimal")=>`<div><label class="f">${l}</label><input class="i" data-an="${k}" inputmode="${mode}" value="${esc(a[k]??"")}" placeholder="${ph}" ${zu?"disabled":""}></div>`;
+  return `<div class="card"><h3>🤝 Mein Anteil</h3>
+    <div class="small mute" style="margin-bottom:8px">Gemeinsamer Auftrag mit JD Brüder: Trag ein, was ihr gearbeitet habt – das ist die Grundlage für deine Rechnung. Den Montagebericht an meta schreibt JD Brüder.</div>
+    ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:zu?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
+    <div class="grid3">${f("tage","Arbeitstage","z. B. 2")}${f("stunden","Stunden gesamt","z. B. 16")}${f("personen","Personen","z. B. 2","numeric")}</div>
+    <label class="f">Was habt ihr gemacht?</label><textarea class="i" data-an="taetigkeit" ${zu?"disabled":""} placeholder="z. B. 6 Kabinen im 1. OG montiert">${esc(a.taetigkeit||"")}</textarea></div>
+   ${S.lohnPos.length?lohnCard(o):""}
+   ${zu?"":`<button class="btn ok block" id="anteilAb" style="min-height:52px;margin-bottom:12px">✓ Anteil abgeben</button>`}`;
+}
+function anteilChefKarte(o){
+  const subs=[...new Set([...(o.monteure||[]).filter(m=>S.roles[m]==="sub"),...Object.keys(o.subAnteil||{})])]; if(!subs.length) return "";
+  return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Anteil Subunternehmer</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)], c=l&&can.preise()?calcLohn(l,S.preise):null;
+    const pos=l?S.lohnPos.filter(x=>nn(l.mengen?.[x.k])).map(x=>`${String(l.mengen[x.k]).replace(".",",")}× ${esc(x.label)}`):[];
+    return `<div class="anteil"><div class="row between" style="flex-wrap:nowrap;gap:8px"><b>${esc(nameOf(u))}</b>${a.bestaetigtAm?`<span class="chip ok">✓ bestätigt</span>`:a.abgegebenAm?`<span class="chip warn">📥 zu prüfen</span>`:`<span class="chip">noch nicht abgegeben</span>`}</div>
+      <div class="small" style="margin-top:4px">${[a.tage?a.tage+" Tag(e)":"",a.stunden?a.stunden+" Std.":"",a.personen?a.personen+" Pers.":""].filter(Boolean).join(" · ")||'<span class="mute">noch keine Zeiten</span>'}</div>
+      ${a.taetigkeit?`<div class="small mute" style="white-space:pre-wrap">${esc(a.taetigkeit)}</div>`:""}
+      ${pos.length?`<div class="small" style="margin-top:4px">${pos.join(" · ")}${c?` = <b>${fmtEUR(c.total)}</b>`:""}</div>`:""}
+      ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Anteil bestätigen</button>`:""}</div>`; }).join("")}
+    <div class="small mute" style="margin-top:6px">Nur für die Abrechnung mit dem Subunternehmer – geht nicht an meta. Mengen korrigierst du unter „Positionsergänzung“.</div></div>`;
+}
+function bindAnteil(id){
+  const o=S.orders[id]; if(!o) return; const P=orderPath(id);
+  $("#gemeinsam") && ($("#gemeinsam").onchange=async()=>{ const v=$("#gemeinsam").checked; await upd(P,{gemeinsam:v}); S.orders[id]={...S.orders[id],gemeinsam:v}; render(); toast(v?"🤝 Gemeinsamer Auftrag – der Sub trägt nur seinen Anteil ein":"Normaler Auftrag",3000); });
+  document.querySelectorAll("[data-an]").forEach(i=>i.onchange=()=>upd(P,{subAnteil:{[myId()]:{[i.dataset.an]:i.value.trim()}}}));
+  $("#anteilAb") && ($("#anteilAb").onclick=async()=>{
+    const a={...(o.subAnteil?.[myId()]||{})}; document.querySelectorAll("[data-an]").forEach(i=>a[i.dataset.an]=i.value.trim());
+    const l=S.lohn[lohnDocId(id,myId())]; const hatPos=l&&Object.values(l.mengen||{}).some(v=>nn(v));
+    if(!nn(a.stunden)&&!nn(a.tage)&&!hatPos) return toast("Bitte Zeit oder Positionen eintragen",3000);
+    if(!await confirmBox("Anteil abgeben?","JD Brüder prüft deinen Anteil und bestätigt ihn. Danach kannst du deine Rechnung schreiben. Ändern geht nach dem Abgeben nicht mehr.","Abgeben","ok")) return;
+    const neu={...a,abgegebenAm:Date.now()}; await upd(P,{subAnteil:{[myId()]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[myId()]:neu}};
+    nachrichtSenden(id,"🤝 Mein Anteil ist eingetragen – bitte prüfen und bestätigen."); toast("Abgegeben ✓ – JD Brüder bekommt Bescheid",3000); render();
+  });
+  document.querySelectorAll("[data-anteil-ok]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.anteilOk;
+    if(!await confirmBox("Anteil bestätigen?",`Ist der Anteil von <b>${esc(nameOf(u))}</b> korrekt? Danach ist er gesperrt und ${esc(nameOf(u))} kann die Rechnung schreiben.`,"Bestätigen","ok")) return;
+    const neu={...(o.subAnteil?.[u]||{}),bestaetigtAm:Date.now(),bestaetigtVon:myId()}; await upd(P,{subAnteil:{[u]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[u]:neu}};
+    nachrichtSenden(id,`✓ Anteil von ${nameOf(u)} bestätigt – die Rechnung kann geschrieben werden.`); toast("Bestätigt ✓",2500); render(); });
+}
+
 /* ---------- Detail ---------- */
 function viewDetail(id){
   const o=S.orders[id];
@@ -1219,6 +1312,7 @@ function viewDetail(id){
     <label class="f">Auftrag zuteilen</label>
     <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip ${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?"ok":"warn"):"info"}" title="${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?"Termin bestätigt":"Termin noch nicht bestätigt"):""}">👷 ${esc(nameOf(m))}${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?" ✓":" · ⏳"):""}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand zugeteilt</span>`}
     ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ zuteilen</button>`:""}</div>
+    ${can.planen()&&(o.monteure||[]).some(m=>S.roles[m]==="sub")?`<label class="gem-k"><input type="checkbox" id="gemeinsam" ${o.gemeinsam?"checked":""}><span><b>🤝 Zusammen mit dem Subunternehmer</b><span class="small mute" style="display:block">Der Sub trägt nur seinen Anteil ein (Zeit, Positionen) – für seine Abrechnung. Den Montagebericht an meta schreibst du.</span></span></label>`:""}
     ${can.planen()&&!o.storniert?`<button class="btn sm ghost" id="stornoSetzen" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}
   </div>`;
 
@@ -1256,7 +1350,9 @@ function viewDetail(id){
   h+=erl?`<div id="unterlagenCard">${fold("unter","Unterlagen &amp; Zeichnungen",`${fk("unterlagen").length} Datei(en)`,unterInhalt)}</div>`:`<div class="card" id="unterlagenCard"><h3>Unterlagen &amp; Zeichnungen</h3>${unterInhalt}</div>`;
 
   // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Sichtabnahme → Versand
-  if(erl || berichtGesperrt(o) || berichtAbgegeben(o)){
+  if(o.gemeinsam && can.sub()){
+    if(!frueh) h+=anteilKarte(o);
+  } else if(erl || berichtGesperrt(o) || berichtAbgegeben(o)){
     const stand=o.bestaetigtAm?`bestätigt am ${fmtDT(o.bestaetigtAm)} – nicht mehr änderbar`:o.berichtStatus==="gesendet"?"an meta gesendet – nicht mehr änderbar":o.berichtStatus==="pruefung"?"abgegeben – wartet auf Bestätigung durch JD Brüder":"fertig – nicht mehr änderbar";
     if(o.abschluss||o.bericht) h+=`<button class="card fold foldbtn" id="berichtAnsehen" style="width:100%;text-align:left;border:0;cursor:pointer"><b>📄 Montagebericht</b><span class="small mute">ansehen · ${stand}</span></button>`;
   } else if(can.einsatz() && !frueh){
@@ -1271,8 +1367,12 @@ function viewDetail(id){
     }
   }
 
-  // Bericht-Versand
-  if(o.berichtStatus==="pruefung"){
+  // Anteil des Subunternehmers (gemeinsamer Auftrag) – nur für die Abrechnung, geht nicht an meta
+  if(o.gemeinsam && can.planen() && !frueh) h+=anteilChefKarte(o);
+
+  // Bericht-Versand (beim gemeinsamen Auftrag sieht der Sub nur seinen Anteil)
+  if(o.gemeinsam && can.sub()){ /* nichts – der Bericht an meta kommt vom Chef */ }
+  else if(o.berichtStatus==="pruefung"){
     h+=`<div class="card" style="border-left:5px solid var(--accent)"><h3>${can.planen()?"Bericht prüfen":"Montagebericht"}</h3>
      ${can.planen()?(()=>{ const sl=S.lohn[lohnDocId(o.id,o.berichtVonSub)]; const sc=sl?calcLohn(sl,S.preise):null; const meta=can.finanzen()&&S.fin[o.id]?Number(S.fin[o.id].summe)||0:null;
        return `<div class="banner warn">Bericht von <b>${esc(nameOf(berichtVonWem(o)))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Sichtabnahme). Du kannst oben noch alles ändern. Nach deiner Bestätigung ist der Bericht <b>gesperrt</b>${o.berichtVonSub?", und der Subunternehmer darf seine Rechnung schreiben":""}.</div>
@@ -1968,8 +2068,9 @@ function lohnCard(o){
   let uid=S.lohnFor[o.id]; if(!uid || (!darfAndere && uid!==myId())) uid=myId();
   const d=S.lohn[lohnDocId(o.id,uid)]||{};
   // Chefs sehen die Liste der Person; Subunternehmer (z. B. Zeltwald) sehen ihre eigene hinterlegte Liste
-  const P=can.preise()?preisFuer(uid):(uid===myId()&&S.preise?S.preise:null);
-  const editable=uid===myId()||darfAndere;
+  const P=can.preise()?preisFuer(uid):(uid===myId()&&S.preise?preisFuer(uid):null);
+  const anU=o.gemeinsam?o.subAnteil?.[uid]:null;
+  const editable=(uid===myId()||darfAndere) && !anU?.bestaetigtAm && !(anU?.abgegebenAm && !can.planen());
   const tage=[...new Set((o.zeiten||[]).map(z=>new Date(z.s).toLocaleDateString("de-DE")))].join(", ");
   const posRow=p=>{ const q=d.mengen?.[p.k]??""; const ep=P?nn(P.preise?.[p.k]):null;
     return `<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap"><div style="flex:1;min-width:0">${esc(p.label)}<div class="small mute">${esc(p.einheit||"")}${P?" · "+fmtEUR(ep):""}</div></div>
@@ -1980,7 +2081,7 @@ function lohnCard(o){
   const sortiert=[...S.lohnPos].sort((a,b)=>(nutz[b.k]||0)-(nutz[a.k]||0)||(b.haeufig?1:0)-(a.haeufig?1:0)||String(a.label).localeCompare(String(b.label),"de"));
   const c=calcLohn(d,P);
   const anz=Object.values(d.mengen||{}).filter(v=>nn(v)).length;
-  const offen=S.lohnOpen[o.id]??false;
+  const offen=S.lohnOpen[o.id]??(!!o.gemeinsam&&can.sub());
   const gewaehlt=sortiert.filter(p=>!leer(d.mengen?.[p.k])&&nn(d.mengen[p.k]));
   return `<div class="card"><details id="lohnDet" ${offen?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionsergänzung</b><div class="small mute">${anz?`${anz} Position${anz>1?"en":""} eingetragen`:"Mengen der montierten Positionen eintragen"}${c?` · Montagebetrag ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
@@ -2725,8 +2826,9 @@ const monatKey=ts=>{ const d=new Date(ts||0); return d.getFullYear()*100+d.getMo
 const monatName=k=>new Date(Math.floor(k/100),k%100,1).toLocaleDateString("de-DE",{month:"long",year:"numeric"});
 function subPosten(){
   return Object.values(S.lohn).filter(l=>l.uid===myId()).map(l=>{ const o=S.orders[l.auftragId]||{nr:l.nr,id:l.auftragId}; const c=calcLohn(l,S.preise)||{lines:[],total:0};
-    const frei=!!o.subGeprueftAm && o.berichtStatus!=="pruefung";
-    const am=o.subGeprueftAm||o.abschluss?.am||l.am||0; return {l,o,c,am,fertig:frei}; }).filter(x=>x.c.total>0||x.c.lines.length).sort((a,b)=>b.am-a.am);
+    const an=o.gemeinsam?o.subAnteil?.[myId()]:null;
+    const frei=o.gemeinsam?!!an?.bestaetigtAm:(!!o.subGeprueftAm && o.berichtStatus!=="pruefung");
+    const am=(o.gemeinsam?an?.bestaetigtAm||an?.abgegebenAm:o.subGeprueftAm)||o.abschluss?.am||l.am||0; return {l,o,c,am,fertig:frei}; }).filter(x=>x.c.total>0||x.c.lines.length).sort((a,b)=>b.am-a.am);
 }
 function subAbrechnungText(liste,k){
   const name=S.preise?.name||nameOf(myId());
@@ -2909,6 +3011,8 @@ function bind(r){
     render(); });
   app.querySelectorAll("[data-kalv]").forEach(b=>b.onclick=()=>{ const k=S.kal; if(!k||k.ansicht===b.dataset.kalv) return; const d=new Date(k.start);
     k.ansicht=b.dataset.kalv; k.start=(k.ansicht==="monat"?new Date(d.getFullYear(),d.getMonth(),1):montagVon(d.getMonth()===new Date().getMonth()&&d.getFullYear()===new Date().getFullYear()?new Date():d)).getTime(); render(); });
+  app.querySelectorAll("#app [data-ansicht]").forEach(b=>b.onclick=()=>ansichtWechseln(b.dataset.ansicht));
+  $("#vorschauSub") && ($("#vorschauSub").onchange=()=>{ S.vorschauSub=$("#vorschauSub").value; ansichtAnwenden(); render(true); });
   app.querySelectorAll("[data-ankunft]").forEach(b=>b.onclick=()=>ankunftDialog(b.dataset.ankunft));
   app.querySelectorAll("[data-kal-tag]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalTag)).getTime()}; render(); });
   app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
@@ -2918,6 +3022,7 @@ function bind(r){
   app.querySelectorAll("[data-rk-toggle]").forEach(b=>b.onclick=async()=>{ const rk=S.reklas[b.dataset.rkToggle]; await upd("reklamationen/"+rk.id,{offen:!rk.offen, erledigtAm:rk.offen?Date.now():null, erledigtVon:rk.offen?myId():null}); toast(rk.offen?"Reklamation erledigt ✓":"Wieder geöffnet"); });
   app.querySelectorAll("[data-rk-ans]").forEach(b=>b.onclick=()=>{ const rk=S.reklas[b.dataset.rkAns]; modal(`<h2>Antwort / Notiz</h2><textarea class="i" id="ans">${esc(rk.antwort||"")}</textarea><div class="grid2" style="margin-top:12px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd("reklamationen/"+rk.id,{antwort:m.querySelector("#ans").value.trim()}); close(); }; }); });
   if(r.v==="detail") bindNachrichten(r.id);
+  if(r.v==="detail") bindAnteil(r.id);
   if(r.v==="detail") bindDetail(r.id);
   if(r.v==="fahrten") bindFahrten();
   $("#geldMonat") && ($("#geldMonat").onchange=()=>{ S.geldMonat=+$("#geldMonat").value; render(); });
@@ -3438,6 +3543,7 @@ function kontoKarte(){
   return `<div class="card konto"><h3>Mein Konto</h3>
     <div class="row between" style="flex-wrap:nowrap;gap:10px"><div style="min-width:0"><div style="font-weight:700">${esc(S.me?.name||mail||"Angemeldet")}</div>${mail?`<div class="small mute" style="overflow:hidden;text-overflow:ellipsis">${esc(mail)}</div>`:""}</div><span class="chip">${esc(rolle)}</span></div>
     <div class="konto-k">
+      ${S.echt.isOwner?`<button class="btn" id="kAnsicht">👁 Ansicht wechseln <span class="small mute" style="margin-left:auto">${ANSICHTEN.find(x=>x[0]===S.ansicht)[1]}</span></button>`:""}
       <button class="btn" id="kGeraet">📱 Mein Gerät <span class="small mute" style="margin-left:auto">${GERAETE[meinGeraet()]}</span></button>
       ${push?`<button class="btn" id="kPush">🔔 Benachrichtigungen <span class="small ${pushAktiv()?"":"mute"}" style="margin-left:auto;${pushAktiv()?"color:var(--ok)":""}">${pushAktiv()?"an":"aus"}</span></button>`:""}
       ${push&&!pushAktiv()?`<div class="small mute" style="margin:-2px 2px 2px">${meinGeraet()==="ios"&&!istInstalliertApp()?"Auf dem iPhone gehen Benachrichtigungen nur aus der App auf dem Home-Bildschirm – zuerst „App auf den Startbildschirm“ unten.":"Einschalten, damit du Termine, Nachrichten und Bestätigungen sofort aufs Handy bekommst."}</div>`:""}
@@ -3449,6 +3555,7 @@ function kontoKarte(){
 function bindKonto(){
   $("#kPush") && ($("#kPush").onclick=pushDialog);
   $("#kGeraet") && ($("#kGeraet").onclick=geraetDialog);
+  $("#kAnsicht") && ($("#kAnsicht").onclick=ansichtDialog);
   $("#kMails") && ($("#kMails").onclick=syncMails);
   $("#kInst") && ($("#kInst").onclick=()=>window.jdInstallHilfe(true));
   $("#kAus") && ($("#kAus").onclick=async()=>{ if(!await confirmBox("Abmelden?","Du musst dich danach mit deiner E-Mail-Adresse neu anmelden.","Abmelden")) return;
