@@ -2391,11 +2391,11 @@ function vdDefaults(o){
   if(b.taetigkeit) bem.push(b.taetigkeit);
   sonder.forEach(s=>bem.push(`Sonderarbeit: ${sonderZeile(s)}`));
   if(!leer(b.personen)||!leer(b.personenMit)) bem.push(`Personen: ${[leer(b.personen)?"":`${b.personen} vor Ort`,leer(b.personenMit)?"":`${b.personenMit} mitgefahren`].filter(Boolean).join(", ")}`);
-  if(rk && rk.ursache!=="teile" && !rk.leerfahrt) bem.push(`Reklamation (${URSACHEN[rk.ursache]||rk.ursache}): ${rk.text}`);
   if(b.bemerkung) bem.push(b.bemerkung);
   vorleistungZeilen(o).forEach(z=>bem.push(z));
   d.bemerkungen=bem.join("\n");
-  d.fertigung=(rk&&rk.ursache==="teile")?rk.text:"";
+  // Fertigung: alle Reklamationen dieses Auftrags, jede in eigener Zeile (Leerfahrten stehen als Vorleistung bei den Bemerkungen)
+  d.fertigung=Object.values(S.reklas).filter(r=>r.auftragId===o.id && !r.leerfahrt).sort((a,c)=>(a.am||0)-(c.am||0)).map(r=>`${URSACHEN[r.ursache]||r.ursache}: ${String(r.text||"").replace(/\s*\n\s*/g," ")}`).join("\n");
   // Montage-Abrechnung ganz unten: ausschließlich gefahrene km und Geschosse
   const ab=[];
   const lk=leerKm(o), ld=(o.leerfahrten||[]).filter(l=>nn(l.km)).map(leerDatum).join(", ");
@@ -3304,7 +3304,12 @@ function reklaBearbeiten(rid){
    <label class="f">Beschreibung – was ist passiert? *</label><textarea class="i" id="t">${esc(r.text||"")}</textarea>
    <label class="f">Fotos</label><div class="thumbs" id="rf"></div>
    <label class="btn sm ghost" style="margin-top:6px">＋ Fotos hinzufügen<input type="file" accept="image/*" multiple hidden id="rfi"></label>
-   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>
+   <button class="btn sm ghost block" id="rkDel" style="margin-top:10px;color:var(--bad)">🗑 Reklamation löschen</button>`,(m,close)=>{
+    m.querySelector("#rkDel").onclick=async()=>{
+      if(!await confirmBox("Reklamation löschen?",`„${esc(String(r.text||"").slice(0,80))}${String(r.text||"").length>80?"…":""}“ wird gelöscht und erscheint nicht mehr im Montagebericht. Das lässt sich nicht rückgängig machen.`,"Löschen","bad")) return;
+      try{ await S.db.doc("reklamationen/"+rid).delete(); delete S.reklas[rid]; close(); render(); toast("Reklamation gelöscht"); }catch(e){ toast("Löschen fehlgeschlagen"); }
+    };
     const show=()=>{ m.querySelector("#rf").innerHTML=fotos.map((f,i)=>`<div class="t"><img src="${f.url}" alt=""><button class="rk-x" data-fx="${i}" aria-label="Foto entfernen">✕</button></div>`).join("");
       m.querySelectorAll("[data-fx]").forEach(b=>b.onclick=e=>{ e.preventDefault(); fotos.splice(Number(b.dataset.fx),1); show(); }); };
     show();
