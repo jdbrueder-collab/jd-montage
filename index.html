@@ -391,6 +391,20 @@ html[data-geraet=android] nav.bottom .nav-ic .badge{box-shadow:0 0 0 2px #f3f4f9
 .gem-k{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:10px 12px;background:var(--greybg);border-radius:12px;cursor:pointer}
 .gem-k input{width:22px;height:22px;flex:none;margin-top:1px}
 .anteil{padding:10px 0;border-bottom:1px solid var(--line)}.anteil:last-of-type{border-bottom:0}
+
+/* ===== Preisliste des Subunternehmers ===== */
+.pl-z{display:grid;grid-template-columns:1fr 78px 78px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.pl-z.voll{background:linear-gradient(90deg,var(--okbg),transparent);border-radius:8px}
+.pl-l{font-size:14px;font-weight:600;line-height:1.25;padding-left:4px}.pl-l span{display:block;font-size:12px;font-weight:500;color:var(--mute)}
+.pl-q{min-height:40px!important;text-align:right;padding:6px 8px!important}
+.pl-gp{text-align:right;font-size:13px;font-weight:650}
+.pl-etage{grid-template-columns:1fr}
+.pl-summe{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;padding-top:10px;border-top:2px solid var(--ink)}.pl-summe span{font-size:22px;font-weight:800}
+table.abr{width:100%;border-collapse:collapse;font-size:13.5px}
+table.abr th{text-align:left;font-size:11.5px;color:var(--mute);font-weight:700;padding:4px 4px;border-bottom:1px solid var(--line)}
+table.abr td{padding:5px 4px;border-bottom:1px solid var(--line)}
+table.abr th:not(:first-child),table.abr td:not(:first-child){text-align:right;white-space:nowrap}
+table.abr tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var(--ink)}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -408,7 +422,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="7b76fbdb74fa";</script>
+<script>window.JD_BUILD="39d2745f22e4";</script>
 </head>
 <body>
 <header class="top">
@@ -1046,7 +1060,7 @@ function statusPills(o, imKal){
     if(o.quelle==="mail-dispo" && !o.zusage) p.push(["gold","📨 Anfrage"]);
     if(o.prodStatus==="abholbereit" && o.nichtVerplant) p.push(["","↩ von Hand verschoben"]);
   }
-  if(chef && o.gemeinsam) p.push(anteilOffen(o)?["warn","🤝 Anteil prüfen"]:["","🤝 mit Sub"]);
+  if(chef && o.gemeinsam) p.push(anteilOffen(o)?["warn","🤝 Abrechnung prüfen"]:["","🤝 mit Sub"]);
   const rk=offeneReklas(o.id).length; if(rk) p.push(["bad",`⚠ ${rk} Rekla`]);
   if((o.leerfahrten||[]).length && !istFertig(o)) p.push(["warn","↩ Leerfahrt"]);
   if(binBeteiligt(o)){ const un=ungelesen(o.id); if(un) p.push(["msg",un]); }
@@ -1244,43 +1258,59 @@ async function nachrichtSenden(id, text){
 
 /* ---------- Gemeinsamer Auftrag: Anteil des Subunternehmers ---------- */
 function anteilKarte(o){
-  const me=myId(), a=o.subAnteil?.[me]||{}, zu=!!a.abgegebenAm;
-  const f=(k,l,ph,mode="decimal")=>`<div><label class="f">${l}</label><input class="i" data-an="${k}" inputmode="${mode}" value="${esc(a[k]??"")}" placeholder="${ph}" ${zu?"disabled":""}></div>`;
-  return `<div class="card"><h3>🤝 Mein Anteil</h3>
-    <div class="small mute" style="margin-bottom:8px">Gemeinsamer Auftrag mit JD Brüder: Trag ein, was ihr gearbeitet habt – das ist die Grundlage für deine Rechnung. Den Montagebericht an meta schreibt JD Brüder.</div>
-    ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:zu?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
-    <div class="grid3">${f("tage","Arbeitstage","z. B. 2")}${f("stunden","Stunden gesamt","z. B. 16")}${f("personen","Personen","z. B. 2","numeric")}</div>
-    <label class="f">Was habt ihr gemacht?</label><textarea class="i" data-an="taetigkeit" ${zu?"disabled":""} placeholder="z. B. 6 Kabinen im 1. OG montiert">${esc(a.taetigkeit||"")}</textarea></div>
-   ${S.lohnPos.length?lohnCard(o):""}
-   ${zu?"":`<button class="btn ok block" id="anteilAb" style="min-height:52px;margin-bottom:12px">✓ Anteil abgeben</button>`}`;
+  const me=myId(), a=o.subAnteil?.[me]||{}, zu=!!a.abgegebenAm||!!a.bestaetigtAm;
+  const d=S.lohn[lohnDocId(o.id,me)]||{}, P=S.preise?preisFuer(me):null, pr=P?.preise||{};
+  const c=calcLohn({...d,uid:me},P)||{lines:[],total:0};
+  const inp=(attr,k,v)=>`<input class="i pl-q" ${attr}="${esc(k)}" inputmode="decimal" value="${esc(v??"")}" placeholder="0" ${zu?"disabled":""}>`;
+  const zeile=(label,einheit,ep,attr,k,v)=>`<div class="pl-z ${nn(v)?"voll":""}" data-ep="${ep}"><div class="pl-l">${esc(label)}<span>${esc(einheit||"")}${ep!==""?" · "+fmtEUR(ep):""}</span></div>${inp(attr,k,v)}<div class="pl-gp">${nn(v)&&ep!==""?fmtEUR(r2(nn(v)*ep)):""}</div></div>`;
+  let h=`<div class="card"><div class="row between" style="flex-wrap:nowrap;gap:8px"><h3 style="margin:0">🤝 Mein Anteil</h3>${P?.name?`<span class="chip">${esc(P.name)}</span>`:""}</div>
+    <div class="small mute" style="margin:4px 0 10px">Deine Preisliste – trag bei jeder Position die Menge ein. JD Brüder bekommt daraus deine fertige Montageabrechnung.</div>
+    ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:a.abgegebenAm?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
+    ${!P?`<div class="banner warn">Für dich ist noch keine Preisliste hinterlegt – JD Brüder richtet sie ein.</div>`:""}
+    <div id="preisliste">`;
+  h+=S.lohnPos.map(x=>zeile(x.label,x.einheit,P?nn(pr[x.k]):"","data-lq",x.k,d.mengen?.[x.k])).join("");
+  h+=zeile("km selbst gefahren","km",P?nn(P.kmSelbst):"","data-lf","kmSelbst",d.kmSelbst);
+  h+=zeile("km mitgefahren","km",P?nn(P.kmMit):"","data-lf","kmMit",d.kmMit);
+  h+=`<div class="pl-z pl-etage"><div class="pl-l">Etagengeld<span>${P?fmtEUR(nn(P.stockSatz))+" je Stockwerk":""}</span></div>
+      <div class="grid3" style="gap:6px;grid-column:1/-1">${[["stockwerke","Stockwerke"],["etagenAnzahl","Anzahl"],["personen","Personen"]].map(([k,l])=>`<div><div class="small mute">${l}</div>${inp("data-lf",k,d[k])}</div>`).join("")}</div></div>
+    </div>
+    <div class="pl-summe"><b>Montageabrechnung</b><span id="plSumme">${fmtEUR(c.total)}</span></div></div>
+   ${zu?"":`<button class="btn ok block" id="anteilAb" style="min-height:52px;margin-bottom:12px">✓ Abrechnung an JD Brüder abgeben</button>`}`;
+  return h;
+}
+// Fertige Montageabrechnung: nur die ausgefüllten Positionen
+function abrechnungTabelle(l,P){
+  const c=l?calcLohn({...l},P):null; if(!c||!c.lines.length) return `<div class="small mute">Noch nichts eingetragen.</div>`;
+  return `<table class="abr"><thead><tr><th>Position</th><th>Menge</th><th>Preis</th><th>Betrag</th></tr></thead><tbody>${c.lines.map(z=>`<tr><td>${esc(z.label)}</td><td>${z.menge!==""?String(z.menge).replace(".",","):""}</td><td>${z.ep!==""?fmtEUR(z.ep):""}</td><td>${fmtEUR(z.gp)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="3">Gesamt</td><td>${fmtEUR(c.total)}</td></tr></tfoot></table>`;
 }
 function anteilChefKarte(o){
   const subs=[...new Set([...(o.monteure||[]).filter(m=>S.roles[m]==="sub"),...Object.keys(o.subAnteil||{})])]; if(!subs.length) return "";
-  return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Anteil Subunternehmer</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)], c=l&&can.preise()?calcLohn(l,S.preise):null;
-    const pos=l?S.lohnPos.filter(x=>nn(l.mengen?.[x.k])).map(x=>`${String(l.mengen[x.k]).replace(".",",")}× ${esc(x.label)}`):[];
-    return `<div class="anteil"><div class="row between" style="flex-wrap:nowrap;gap:8px"><b>${esc(nameOf(u))}</b>${a.bestaetigtAm?`<span class="chip ok">✓ bestätigt</span>`:a.abgegebenAm?`<span class="chip warn">📥 zu prüfen</span>`:`<span class="chip">noch nicht abgegeben</span>`}</div>
-      <div class="small" style="margin-top:4px">${[a.tage?a.tage+" Tag(e)":"",a.stunden?a.stunden+" Std.":"",a.personen?a.personen+" Pers.":""].filter(Boolean).join(" · ")||'<span class="mute">noch keine Zeiten</span>'}</div>
-      ${a.taetigkeit?`<div class="small mute" style="white-space:pre-wrap">${esc(a.taetigkeit)}</div>`:""}
-      ${pos.length?`<div class="small" style="margin-top:4px">${pos.join(" · ")}${c?` = <b>${fmtEUR(c.total)}</b>`:""}</div>`:""}
-      ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Anteil bestätigen</button>`:""}</div>`; }).join("")}
-    <div class="small mute" style="margin-top:6px">Nur für die Abrechnung mit dem Subunternehmer – geht nicht an meta. Mengen korrigierst du unter „Positionsergänzung“.</div></div>`;
+  return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Montageabrechnung Subunternehmer</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)];
+    return `<div class="anteil"><div class="row between" style="flex-wrap:nowrap;gap:8px;margin-bottom:6px"><b>${esc(nameOf(u))}</b>${a.bestaetigtAm?`<span class="chip ok">✓ bestätigt</span>`:a.abgegebenAm?`<span class="chip warn">📥 zu prüfen</span>`:`<span class="chip">noch nicht abgegeben</span>`}</div>
+      ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()?S.preise:null):`<div class="small mute">Der Subunternehmer trägt seine Positionen gerade ein.</div>`}
+      ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Abrechnung bestätigen</button>`:""}</div>`; }).join("")}
+    <div class="small mute" style="margin-top:6px">Nur für die Abrechnung mit dem Subunternehmer – geht nicht an meta.</div></div>`;
 }
 function bindAnteil(id){
   const o=S.orders[id]; if(!o) return; const P=orderPath(id);
   $("#gemeinsam") && ($("#gemeinsam").onchange=async()=>{ const v=$("#gemeinsam").checked; await upd(P,{gemeinsam:v}); S.orders[id]={...S.orders[id],gemeinsam:v}; render(); toast(v?"🤝 Gemeinsamer Auftrag – der Sub trägt nur seinen Anteil ein":"Normaler Auftrag",3000); });
-  document.querySelectorAll("[data-an]").forEach(i=>i.onchange=()=>upd(P,{subAnteil:{[myId()]:{[i.dataset.an]:i.value.trim()}}}));
+  // Preisliste: Betrag je Zeile sofort mitrechnen (gespeichert wird beim Verlassen des Feldes)
+  document.querySelectorAll("#preisliste .pl-z:not(.pl-etage) .pl-q").forEach(i=>i.addEventListener("input",()=>{ const z=i.closest(".pl-z"), ep=z.dataset.ep;
+    z.classList.toggle("voll",!!nn(i.value)); z.querySelector(".pl-gp").textContent=nn(i.value)&&ep!==""?fmtEUR(r2(nn(i.value.replace(",","."))*nn(ep))):""; }));
   $("#anteilAb") && ($("#anteilAb").onclick=async()=>{
-    const a={...(o.subAnteil?.[myId()]||{})}; document.querySelectorAll("[data-an]").forEach(i=>a[i.dataset.an]=i.value.trim());
-    const l=S.lohn[lohnDocId(id,myId())]; const hatPos=l&&Object.values(l.mengen||{}).some(v=>nn(v));
-    if(!nn(a.stunden)&&!nn(a.tage)&&!hatPos) return toast("Bitte Zeit oder Positionen eintragen",3000);
-    if(!await confirmBox("Anteil abgeben?","JD Brüder prüft deinen Anteil und bestätigt ihn. Danach kannst du deine Rechnung schreiben. Ändern geht nach dem Abgeben nicht mehr.","Abgeben","ok")) return;
+    if(document.activeElement?.closest?.("#preisliste")){ document.activeElement.dispatchEvent(new Event("change")); document.activeElement.blur(); await new Promise(r=>setTimeout(r,300)); }
+    const l=S.lohn[lohnDocId(id,myId())], c=l?calcLohn({...l,uid:myId()},S.preise?preisFuer(myId()):null):null;
+    if(!c||!c.lines.length) return toast("Bitte mindestens eine Position mit Menge eintragen",3000);
+    if(!await confirmBox("Abrechnung abgeben?",`${c.lines.length} Position${c.lines.length>1?"en":""} · <b>${fmtEUR(c.total)}</b><br>JD Brüder prüft und bestätigt sie – danach kannst du deine Rechnung schreiben. Ändern geht nach dem Abgeben nicht mehr.`,"Abgeben","ok")) return;
+    const a={...(o.subAnteil?.[myId()]||{}),summe:c.total};
     const neu={...a,abgegebenAm:Date.now()}; await upd(P,{subAnteil:{[myId()]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[myId()]:neu}};
-    nachrichtSenden(id,"🤝 Mein Anteil ist eingetragen – bitte prüfen und bestätigen."); toast("Abgegeben ✓ – JD Brüder bekommt Bescheid",3000); render();
+    nachrichtSenden(id,`🤝 Meine Montageabrechnung ist fertig (${fmtEUR(a.summe)}) – bitte prüfen und bestätigen.`); toast("Abgegeben ✓ – JD Brüder bekommt Bescheid",3000); render();
   });
   document.querySelectorAll("[data-anteil-ok]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.anteilOk;
-    if(!await confirmBox("Anteil bestätigen?",`Ist der Anteil von <b>${esc(nameOf(u))}</b> korrekt? Danach ist er gesperrt und ${esc(nameOf(u))} kann die Rechnung schreiben.`,"Bestätigen","ok")) return;
+    if(!await confirmBox("Abrechnung bestätigen?",`Ist die Montageabrechnung von <b>${esc(nameOf(u))}</b> korrekt? Danach ist sie gesperrt und ${esc(nameOf(u))} kann die Rechnung schreiben.`,"Bestätigen","ok")) return;
     const neu={...(o.subAnteil?.[u]||{}),bestaetigtAm:Date.now(),bestaetigtVon:myId()}; await upd(P,{subAnteil:{[u]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[u]:neu}};
-    nachrichtSenden(id,`✓ Anteil von ${nameOf(u)} bestätigt – die Rechnung kann geschrieben werden.`); toast("Bestätigt ✓",2500); render(); });
+    nachrichtSenden(id,`✓ Montageabrechnung von ${nameOf(u)} bestätigt – die Rechnung kann geschrieben werden.`); toast("Bestätigt ✓",2500); render(); });
 }
 
 /* ---------- Detail ---------- */
