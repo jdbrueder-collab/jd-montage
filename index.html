@@ -356,6 +356,23 @@ html[data-geraet=android] nav.bottom a.on,html[data-geraet=android] nav.bottom a
 html[data-geraet=android] nav.bottom a.on .nav-ic{background:#d9e2ff}
 html[data-geraet=android] nav.bottom .nav-ic .badge{box-shadow:0 0 0 2px #f3f4f9}
 @media(min-width:900px){nav.bottom .nav-in{max-width:560px}}
+
+/* ===== „Zu tun“: schlicht – eine Zeile, Punkt in der Farbe, Zahl als Abzeichen ===== */
+.tun{flex-wrap:nowrap;overflow-x:auto;gap:6px;margin:0 -16px 10px;padding:0 16px 2px;scrollbar-width:none}
+.tun::-webkit-scrollbar{display:none}
+.tun-p{display:inline-flex;align-items:center;gap:6px;background:var(--card)!important;color:var(--ink)!important;border:1px solid var(--line);font-weight:600;font-size:13px;padding:6px 8px 6px 10px;box-shadow:none}
+.tun-p::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--grey);flex:none}
+.tun-p.warn::before{background:var(--accent)}.tun-p.bad::before{background:var(--bad)}.tun-p.info::before,.tun-p.msg::before{background:var(--info)}.tun-p.ok::before{background:var(--ok)}
+.tun-p .badge{margin-left:2px}
+.tun-p.on{border-color:var(--ink);box-shadow:none!important;background:var(--greybg)!important}
+
+/* ===== Fahrtenbuch mit Kilometerstand ===== */
+.fahrt-l{display:flex;align-items:center;gap:10px;background:var(--okbg);border:1px solid #b7e4c7;border-radius:14px;padding:10px 10px 10px 14px;margin-bottom:12px}
+.fahrt-l .btn{flex:none;white-space:nowrap}
+.fb-box{background:var(--greybg);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.km-gross{font-size:20px!important;font-weight:700;text-align:center;letter-spacing:.5px}
+.ziel-w{display:flex;gap:6px;flex-wrap:wrap}
+.fb-z.privat{opacity:.7}.fb-z.offen{box-shadow:inset 3px 0 0 var(--ok),var(--sh)}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -745,15 +762,15 @@ const langDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"long",day:"2
 
 /* ---------- „Zu tun“: was jetzt ansteht, je Rolle ---------- */
 const SPEZIAL={
-  pruefung:{t:"Berichte prüfen",cls:"warn",p:()=>`📥 Bericht prüfen`,f:o=>o.berichtStatus==="pruefung"},
-  msg:{t:"Neue Nachrichten",cls:"msg",p:()=>`💬 Nachrichten`,f:o=>binBeteiligt(o)&&ungelesen(o.id)>0},
-  ueber:{t:"Überfällige Termine – Montage nicht abgeschlossen",cls:"bad",p:()=>`⚠ Überfällig`,f:o=>ueberfaellig(o)},
-  ohneTeam:{t:"Termin, aber niemand eingeteilt",cls:"warn",p:()=>`👷 Ohne Team`,f:o=>phase(o)==="arbeit"&&!istFertig(o)&&!(o.monteure||[]).length},
-  unbest:{t:"Termin noch nicht bestätigt",cls:"info",p:()=>can.planen()?`❔ Unbestätigt`:`👍 Termin bestätigen`,
+  pruefung:{t:"Berichte prüfen",cls:"warn",p:()=>`Prüfen`,f:o=>o.berichtStatus==="pruefung"},
+  msg:{t:"Neue Nachrichten",cls:"msg",p:()=>`Nachrichten`,f:o=>binBeteiligt(o)&&ungelesen(o.id)>0},
+  ueber:{t:"Überfällige Termine – Montage nicht abgeschlossen",cls:"bad",p:()=>`Überfällig`,f:o=>ueberfaellig(o)},
+  ohneTeam:{t:"Termin, aber niemand eingeteilt",cls:"warn",p:()=>`Ohne Team`,f:o=>phase(o)==="arbeit"&&!istFertig(o)&&!(o.monteure||[]).length},
+  unbest:{t:"Termin noch nicht bestätigt",cls:"info",p:()=>can.planen()?`Unbestätigt`:`Bestätigen`,
     f:o=>can.planen()?(o.monteure||[]).some(m=>terminOffenFuer(o,m)):terminOffenFuerMich(o)},
-  abnahme:{t:"Sichtabnahme seit über einer Woche offen",cls:"bad",p:()=>`⏰ Sichtabnahme`,f:o=>meinAuftrag(o)&&abnahmeFaellig(o)},
-  heute:{t:"Heute",cls:"ok",p:()=>`📅 Heute`,f:o=>terminTag(o)===tagHeute()&&(o.monteure||[]).includes(myId())&&!istFertig(o)},
-  berichtOffen:{t:"Montage vorbei – Bericht noch offen",cls:"warn",p:()=>`✍️ Bericht offen`,f:o=>(o.monteure||[]).includes(myId())&&ueberfaellig(o)}
+  abnahme:{t:"Sichtabnahme seit über einer Woche offen",cls:"bad",p:()=>`Sichtabnahme`,f:o=>meinAuftrag(o)&&abnahmeFaellig(o)},
+  heute:{t:"Heute",cls:"ok",p:()=>`Heute`,f:o=>terminTag(o)===tagHeute()&&(o.monteure||[]).includes(myId())&&!istFertig(o)},
+  berichtOffen:{t:"Montage vorbei – Bericht noch offen",cls:"warn",p:()=>`Bericht offen`,f:o=>(o.monteure||[]).includes(myId())&&ueberfaellig(o)}
 };
 function zuTun(){
   const alle=Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert);
@@ -1067,8 +1084,8 @@ function viewListe(){
   const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
   list=list.filter(imBereich);
   const tun=zuTun();
-  let h=`<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>
-  ${tun.length||(!pushAktiv()&&pushUnterstuetzt())||(meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe)?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}${badge(n)}</button>`).join("")}${!pushAktiv()&&pushUnterstuetzt()?`<button class="tun-p" id="pushHinweis">🔔 Benachrichtigungen einschalten</button>`:""}${meinGeraet()==="ios"&&!istInstalliertApp()&&window.jdInstallHilfe?`<button class="tun-p" id="iosHinweis">📲 Für Benachrichtigungen: App auf den Home-Bildschirm</button>`:""}</div>`:""}
+  let h=`${fahrtLeiste()}<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>
+  ${tun.length?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}${badge(n)}</button>`).join("")}</div>`:""}
   <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
     ${can.sub()?"":`<button class="fp ${S.nurMeine?"on":""}" id="nurMeine">👷 Meine</button>`}
@@ -1181,7 +1198,7 @@ function viewDetail(id){
   const frueh=phase(o)==="offen"||phase(o)==="abholbereit";
   // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
   const fold=(key,titel,info,inhalt,offen=false)=>`<details class="card fold" data-fold="${id}:${key}" ${(S.fold[id+":"+key]??offen)?"open":""}><summary><b>${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
-  let h=`<button class="back" data-back>‹ Alle Aufträge</button>`;
+  let h=`<button class="back" data-back>‹ Alle Aufträge</button>${schritt(o)==="ankunft"&&S.fahrten[o.einsatz?.fahrtId]?.offen?"":fahrtLeiste()}`;
   if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
   // Kopf
@@ -1509,12 +1526,19 @@ function einsatzCard(o,fk){
    <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
   if(st==="fahrzeug"){
     if((o.leerfahrten||[]).length) h+=`<div class="banner warn small">${vorleistungZeilen(o).map(esc).join("<br>")}</div>`;
+    const fzE=meineFahrzeuge(), fzD=einsatzFz(o);
+    if(fzE.length) h+=`<div class="fb-box"><div class="small" style="font-weight:700;margin-bottom:2px">🚗 Fahrtenbuch</div>
+       <div class="grid2"><div><label class="f">Fahrzeug</label><select class="i" id="eFz">${fzE.map(f=>`<option value="${esc(f.id)}" ${f.id===fzD?"selected":""}>${esc(f.kennzeichen)}</option>`).join("")}<option value="">anderes / ohne Fahrtenbuch</option></select></div>
+       <div><label class="f">Kilometerstand jetzt</label><input class="i" id="eKm" inputmode="numeric" value="${fzD?kmStand(fzD):""}"></div></div>
+       <div class="small mute" style="margin-top:4px">Beim Ankommen wirst du nach dem neuen Stand gefragt – die km rechnet die App aus.</div></div>`;
     h+=`<div class="q">Womit wird gefahren?</div><div class="choice">${Object.entries(FAHRZEUGE).map(([k,l])=>`<button class="btn ${e.fahrzeug===k?"on":""}" data-fz="${k}">🚐 ${l}</button>`).join("")}</div>
      <label class="f" style="margin-top:14px">Oder selbst eintragen</label>
      <div class="row" style="flex-wrap:nowrap"><input class="i" id="fzText" placeholder="z. B. 2 Autos, 2 Anhänger" value="${esc(e.fahrzeug==="sonst"?e.fahrzeugText||"":"")}"><button class="btn pri" id="fzTextOk" style="white-space:nowrap">Übernehmen</button></div>`;
   } else if(st==="ankunft"){
     h+=`<div class="q">Auf der Baustelle angekommen?</div>
      <div class="small mute" style="margin-bottom:10px">Abfahrt ${fmtDT(e.abfahrtAm)} · ${esc(adresseOf(o))}</div>
+     ${S.fahrten[e.fahrtId]?.offen?`<div class="fb-box"><label class="f" style="margin-top:0">🚗 Kilometerstand jetzt (${esc(S.fahrzeuge[S.fahrten[e.fahrtId].fahrzeugId]?.kennzeichen||"")}, losgefahren bei ${kmFmt(S.fahrten[e.fahrtId].startKm)} km)</label>
+       <input class="i km-gross" id="eKmAn" inputmode="numeric" placeholder="mind. ${kmFmt(S.fahrten[e.fahrtId].startKm)}"><div class="small" id="eKmDiff" style="margin-top:4px;font-weight:700"></div></div>`:""}
      <button class="btn ok block" id="ankunft" style="min-height:56px;font-size:16px">✓ Ja, wir sind angekommen</button>`;
   } else if(st==="vorher"){
     const n=fk("vorher").length, frei=n||!S.assets||e.vorherSkip, w=S.bereitWahl[id];
@@ -1694,9 +1718,24 @@ function abschlussCard(o,fk){
 }
 function bindEinsatz(o){
   const id=o.id, P=orderPath(id), e=o.einsatz||{};
-  document.querySelectorAll("[data-fz]").forEach(b=>b.onclick=()=>upd(P,{einsatz:{fahrzeug:b.dataset.fz,fahrzeugText:null,abfahrtAm:Date.now(),von:myId()}}));
-  $("#fzTextOk") && ($("#fzTextOk").onclick=()=>{ const t=($("#fzText").value||"").trim(); if(!t) return toast("Bitte eintragen, womit gefahren wird"); upd(P,{einsatz:{fahrzeug:"sonst",fahrzeugText:t,abfahrtAm:Date.now(),von:myId()}}); });
-  $("#ankunft") && ($("#ankunft").onclick=()=>{ upd(P,{einsatz:{ankunftAm:Date.now()}}); toast("Angekommen ✓ – bitte die gefahrenen km eintragen",3500); });
+  // Losfahren: mit Fahrtenbuch-Auto → Kilometerstand speichern und Fahrt öffnen
+  const abfahrt=async(patch)=>{
+    const fzW=$("#eFz")?.value, kmW=($("#eKm")?.value||"").trim(); let extra={};
+    if(fzW){ if(kmW===""||isNaN(nn(kmW))){ $("#eKm")?.focus(); return toast("Bitte den Kilometerstand eintragen"); }
+      const fid=await fahrtStarten({fzId:fzW,startKm:kmW,auftragId:id,zweck:`Montage Auftrag ${o.nr}`,von:(fahrtenVon(fzW).filter(f=>!f.offen).slice(-1)[0]?.nach)||S.settings.firmenAdresse||"",nach:adresseOf(o),ziel:"baustelle"});
+      if(!fid) return; extra={fahrtId:fid,fahrtFz:fzW}; }
+    await upd(P,{einsatz:{...patch,abfahrtAm:Date.now(),von:myId(),...extra}}); if(fzW) toast("Gute Fahrt 🚗 – Kilometerstand gespeichert",3000);
+  };
+  document.querySelectorAll("[data-fz]").forEach(b=>b.onclick=()=>abfahrt({fahrzeug:b.dataset.fz,fahrzeugText:null}));
+  $("#fzTextOk") && ($("#fzTextOk").onclick=()=>{ const t=($("#fzText").value||"").trim(); if(!t) return toast("Bitte eintragen, womit gefahren wird"); abfahrt({fahrzeug:"sonst",fahrzeugText:t}); });
+  // Ankommen: offene Fahrt mit Kilometerstand abschließen → gefahrene km stehen schon drin
+  $("#eKmAn") && ($("#eKmAn").oninput=()=>{ const f=S.fahrten[e.fahrtId], d=nn($("#eKmAn").value)-nn(f?.startKm); $("#eKmDiff").textContent=$("#eKmAn").value&&d>=0?`= ${kmFmt(Math.round(d*10)/10)} km gefahren`:""; });
+  $("#ankunft") && ($("#ankunft").onclick=async()=>{
+    const f=S.fahrten[e.fahrtId];
+    if(f?.offen && $("#eKmAn")){ const v=$("#eKmAn").value.trim(); if(v===""||isNaN(nn(v))){ $("#eKmAn").focus(); return toast("Bitte den Kilometerstand eintragen"); }
+      const km=await fahrtBeenden(f.id,{endKm:v,nach:adresseOf(o),ziel:"baustelle"}); if(km==null) return;
+      await upd(P,{einsatz:{ankunftAm:Date.now(),anfahrtKm:String(km)}}); toast(`Angekommen ✓ – ${kmFmt(km)} km im Fahrtenbuch`,3500); return; }
+    upd(P,{einsatz:{ankunftAm:Date.now()}}); toast("Angekommen ✓ – bitte die gefahrenen km eintragen",3500); });
   $("#bereitJa") && ($("#bereitJa").onclick=()=>{ S.bereitWahl[id]="ja"; render(); });
   $("#vorherSkip") && ($("#vorherSkip").onclick=()=>upd(P,{einsatz:{vorherSkip:Date.now()}}));
   $("#bereitWeiter") && ($("#bereitWeiter").onclick=()=>{ delete S.bereitWahl[id]; upd(P,{einsatz:{bereit:"ja"}}); });
@@ -2380,10 +2419,121 @@ function meineFahrzeuge(){
 function fahrtenVon(fzId){
   const fz=S.fahrzeuge[fzId]; if(!fz) return [];
   const list=Object.values(S.fahrten).filter(f=>f.fahrzeugId===fzId).sort((a,b)=>(a.datum||"").localeCompare(b.datum||"")||(a.am||0)-(b.am||0));
-  let stand=nn(fz.startKm); list.forEach(f=>{ f._start=stand; stand+=nn(f.km); f._ende=stand; });
+  let stand=nn(fz.startKm);
+  list.forEach(f=>{
+    if(f.startKm!=null && f.startKm!==""){ f._start=nn(f.startKm); f._ende=f.offen?null:(f.endKm!=null&&f.endKm!==""?nn(f.endKm):f._start+nn(f.km)); }
+    else { f._start=stand; f._ende=stand+nn(f.km); }
+    stand=f._ende??f._start;
+  });
   return list;
 }
-function kmStand(fzId){ const l=fahrtenVon(fzId); return l.length?l[l.length-1]._ende:nn(S.fahrzeuge[fzId]?.startKm); }
+function kmStand(fzId){ const l=fahrtenVon(fzId); if(!l.length) return nn(S.fahrzeuge[fzId]?.startKm); const x=l[l.length-1]; return x._ende??x._start; }
+
+/* ---------- Fahrten mit Kilometerstand: beim Losfahren und beim Ankommen abgefragt ---------- */
+const kmFmt=n=>Number(n||0).toLocaleString("de-DE");
+const neueFahrtId=()=>"f"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const ohneTemp=f=>{ const {id,_start,_ende,...r}=f; return r; };
+const offeneFahrt=(uid=myId())=>Object.values(S.fahrten).filter(f=>f.offen&&f.fahrer===uid).sort((a,b)=>(b.startAm||0)-(a.startAm||0))[0]||null;
+const offeneFahrtFz=fzId=>Object.values(S.fahrten).find(f=>f.offen&&f.fahrzeugId===fzId)||null;
+const ZIELE=[["baustelle","🏗 Baustelle"],["hotel","🏨 Hotel"],["firma","🏢 Firma"],["zuhause","🏠 Zuhause"],["material","📦 Material"],["sonst","Sonstiges"]];
+const zielText=(k,o)=>k==="baustelle"?(o?adresseOf(o):"Baustelle"):k==="hotel"?"Hotel":k==="firma"?(S.settings.firmenAdresse||"Firma"):k==="zuhause"?"Zuhause":k==="material"?"Material abholen":"";
+// Fahrzeug für einen Einsatz: das beim Losfahren gewählte, sonst meins
+const einsatzFz=o=>{ const f=o?.einsatz?.fahrtFz; return f&&S.fahrzeuge[f]?f:(meineFahrzeuge().length?defaultFahrzeug():null); };
+function waehleBox(titel,text,opts){
+  return new Promise(res=>{ let fertig=false;
+    modal(`<h2>${esc(titel)}</h2><div class="mute">${text}</div><div style="display:grid;gap:8px;margin-top:14px">${opts.map(([k,l])=>`<button class="btn block" data-w="${k}">${esc(l)}</button>`).join("")}<button class="btn ghost block" data-close>Abbrechen</button></div>`,
+      (m,close)=>m.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{ fertig=true; close(); res(b.dataset.w); }), ()=>{ if(!fertig) res(null); });
+  });
+}
+// Losfahren: offene Fahrt dieses Autos abschließen, Lücke klären (privat / vergessen), neue Fahrt öffnen
+async function fahrtStarten({fzId,startKm,auftragId=null,zweck="",von="",nach="",art="dienst",ziel=null}){
+  if(!S.fahrzeuge[fzId]) return null;
+  startKm=nn(startKm);
+  const offen=offeneFahrtFz(fzId);
+  if(offen){
+    if(startKm<nn(offen.startKm)){ toast(`Kleiner als bei der letzten Abfahrt (${kmFmt(offen.startKm)} km) – bitte prüfen`,3500); return null; }
+    const g={...ohneTemp(offen),offen:false,endKm:startKm,km:Math.round((startKm-nn(offen.startKm))*10)/10,endAm:Date.now(),autoGeschlossen:true};
+    await setDoc("fahrten/"+offen.id,g); S.fahrten[offen.id]={id:offen.id,...g};
+  } else {
+    const stand=kmStand(fzId);
+    if(startKm<stand){ toast(`Kleiner als der letzte Stand (${kmFmt(stand)} km) – bitte prüfen`,3500); return null; }
+    if(startKm>stand){
+      const diff=Math.round((startKm-stand)*10)/10;
+      const w=await waehleBox(`${kmFmt(diff)} km ohne Eintrag`,`Seit dem letzten Eintrag (${kmFmt(stand)} km) ist das Auto <b>${kmFmt(diff)} km</b> gefahren. Was war das?`,[["privat","🏠 Privatfahrt"],["dienst","💼 Dienstfahrt (vergessen einzutragen)"]]);
+      if(!w) return null;
+      const lid=neueFahrtId(), l={fahrzeugId:fzId,datum:isoTag(Date.now()),von:"",nach:"",km:diff,startKm:stand,endKm:startKm,art:w,zweck:w==="privat"?"Privatfahrt":"Dienstfahrt (nachgetragen)",fahrer:myId(),am:Date.now()-1,nachtrag:true};
+      await setDoc("fahrten/"+lid,l); S.fahrten[lid]={id:lid,...l};
+    }
+  }
+  const id=neueFahrtId(), f={fahrzeugId:fzId,datum:isoTag(Date.now()),von,nach,km:0,startKm,offen:true,startAm:Date.now(),am:Date.now(),auftragId,zweck,art,ziel,fahrer:myId()};
+  await setDoc("fahrten/"+id,f); S.fahrten[id]={id,...f};
+  return id;
+}
+// Ankommen: Stand eintragen → gefahrene km; Hotelfahrt landet auch im Auftrag
+async function fahrtBeenden(fid,{endKm,nach,ziel}={}){
+  const f=S.fahrten[fid]; if(!f) return null;
+  endKm=nn(endKm);
+  if(endKm<nn(f.startKm)){ toast(`Kleiner als bei der Abfahrt (${kmFmt(f.startKm)} km) – bitte prüfen`,3500); return null; }
+  const km=Math.round((endKm-nn(f.startKm))*10)/10;
+  const g={...ohneTemp(f),offen:false,endKm,km,endAm:Date.now(),nach:nach||f.nach||"",ziel:ziel||f.ziel||null};
+  await setDoc("fahrten/"+fid,g); S.fahrten[fid]={id:fid,...g};
+  const o=S.orders[f.auftragId];
+  if(o && !istFertig(o) && f.art==="hotel"){ const hf=[...(o.einsatz?.hotelFahrten||[]),{am:Date.now(),tag:isoTag(f.startAm||Date.now()),richtung:"hin",km:String(km),von:myId(),fahrtId:fid}];
+    await upd(orderPath(o.id),{einsatz:{hotelFahrten:hf}}); S.orders[o.id]={...S.orders[o.id],einsatz:{...(S.orders[o.id].einsatz||{}),hotelFahrten:hf}}; } // sofort lokal, damit direkt folgende Einträge darauf aufbauen
+  if(o && !istFertig(o) && (ziel||f.ziel)==="baustelle" && schritt(o)==="ankunft") await upd(orderPath(o.id),{einsatz:{ankunftAm:Date.now(),anfahrtKm:String(km)}});
+  return km;
+}
+function losfahrenDialog(vor={}){
+  const fzs=meineFahrzeuge(); if(!fzs.length){ toast("Erst ein Fahrzeug anlegen (Fahrten → ＋ Auto)"); go("fahrten"); return; }
+  let fzId=vor.fzId||(S.fzSel&&fzs.some(f=>f.id===S.fzSel)?S.fzSel:defaultFahrzeug()), ziel=vor.ziel||(vor.auftragId?"baustelle":"");
+  const letzte=fahrtenVon(fzId).filter(f=>!f.offen).slice(-1)[0];
+  const auftr=Object.values(S.orders).filter(sichtbar).filter(x=>!istFertig(x)&&!x.storniert&&phase(x)!=="offen").sort((a,b)=>(a.termin||9e15)-(b.termin||9e15));
+  modal(`<h2>▶ Losfahren</h2>
+   <label class="f">Fahrzeug</label><select class="i" id="lfz">${fzs.map(f=>`<option value="${esc(f.id)}" ${f.id===fzId?"selected":""}>${esc(f.kennzeichen)}${f.name?" · "+esc(f.name):""}</option>`).join("")}</select>
+   <label class="f">Kilometerstand jetzt *</label><input class="i km-gross" id="lkm" inputmode="numeric" value="${kmStand(fzId)}">
+   <div class="small mute" id="lst" style="margin-top:4px"></div>
+   <label class="f">Wohin?</label><div class="ziel-w">${ZIELE.map(([k,l])=>`<button class="fp ${ziel===k?"on":""}" data-ziel="${k}">${l}</button>`).join("")}</div>
+   <div id="lauW" ${ziel==="baustelle"?"":'style="display:none"'}><label class="f">Auftrag</label><select class="i" id="lau"><option value="">– keiner –</option>${auftr.map(x=>`<option value="${esc(x.id)}" ${x.id===vor.auftragId?"selected":""}>${esc(x.nr)} ${esc(x.bauvorhaben||"")}${x.termin?" · "+kurzDatum(x.termin):""}</option>`).join("")}</select></div>
+   <label class="f">Von</label><input class="i" id="lvon" value="${esc(vor.von||letzte?.nach||S.settings.firmenAdresse||"")}">
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">▶ Losfahren</button></div>`,(m,close)=>{
+    const st=()=>{ fzId=m.querySelector("#lfz").value; const of=offeneFahrtFz(fzId); m.querySelector("#lst").innerHTML=`Letzter Stand: <b>${kmFmt(kmStand(fzId))} km</b>${of?` · Fahrt seit ${fmtDT(of.startAm)} noch offen – wird mit diesem Stand abgeschlossen`:""}`; };
+    st(); m.querySelector("#lfz").onchange=()=>{ st(); m.querySelector("#lkm").value=kmStand(fzId); };
+    m.querySelectorAll("[data-ziel]").forEach(b=>b.onclick=()=>{ ziel=b.dataset.ziel; m.querySelectorAll("[data-ziel]").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#lauW").style.display=ziel==="baustelle"?"":"none"; });
+    m.querySelector("#ok").onclick=async()=>{
+      const v=m.querySelector("#lkm").value.trim(); if(v===""||isNaN(nn(v))) return toast("Bitte den Kilometerstand eintragen");
+      const au=ziel==="baustelle"?m.querySelector("#lau").value||null:null, o=S.orders[au];
+      m.querySelector("#ok").disabled=true;
+      const id=await fahrtStarten({fzId,startKm:v,auftragId:au,zweck:o?`Montage Auftrag ${o.nr}`:(ZIELE.find(z=>z[0]===ziel)?.[1].replace(/^\S+\s/,"")||""),von:m.querySelector("#lvon").value.trim(),nach:zielText(ziel,o),art:ziel==="hotel"?"hotel":"dienst",ziel:ziel||null});
+      m.querySelector("#ok").disabled=false; if(!id) return;
+      close(); toast("Gute Fahrt 🚗 – beim Ankommen „Angekommen“ tippen",3500); render();
+    };
+  });
+}
+function ankunftDialog(fid){
+  const f=S.fahrten[fid]; if(!f) return;
+  const o=S.orders[f.auftragId]; let ziel=f.ziel||(f.art==="hotel"?"hotel":o?"baustelle":"");
+  modal(`<h2>🏁 Angekommen</h2><div class="small mute">${esc(S.fahrzeuge[f.fahrzeugId]?.kennzeichen||"")} · losgefahren ${fmtDT(f.startAm)} bei ${kmFmt(f.startKm)} km</div>
+   <label class="f">Kilometerstand jetzt *</label><input class="i km-gross" id="akm" inputmode="numeric" placeholder="mind. ${kmFmt(f.startKm)}">
+   <div class="small" id="adiff" style="margin-top:4px;font-weight:700"></div>
+   <label class="f">Wo bist du?</label><div class="ziel-w">${ZIELE.map(([k,l])=>`<button class="fp ${ziel===k?"on":""}" data-ziel="${k}">${l}</button>`).join("")}</div>
+   <label class="f">Ziel / Adresse</label><input class="i" id="anach" value="${esc(f.nach||zielText(ziel,o))}">
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Später</button><button class="btn ok" id="ok">🏁 Angekommen</button></div>`,(m,close)=>{
+    const ki=m.querySelector("#akm"); setTimeout(()=>ki.focus(),80);
+    ki.oninput=()=>{ const d=nn(ki.value)-nn(f.startKm); m.querySelector("#adiff").textContent=ki.value&&d>=0?`= ${kmFmt(Math.round(d*10)/10)} km gefahren`:""; };
+    m.querySelectorAll("[data-ziel]").forEach(b=>b.onclick=()=>{ ziel=b.dataset.ziel; m.querySelectorAll("[data-ziel]").forEach(x=>x.classList.toggle("on",x===b)); const t=zielText(ziel,o); if(t) m.querySelector("#anach").value=t; });
+    m.querySelector("#ok").onclick=async()=>{
+      if(ki.value.trim()===""||isNaN(nn(ki.value))) return toast("Bitte den Kilometerstand eintragen");
+      const km=await fahrtBeenden(fid,{endKm:ki.value,nach:m.querySelector("#anach").value.trim(),ziel}); if(km==null) return;
+      close(); toast(`Angekommen ✓ – ${kmFmt(km)} km im Fahrtenbuch`,3500); render();
+    };
+  });
+}
+// Hinweis „Fahrt läuft“ (oben in Aufträgen und Fahrten)
+function fahrtLeiste(){
+  const f=offeneFahrt(); if(!f) return "";
+  const o=S.orders[f.auftragId];
+  return `<div class="fahrt-l"><div style="min-width:0;flex:1"><b>🚗 Fahrt läuft</b><div class="small mute" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.fahrzeuge[f.fahrzeugId]?.kennzeichen||"")} · seit ${new Date(f.startAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} · ab ${kmFmt(f.startKm)} km${o?` · ${esc(o.nr)}`:f.nach?` · ${esc(f.nach)}`:""}</div></div><button class="btn ok" data-ankunft="${esc(f.id)}">🏁 Angekommen</button></div>`;
+}
 function defaultFahrzeug(){ const l=meineFahrzeuge(); return (l.find(f=>f.zugeordnet===myId())||l[0]||{}).id; }
 function viewFahrten(){
   const fzs=meineFahrzeuge();
@@ -2396,15 +2546,17 @@ function viewFahrten(){
   h+=`<div class="seg" id="fzSeg" style="margin-bottom:10px">${fzs.map(f=>`<button data-fz="${esc(f.id)}" class="${f.id===fz.id?"on":""}">🚗 ${esc(f.kennzeichen||f.name||"Auto")}</button>`).join("")}</div>
   <div class="card"><div class="row between"><div><div class="small mute">${esc(fz.name||"")}${fz.zugeordnet?" · "+esc(nameOf(fz.zugeordnet)):""}</div><div class="small mute">Kilometerstand aktuell</div><div class="big" style="font-size:30px">${kmStand(fz.id).toLocaleString("de-DE")} km</div></div>
    ${can.planen()||fz.zugeordnet===myId()?`<button class="btn sm ghost" id="fzEdit">Bearbeiten</button>`:""}</div>
-   <button class="btn pri block" id="fahrtNew" style="margin-top:10px">➕ Fahrt eintragen</button></div>
+   ${(()=>{ const of=offeneFahrtFz(fz.id); return of?`<div class="fahrt-l" style="margin:10px 0 0"><div style="min-width:0;flex:1"><b>🚗 Unterwegs</b><div class="small mute">${esc(nameOf(of.fahrer))} · seit ${fmtDT(of.startAm)} · ab ${kmFmt(of.startKm)} km</div></div>${of.fahrer===myId()||can.planen()?`<button class="btn ok" data-ankunft="${esc(of.id)}">🏁 Angekommen</button>`:""}</div>`
+      :`<button class="btn ok block" id="losfahren" style="margin-top:10px;min-height:52px">▶ Losfahren – Kilometerstand eintragen</button>`; })()}
+   <button class="btn ghost block sm" id="fahrtNew" style="margin-top:8px">Fahrt nachtragen</button></div>
   <div class="row between" style="margin:14px 2px 6px"><select class="i" id="fzMon" style="width:auto">${(monate.length?monate:[S.fzMonat]).map(mo=>`<option value="${mo}" ${mo===S.fzMonat?"selected":""}>${new Date(mo+"-01").toLocaleDateString("de-DE",{month:"long",year:"numeric"})}</option>`).join("")}</select>
    <div class="row"><button class="btn sm" id="fbPdf">⬇︎ PDF</button>${can.mails()?`<button class="btn sm" id="fbMail">✉︎ Senden</button>`:""}</div></div>`;
   const mon=list.filter(f=>(f.datum||"").startsWith(S.fzMonat)).reverse();
   const sumMon=mon.reduce((a,f)=>a+nn(f.km),0);
   h+=`<div class="small mute" style="margin:0 2px 6px">${mon.length} Fahrten · ${sumMon.toLocaleString("de-DE")} km</div>`;
-  h+=mon.map(f=>{ const o=S.orders[f.auftragId]; return `<div class="card" style="padding:10px 12px;margin-bottom:6px"><div class="row between"><b>${new Date(f.datum).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})}</b><b>${nn(f.km).toLocaleString("de-DE")} km</b></div>
-   <div class="small">${esc(f.von||"")} → ${esc(f.nach||"")}</div>
-   <div class="small mute">${o?`Auftrag ${esc(o.nr)} · `:""}${esc(f.zweck||"")} · ${esc(nameOf(f.fahrer))} · Stand ${f._start.toLocaleString("de-DE")} → ${f._ende.toLocaleString("de-DE")}</div>
+  h+=mon.map(f=>{ const o=S.orders[f.auftragId]; return `<div class="card fb-z ${f.art==="privat"?"privat":""} ${f.offen?"offen":""}" style="padding:10px 12px;margin-bottom:6px"><div class="row between"><b>${new Date(f.datum).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})}${f.startAm?` <span class="small mute" style="font-weight:500">${new Date(f.startAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}${f.endAm?"–"+new Date(f.endAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):""}</span>`:""}</b><b>${f.offen?`<span class="kal-st info">unterwegs</span>`:`${nn(f.km).toLocaleString("de-DE")} km`}</b></div>
+   ${f.art==="privat"?`<div class="small"><b>Privatfahrt</b></div>`:`<div class="small">${esc(f.von||"")} → ${esc(f.nach||(f.offen?"…":""))}</div>`}
+   <div class="small mute">${o?`Auftrag ${esc(o.nr)} · `:""}${f.art==="privat"?"":esc(f.zweck||"")+" · "}${esc(nameOf(f.fahrer))} · Stand ${f._start.toLocaleString("de-DE")} → ${f._ende!=null?f._ende.toLocaleString("de-DE"):"…"}</div>
    ${(f.fahrer===myId()||can.planen())?`<div style="margin-top:4px"><a href="#" class="small" data-fdel="${esc(f.id)}">löschen</a></div>`:""}</div>`; }).join("")||`<div class="small mute" style="padding:4px">Keine Fahrten in diesem Monat.</div>`;
   return h;
 }
@@ -2414,6 +2566,7 @@ function bindFahrten(){
   document.querySelectorAll("#fzSeg [data-fz]").forEach(b=>b.onclick=()=>{ S.fzSel=b.dataset.fz; S.fzMonat=null; render(); });
   $("#fzMon") && ($("#fzMon").onchange=()=>{ S.fzMonat=$("#fzMon").value; render(); });
   $("#fahrtNew") && ($("#fahrtNew").onclick=()=>fahrtDialog(null));
+  $("#losfahren") && ($("#losfahren").onclick=()=>losfahrenDialog({fzId:S.fzSel}));
   document.querySelectorAll("[data-fdel]").forEach(a=>a.onclick=async e=>{ e.preventDefault(); if(await confirmBox("Fahrt löschen?","Der Kilometerstand wird neu berechnet.","Löschen","bad")) S.db.doc("fahrten/"+a.dataset.fdel).delete(); });
   $("#fbPdf") && ($("#fbPdf").onclick=async()=>{ try{ const {blob,name}=await fahrtenbuchPdf(S.fzSel,S.fzMonat); const dl=await window.claude.use("downloads").catch(()=>null); if(dl) await dl.save({filename:name,data:blob}); else toast("Speichern ist hier nicht möglich"); }catch(e){ if(e?.code!=="cancelled") toast("PDF fehlgeschlagen: "+(e.message||e.code||e)); } });
   $("#fbMail") && ($("#fbMail").onclick=()=>fahrtenbuchMail(S.fzSel,S.fzMonat));
@@ -2457,7 +2610,9 @@ function fahrtDialog(oid){
       const km=nn(m.querySelector("#km").value); if(!(km>0)) return toast("Bitte gefahrene km oder Kilometerstand eintragen");
       if(m.querySelector("#ende").value && nn(m.querySelector("#ende").value)<=kmStand(fzId)) return toast("Kilometerstand ist kleiner als der aktuelle Stand");
       const au=m.querySelector("#au").value;
-      await setDoc("fahrten/f"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),{fahrzeugId:fzId,datum:m.querySelector("#dt").value,von:m.querySelector("#von").value.trim(),nach:m.querySelector("#nach").value.trim(),km,auftragId:au||null,zweck:m.querySelector("#zw").value.trim(),fahrer:myId(),am:Date.now()});
+      if(offeneFahrtFz(fzId)) return toast("Mit diesem Auto ist gerade eine Fahrt offen – erst „Angekommen“ eintragen",3500);
+      const ende=m.querySelector("#ende").value.trim(), stand=kmStand(fzId);
+      await setDoc("fahrten/"+neueFahrtId(),{fahrzeugId:fzId,datum:m.querySelector("#dt").value,von:m.querySelector("#von").value.trim(),nach:m.querySelector("#nach").value.trim(),km,startKm:stand,endKm:ende?nn(ende):stand+km,auftragId:au||null,zweck:m.querySelector("#zw").value.trim(),fahrer:myId(),am:Date.now(),nachtrag:true});
       const x=S.orders[au];
       if(x && !istFertig(x)){ const sum=Object.values(S.fahrten).filter(f=>f.auftragId===au).reduce((a,f)=>a+nn(f.km),0)+km; await upd(orderPath(au),{bericht:{istKm:String(sum)}}); }
       close(); toast("Fahrt gespeichert ✓");
@@ -2473,11 +2628,11 @@ async function fahrtenbuchPdf(fzId,monat){
   const cols=[["Datum",22],["Fahrer",32],["Von",58],["Nach",58],["Auftrag",22],["Zweck",42],["km",14],["km-Stand",22]];
   let y=32; const head=()=>{ pdf.setFont(undefined,"bold"); let x=14; cols.forEach(([t,w])=>{ pdf.text(t,x,y); x+=w; }); pdf.setFont(undefined,"normal"); pdf.line(14,y+1.5,284,y+1.5); y+=6; };
   head();
-  list.forEach(f=>{ const o=S.orders[f.auftragId]; const row=[new Date(f.datum).toLocaleDateString("de-DE"),nameOf(f.fahrer)==="Ich"?(S.me?.name||""):nameOf(f.fahrer),f.von||"",f.nach||"",o?o.nr:"",f.zweck||"",String(nn(f.km)),`${f._start}–${f._ende}`];
+  list.forEach(f=>{ const o=S.orders[f.auftragId]; const priv=f.art==="privat"; const row=[new Date(f.datum).toLocaleDateString("de-DE"),nameOf(f.fahrer)==="Ich"?(S.me?.name||""):nameOf(f.fahrer),priv?"":f.von||"",priv?"":f.nach||"",o?o.nr:"",priv?"Privatfahrt":f.zweck||"",f.offen?"–":String(nn(f.km)),`${f._start}–${f._ende??"unterwegs"}`];
     const wrapped=row.map((t,i)=>pdf.splitTextToSize(String(t),cols[i][1]-2)); const hh=Math.max(...wrapped.map(w=>w.length))*4.2;
     if(y+hh>196){ pdf.addPage(); y=16; head(); }
     let x=14; wrapped.forEach((w,i)=>{ pdf.text(w,x,y); x+=cols[i][1]; }); y+=hh+1.5; pdf.setDrawColor(220); pdf.line(14,y-2.5,284,y-2.5); pdf.setDrawColor(0); });
-  if(list.length){ y+=3; pdf.setFont(undefined,"bold"); pdf.text(`Kilometerstand Monatsanfang: ${list[0]._start}   ·   Monatsende: ${list[list.length-1]._ende}`,14,y); }
+  if(list.length){ y+=3; pdf.setFont(undefined,"bold"); pdf.text(`Kilometerstand Monatsanfang: ${list[0]._start}   ·   Monatsende: ${list[list.length-1]._ende??list[list.length-1]._start}   ·   davon privat: ${list.filter(f=>f.art==="privat").reduce((a,f)=>a+nn(f.km),0)} km`,14,y); }
   return {blob:pdf.output("blob"),name:`Fahrtenbuch_${(fz.kennzeichen||"Auto").replace(/[^\w-]+/g,"_")}_${monat}.pdf`};
 }
 function fahrtenbuchMail(fzId,monat){
@@ -2750,8 +2905,6 @@ function bind(r){
     if(f==="zurueck" || (S.filter===f && !normal)) S.filter=S.letzterBereich||meinePhasen()[0][0];
     else { if(!SPEZIAL[S.filter] && S.filter!=="storniert") S.letzterBereich=S.filter; S.filter=f; if(normal) S.letzterBereich=f; }
     render(true); });
-  $("#pushHinweis") && ($("#pushHinweis").onclick=pushDialog);
-  $("#iosHinweis") && ($("#iosHinweis").onclick=()=>window.jdInstallHilfe(true));
   $("#nurMeine") && ($("#nurMeine").onclick=()=>{ S.nurMeine=!S.nurMeine; render(); });
   app.querySelectorAll(".fzeile [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
@@ -2763,6 +2916,7 @@ function bind(r){
     render(); });
   app.querySelectorAll("[data-kalv]").forEach(b=>b.onclick=()=>{ const k=S.kal; if(!k||k.ansicht===b.dataset.kalv) return; const d=new Date(k.start);
     k.ansicht=b.dataset.kalv; k.start=(k.ansicht==="monat"?new Date(d.getFullYear(),d.getMonth(),1):montagVon(d.getMonth()===new Date().getMonth()&&d.getFullYear()===new Date().getFullYear()?new Date():d)).getTime(); render(); });
+  app.querySelectorAll("[data-ankunft]").forEach(b=>b.onclick=()=>ankunftDialog(b.dataset.ankunft));
   app.querySelectorAll("[data-kal-tag]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalTag)).getTime()}; render(); });
   app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
     const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Nicht verplant“`,3000); });
@@ -2804,24 +2958,29 @@ function bindDetail(id){
   $("#hotelBtn") && ($("#hotelBtn").onclick=()=>{
     const c=S.orders[id]||o, z0=(c.zeiten||[]).slice(-1)[0], heute=isoTag(Date.now());
     const kmAlt=[...hotelFahrten(c)].reverse().find(f=>f.richtung!=="zurueck")?.km||"";
+    const hFz=einsatzFz(c);
     const pAlt=nn(z0?.p)||nn(c.einsatz?.personenVorOrt)||nn(c.bericht?.personen)||"";
     modal(`<h2>🏨 Feierabend – ab ins Hotel</h2><div class="small mute">${esc(nachtTag(heute))} · die Zeit wird angehalten</div>
-      <label class="f">Wie viele km von der Baustelle zum Hotel?</label>
-      <input class="i" id="hk" inputmode="decimal" value="${esc(kmAlt)}" placeholder="z. B. 12" style="font-size:18px;text-align:center">
+      ${hFz?`<label class="f">🚗 Kilometerstand jetzt (${esc(S.fahrzeuge[hFz].kennzeichen)}, Abfahrt Baustelle)</label>
+      <input class="i km-gross" id="hkm" inputmode="numeric" value="${kmStand(hFz)}"><div class="small mute" style="margin-top:4px">Im Hotel tippst du „Angekommen“ und trägst den neuen Stand ein.</div>`
+      :`<label class="f">Wie viele km von der Baustelle zum Hotel?</label>
+      <input class="i" id="hk" inputmode="decimal" value="${esc(kmAlt)}" placeholder="z. B. 12" style="font-size:18px;text-align:center">`}
       <label class="f">Wie viele Personen übernachten?</label>
       <div class="row" style="flex-wrap:nowrap"><button class="btn" data-hp="-1" style="width:56px">−</button><input class="i" id="hp" inputmode="numeric" value="${esc(pAlt)}" style="text-align:center;font-weight:700"><button class="btn" data-hp="1" style="width:56px">＋</button></div>
       <div class="small mute" style="margin-top:6px">Die Übernachtung wird für heute automatisch im Bericht eingetragen.</div>
       <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">🏨 Feierabend</button></div>`,(m,close)=>{
       m.querySelectorAll("[data-hp]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#hp"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.hp)); });
       m.querySelector("#ok").onclick=async()=>{
-        const km=m.querySelector("#hk").value.trim().replace(",","."), pp=parseInt(m.querySelector("#hp").value,10);
-        if(!nn(km)) return toast("Bitte die Kilometer zum Hotel eintragen");
+        const km=(m.querySelector("#hk")?.value||"").trim().replace(",","."), pp=parseInt(m.querySelector("#hp").value,10), hkm=(m.querySelector("#hkm")?.value||"").trim();
+        if(hFz){ if(hkm===""||isNaN(nn(hkm))) return toast("Bitte den Kilometerstand eintragen"); }
+        else if(!nn(km)) return toast("Bitte die Kilometer zum Hotel eintragen");
         if(!(pp>0)) return toast("Bitte die Anzahl der Personen eintragen");
         const c=S.orders[id]||o, z=[...(c.zeiten||[])].map(x=>({...x})); if(running(c)){ z[z.length-1].e=Date.now(); z[z.length-1].feierabend=true; z[z.length-1].hotel=true; }
-        const hf=[...(c.einsatz?.hotelFahrten||[]),{am:Date.now(),tag:heute,richtung:"hin",km,von:myId()}];
+        if(hFz && !(await fahrtStarten({fzId:hFz,startKm:hkm,auftragId:id,zweck:"Fahrt Baustelle → Hotel",von:adresseOf(c),nach:"Hotel",art:"hotel",ziel:"hotel"}))) return;
+        const hf=hFz?(c.einsatz?.hotelFahrten||[]):[...(c.einsatz?.hotelFahrten||[]),{am:Date.now(),tag:heute,richtung:"hin",km,von:myId()}];
         const n=[...(c.bericht?.naechte||[]).filter(x=>x.datum!==heute),{datum:heute,personen:String(pp)}].sort((a,b)=>String(a.datum).localeCompare(String(b.datum)));
         close(); await upd(P,{zeiten:z,einsatz:{hotelFahrten:hf},bericht:{uebernachtet:"ja",naechte:n,uebernachtungen:String(n.length)}});
-        toast("Gute Nacht 🏨 – morgen einfach „Weiterarbeiten“ tippen",3500);
+        toast(hFz?"Gute Fahrt 🏨 – im Hotel „Angekommen“ tippen":"Gute Nacht 🏨 – morgen einfach „Weiterarbeiten“ tippen",3500);
       };
     });
   });
@@ -2829,6 +2988,7 @@ function bindDetail(id){
     const z=[...(o.zeiten||[])].map(x=>({...x})), lz=z[z.length-1], pAlt=nn(lz?.p)||nn(o.einsatz?.personenVorOrt)||nn(o.bericht?.personen)||"";
     const vomHotel=!!lz?.hotel && isoTag(lz.s)!==isoTag(Date.now());
     const kmHin=[...hotelFahrten(o)].reverse().find(f=>f.richtung!=="zurueck")?.km||"";
+    const wFz=vomHotel?einsatzFz(o):null, wOffen=wFz?offeneFahrtFz(wFz):null;
     const los=async(pp,hk)=>{ z.push({s:Date.now(),by:myId(),p:pp||pAlt||null}); const e2={...(pp?{personenVorOrt:pp}:{})};
       if(nn(hk)) e2.hotelFahrten=[...((S.orders[id]||o).einsatz?.hotelFahrten||[]),{am:Date.now(),tag:isoTag(Date.now()),richtung:"zurueck",km:String(hk).replace(",","."),von:myId()}];
       await upd(P,{zeiten:z,...(Object.keys(e2).length?{einsatz:e2}:{})}); toast("Zeit läuft weiter ⏱"); };
@@ -2836,10 +2996,19 @@ function bindDetail(id){
     modal(`<h2>Neuer Arbeitstag</h2><div class="small mute">${esc(nachtTag(isoTag(Date.now())))}</div>
       <label class="f">Wie viele Personen sind heute vor Ort?</label>
       <div class="row" style="flex-wrap:nowrap"><button class="btn" data-pp="-1" style="width:56px">−</button><input class="i" id="ppH" inputmode="numeric" value="${esc(pAlt)}" style="text-align:center;font-weight:700"><button class="btn" data-pp="1" style="width:56px">＋</button></div>
-      ${vomHotel?`<label class="f">🏨 Wie viele km vom Hotel zur Baustelle?</label><input class="i" id="hkH" inputmode="decimal" value="${esc(kmHin)}" placeholder="z. B. 12" style="text-align:center">`:""}
+      ${vomHotel&&wFz?`${wOffen?`<label class="f">🏨 Kilometerstand bei Ankunft im Hotel</label><input class="i" id="wkmH" inputmode="numeric" placeholder="mind. ${kmFmt(wOffen.startKm)}">`:""}
+        <label class="f">🚗 Kilometerstand jetzt an der Baustelle (${esc(S.fahrzeuge[wFz].kennzeichen)})</label><input class="i km-gross" id="wkm" inputmode="numeric" placeholder="mind. ${kmFmt(wOffen?wOffen.startKm:kmStand(wFz))}">`
+      :vomHotel?`<label class="f">🏨 Wie viele km vom Hotel zur Baustelle?</label><input class="i" id="hkH" inputmode="decimal" value="${esc(kmHin)}" placeholder="z. B. 12" style="text-align:center">`:""}
       <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">▶ Weiterarbeiten</button></div>`,(m,close)=>{
       m.querySelectorAll("[data-pp]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#ppH"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.pp)); });
       m.querySelector("#ok").onclick=()=>{ const pp=parseInt(m.querySelector("#ppH").value,10); if(!(pp>0)) return toast("Bitte die Anzahl der Personen eintragen");
+        if(vomHotel && wFz){ (async()=>{
+          const jetzt=(m.querySelector("#wkm").value||"").trim(), hotel=(m.querySelector("#wkmH")?.value||"").trim();
+          if(jetzt===""||isNaN(nn(jetzt))) return toast("Bitte den Kilometerstand eintragen");
+          if(wOffen){ if(hotel===""||isNaN(nn(hotel))) return toast("Bitte den Kilometerstand im Hotel eintragen"); if(await fahrtBeenden(wOffen.id,{endKm:hotel,nach:"Hotel",ziel:"hotel"})==null) return; }
+          const fid=await fahrtStarten({fzId:wFz,startKm:kmStand(wFz),auftragId:id,zweck:"Fahrt Hotel → Baustelle",von:"Hotel",nach:adresseOf(o),art:"hotel_zurueck",ziel:"baustelle"}); if(!fid) return;
+          const km=await fahrtBeenden(fid,{endKm:jetzt,nach:adresseOf(o),ziel:"baustelle"}); if(km==null) return;
+          close(); los(pp,String(km)); })(); return; }
         const hk=m.querySelector("#hkH")?.value.trim()||""; if(vomHotel && !nn(hk.replace(",","."))) return toast("Bitte die Kilometer vom Hotel eintragen"); close(); los(pp,hk); };
     });
   });
@@ -3278,6 +3447,7 @@ function kontoKarte(){
     <div class="konto-k">
       <button class="btn" id="kGeraet">📱 Mein Gerät <span class="small mute" style="margin-left:auto">${GERAETE[meinGeraet()]}</span></button>
       ${push?`<button class="btn" id="kPush">🔔 Benachrichtigungen <span class="small ${pushAktiv()?"":"mute"}" style="margin-left:auto;${pushAktiv()?"color:var(--ok)":""}">${pushAktiv()?"an":"aus"}</span></button>`:""}
+      ${push&&!pushAktiv()?`<div class="small mute" style="margin:-2px 2px 2px">${meinGeraet()==="ios"&&!istInstalliertApp()?"Auf dem iPhone gehen Benachrichtigungen nur aus der App auf dem Home-Bildschirm – zuerst „App auf den Startbildschirm“ unten.":"Einschalten, damit du Termine, Nachrichten und Bestätigungen sofort aufs Handy bekommst."}</div>`:""}
       ${can.mails()?`<button class="btn" id="kMails">🔄 Mails von meta abrufen</button>`:""}
       ${window.jdInstallHilfe?`<button class="btn" id="kInst">📲 App auf den Startbildschirm</button>`:""}
       <button class="btn" id="kAus" style="color:var(--bad)">Abmelden</button>
