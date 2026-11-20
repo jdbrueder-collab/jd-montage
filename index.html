@@ -432,7 +432,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="6df917fa89fc";</script>
+<script>window.JD_BUILD="78261bdddc09";</script>
 </head>
 <body>
 <header class="top">
@@ -1286,7 +1286,7 @@ function anteilKarte(o){
     ${!P?`<div class="banner warn">Für dich ist noch keine Preisliste hinterlegt – JD Brüder richtet sie ein.</div>`:""}
     ${zu?abrechnungTabelle({...d,uid:me},P):`<div id="preisliste">`}`;
   if(zu) return h+`</div>`;
-  h+=S.lohnPos.map(x=>zeile(x.label,x.einheit,P?nn(pr[x.k]):"","data-lq",x.k,d.mengen?.[x.k])).join("");
+  h+=posFuer(P).map(x=>zeile(x.label,x.einheit,P?nn(pr[x.k]):"","data-lq",x.k,d.mengen?.[x.k])).join("");
   h+=zeile("km selbst gefahren","km",P?nn(P.kmSelbst):"","data-lf","kmSelbst",d.kmSelbst);
   h+=zeile("km mitgefahren","km",P?nn(P.kmMit):"","data-lf","kmMit",d.kmMit);
   h+=`<div class="pl-z pl-etage"><div class="pl-l">Etagengeld<span>${P?fmtEUR(nn(P.stockSatz))+" je Stockwerk":""}</span></div>
@@ -2080,6 +2080,8 @@ function nmbDialog(id){
 const nn = v => { const x=parseFloat(String(v??"").replace(",",".")); return isNaN(x)?0:x; };
 const r2 = x => Math.round(x*100)/100;
 function lohnDocId(oid,uid){ return oid+"__"+uid; }
+// Subunternehmer mit eigener Preisliste sehen nur deren Positionen; Chef und Mitarbeiter sehen alle
+const posFuer=(P)=>!can.planen() && can.sub() && P && Object.keys(P.preise||{}).length ? S.lohnPos.filter(x=>nn(P.preise[x.k])>0) : S.lohnPos;
 function preisFuer(uid,P=S.preise){ if(!P) return null; const lid=P.zuordnung?.[uid]; return (lid&&P.listen?.[lid])||P; }
 function calcLohn(d,P){
   if(!P||!d) return null;
@@ -2121,10 +2123,10 @@ function lohnCard(o,opts={}){
   if(opts.montagebericht) return `<div class="card" id="berichtCard"><div class="row between" style="flex-wrap:nowrap;gap:8px"><h3 style="margin:0">📋 Montagebericht</h3><span class="small mute">${anz?`${anz} Position${anz>1?"en":""}`:""}</span></div>
    <div class="small mute" style="margin:4px 0 10px">Trag bei jeder Position die Menge ein – daraus entsteht der Montagebericht an meta.</div>
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
-   ${editable?`<div class="pl-liste">${S.lohnPos.map(zeile).join("")}</div>${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}</div>`;
+   ${editable?`<div class="pl-liste">${posFuer(P).map(zeile).join("")}</div>${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}</div>`;
   return `<div class="card"><details id="lohnDet" ${offen?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionsergänzung</b><div class="small mute">${anz?`${anz} Position${anz>1?"en":""} eingetragen`:"Mengen der montierten Positionen eintragen"}${c&&P?` · ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
-   ${editable?`<div class="pl-liste">${S.lohnPos.map(zeile).join("")}</div>
+   ${editable?`<div class="pl-liste">${posFuer(P).map(zeile).join("")}</div>
    ${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}
   </div></details></div>`;
 }
