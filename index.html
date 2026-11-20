@@ -432,7 +432,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="4d4e0afb41cb";</script>
+<script>window.JD_BUILD="298d0e812b20";</script>
 </head>
 <body>
 <header class="top">
@@ -585,6 +585,13 @@ function confirmBox(title, text, okLabel="Ja", cls="pri"){
   });
 }
 function lightbox(src){ dokViewer(src,"bild"); }
+// Vorschau Montagebericht / Sichtabnahme: alle Seiten untereinander im Zoom-Betrachter
+function vorschauZeigen(cs,titel){
+  const g=28, W=Math.max(...cs.map(c=>c.width)), H=cs.reduce((a,c)=>a+c.height,0)+g*(cs.length-1);
+  const c=document.createElement("canvas"); c.width=W; c.height=H; const x=c.getContext("2d"); x.fillStyle="#2b3038"; x.fillRect(0,0,W,H);
+  let y=0; cs.forEach(pg=>{ x.drawImage(pg,0,y); y+=pg.height+g; });
+  dokViewer(c.toDataURL("image/jpeg",.9),"seiten",titel);
+}
 /* ---------- Dokument-Betrachter: Fotos, Zeichnungen und PDFs mit Zoom ----------
    Zwei Finger = zoomen, ein Finger = verschieben, doppelt tippen = näher/zurück, Mausrad/Trackpad am PC. */
 let pdfjsP=null;
@@ -634,7 +641,7 @@ function dokViewer(src, art="bild", titel=""){
   const fehler=t=>{ inh.innerHTML=`<div class="dvlade">${esc(t)}${art==="pdf"?`<br><a href="${esc(src)}" target="_blank" rel="noopener" style="color:#fff">Im Browser öffnen</a>`:""}</div>`; };
   if(art!=="pdf"){
     const img=new Image(); img.alt=""; img.draggable=false;
-    img.onload=()=>{ inh.innerHTML=""; inh.appendChild(img); img.style.width=img.naturalWidth+"px"; img.style.height=img.naturalHeight+"px"; bereit(img.naturalWidth,img.naturalHeight,true); };
+    img.onload=()=>{ inh.innerHTML=""; inh.appendChild(img); img.style.width=img.naturalWidth+"px"; img.style.height=img.naturalHeight+"px"; bereit(img.naturalWidth,img.naturalHeight,art!=="seiten"); };
     img.onerror=()=>fehler("Bild konnte nicht geladen werden."); img.src=src;
   } else {
     (async()=>{ try{
@@ -2351,7 +2358,7 @@ function abnahmeDialog(id){
    <label class="row" style="margin-top:10px;gap:8px;flex-wrap:nowrap"><input type="checkbox" id="chk" style="width:22px;height:22px"><b>Ich habe die Sichtabnahme geprüft – alles korrekt.</b></label>
    <div id="st" class="small mute" style="margin-top:8px"></div>
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">✉︎ Senden</button></div>`,(m,close)=>{
-    renderVordruck(o).then(([,c2])=>{ const u=c2.toDataURL("image/jpeg",.8); m.querySelector("#pv").innerHTML=`<img src="${u}" style="width:100%;border:1px solid var(--line);border-radius:8px;cursor:zoom-in" id="pvi">`; m.querySelector("#pvi").onclick=()=>lightbox(u); }).catch(()=>{ m.querySelector("#pv").textContent="Vorschau nicht möglich."; });
+    renderVordruck(o).then(([,c2])=>{ const u=c2.toDataURL("image/jpeg",.8); m.querySelector("#pv").innerHTML=`<img src="${u}" style="width:100%;border:1px solid var(--line);border-radius:8px;cursor:zoom-in" id="pvi">`; m.querySelector("#pvi").onclick=()=>vorschauZeigen([c2],`Sichtabnahme ${o.nr}`); }).catch(()=>{ m.querySelector("#pv").textContent="Vorschau nicht möglich."; });
     m.querySelector("#ok").onclick=async()=>{
       const toV=m.querySelector("#to").value.trim(); if(!/@/.test(toV)) return toast("Bitte E-Mail-Adresse eintragen");
       if(!m.querySelector("#chk").checked) return toast("Bitte erst prüfen und abhaken");
@@ -2395,8 +2402,9 @@ function vdDefaults(o){
   const tot=summeMengen(o); const lbl=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k;
   const sonder=sonderFertig(b);
   const bem=[];
-  const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${lbl(k)}`);
-  if(pos.length) bem.push("Montiert: "+pos.join(", "));
+  // Positionen stehen im Vordruck einzeln untereinander (eigene Liste), nicht im Fließtext
+  d.positionen=S.lohnPos.filter(p=>p.k!=="stunden"&&tot[p.k]).map(p=>({m:fmtZahl(tot[p.k]),l:p.label,e:p.einheit||""}));
+  Object.keys(tot).filter(k=>k!=="stunden"&&!S.lohnPos.some(p=>p.k===k)).forEach(k=>d.positionen.push({m:fmtZahl(tot[k]),l:lbl(k),e:""}));
   if(b.taetigkeit) bem.push(b.taetigkeit);
   sonder.forEach(s=>bem.push(`Sonderarbeit: ${sonderZeile(s)}`));
   if(!leer(b.personen)||!leer(b.personenMit)) bem.push(`Personen: ${[leer(b.personen)?"":`${b.personen} vor Ort`,leer(b.personenMit)?"":`${b.personenMit} mitgefahren`].filter(Boolean).join(", ")}`);
@@ -2440,7 +2448,7 @@ function vordruckCard(o){
    <label class="f">Art</label><div class="seg" id="vdArt">${Object.entries(ARTEN).map(([k,l])=>`<button data-art="${k}" class="${v.art===k?"on":""}" ${ed?"":"disabled"}>${l}</button>`).join("")}</div>
    <label class="f">Monteur / Monteursnummer / Anteil %</label>
    ${[1,2,3,4].map(i=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px">${inp("m"+i,"Monteur "+i,"flex:1")}${inp("n"+i,"Nr.","width:64px")}${inp("p"+i,"%","width:64px")}</div>`).join("")}
-   <label class="f">Bemerkungen</label>${ta("bemerkungen","Was wurde gemacht …")}
+   <label class="f">Bemerkungen <span class="small mute">– die Positionen setzt die App automatisch untereinander davor</span></label>${ta("bemerkungen","Was wurde gemacht …")}
    <label class="f">Fertigung (fehlende/falsche Teile)</label>${ta("fertigung","")}
    <label class="f">Montage-Abrechnung (nur gefahrene km und Geschosse)</label>${ta("abrechnung","z. B. 390 km, Geschosse: EG, 1. OG")}
    <label class="f">Stunden (Sonderleistungen: Personen × Std. für …)</label>
@@ -2462,8 +2470,7 @@ function bindVordruck(o){
   document.querySelectorAll("[data-vd]").forEach(i=>i.onchange=()=>upd(P,{vordruck:{[i.dataset.vd]:i.value}}));
   document.querySelectorAll("#vdArt [data-art]").forEach(b=>b.onclick=()=>upd(P,{vordruck:{art:b.dataset.art}}));
   $("#vdReset") && ($("#vdReset").onclick=async()=>{ if(await confirmBox("Zurücksetzen?","Deine Änderungen am Vordruck werden verworfen.","Zurücksetzen","bad")) upd(P,{vordruck:null}); });
-  $("#vdPrev") && ($("#vdPrev").onclick=async()=>{ const b=$("#vdPrev"); b.disabled=true; try{ const cs=await renderVordruck(o); const urls=cs.map(c=>c.toDataURL("image/jpeg",.85));
-    modal(`<h2>Vorschau</h2>${urls.map(u=>`<img src="${u}" style="width:100%;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;cursor:zoom-in" data-z>`).join("")}<button class="btn block" data-close>Schließen</button>`,(m)=>m.querySelectorAll("[data-z]").forEach(im=>im.onclick=()=>lightbox(im.src))); }catch(e){ toast("Vorschau fehlgeschlagen: "+(e.message||e)); } b.disabled=false; });
+  $("#vdPrev") && ($("#vdPrev").onclick=async()=>{ const b=$("#vdPrev"); b.disabled=true; try{ const cs=await renderVordruck(o); vorschauZeigen(cs,`Montagebericht & Sichtabnahme ${o.nr}`); }catch(e){ toast("Vorschau fehlgeschlagen: "+(e.message||e)); } b.disabled=false; });
   $("#vdPdf") && ($("#vdPdf").onclick=async()=>{ const b=$("#vdPdf"); b.disabled=true; b.innerHTML=`<span class="spin"></span>`;
     try{ const blob=await makeVordruckPdf(o); const dl=await window.claude.use("downloads").catch(()=>null);
       if(dl){ await dl.save({filename:`Montagebericht_${idOf(o.nr)}.pdf`,data:blob}); } else toast("Speichern ist hier nicht möglich – das PDF hängt beim Senden automatisch an der Mail.");
@@ -2492,7 +2499,13 @@ async function renderVordruck(o){
   if(artPos[v.art]) X(a,k1,...artPos[v.art]);
   [385,435,485,535].forEach((y,i)=>{ T(a,k1,v["m"+(i+1)],806,y+9,22,245); T(a,k1,v["n"+(i+1)],1103,y+9,22,52,false,"center"); T(a,k1,v["p"+(i+1)],1176,y+9,22,52,false,"center"); });
   X(a,k1,...(v.ok==="nein"?[654,637]:[467,637]));
-  lines(a,k1,v.bemerkungen,132,[732,773,815,856,897,939,980,1021,1063,1104,1145],755);
+  { const ys=[732,773,815,856,897,939,980,1021,1063,1104,1145], pos=vd(o).positionen||vdDefaults(o).positionen||[];
+    a.font=font(22*k1); const rest=wrap(a,v.bemerkungen||"",755*k1).filter(Boolean);
+    const spalten=pos.length && pos.length+rest.length>ys.length ? 2 : 1, proSp=Math.ceil(pos.length/spalten), bx=132, sb=spalten===2?385:770;
+    pos.forEach((p,i)=>{ const sp=Math.floor(i/proSp), r=i%proSp; if(r>=ys.length) return; const x0=bx+sp*sb;
+      T(a,k1,`${p.m} ×`,x0+62,ys[r],22,62,true,"right"); T(a,k1,`${p.l}${p.e&&p.e!=="Stück"?` (${p.e})`:""}`,x0+76,ys[r],22,sb-92); });
+    if(spalten===2){ a.save(); a.strokeStyle="rgba(13,42,107,.35)"; a.lineWidth=1.5*k1; a.beginPath(); a.moveTo((bx+sb-12)*k1,704*k1); a.lineTo((bx+sb-12)*k1,(ys[Math.min(proSp,ys.length)-1]+11)*k1); a.stroke(); a.restore(); }
+    lines(a,k1,v.bemerkungen,132,ys.slice(Math.min(proSp,ys.length)),755); }
   lines(a,k1,v.fertigung,132,[1228,1270,1311,1352,1394,1435],755);
   lines(a,k1,v.abrechnung,132,[1518,1559,1601,1642,1683],755);
   [1765,1806,1848,1889].forEach((y,i)=>{ const q="s"+(i+1); T(a,k1,v[q+"n"],165,y,22,34,false,"center"); T(a,k1,v[q+"h"],226,y,22,40,false,"center"); T(a,k1,v[q+"f"],340,y,21,565); });
@@ -3643,7 +3656,7 @@ function berichtText(o){
     const uebern=naechteText(b)||"-";
     L.push(`- Montagetag(e): ${tage||"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,hotelKm(o)?`- Hotelfahrten (Baustelle ↔ Hotel): ${hotelText(o)}`:null,o.einsatz?.fahrzeug?`- Fahrzeug: ${fahrzeugText(o.einsatz)}${mitAnhaenger(o.einsatz)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Geschosse (Material getragen): ${b.geschosse||"-"}`,`- Übernachtungen: ${uebern}`);
     const tot=summeMengen(o); const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${(S.lohnPos.find(p=>p.k===k)||{}).label||k}`);
-    if(pos.length) L.push(`- Positionen: ${pos.join(", ")}`);
+    if(pos.length) L.push(`- Positionen:`,...pos.map(x=>`   • ${x.replace("× "," × ")}`));
     if(b.taetigkeit) L.push(`- Ausgeführt: ${b.taetigkeit}`);
     sonderFertig(b).forEach(s=>L.push(`- Sonderarbeit: ${sonderZeile(s)}`));
     if(b.bemerkung) L.push(`- Bemerkungen: ${b.bemerkung}`);
@@ -3680,7 +3693,7 @@ function berichtDialog(id){
    <div class="thumbs">${cands.map((c,i)=>`<label class="t" style="cursor:pointer"><img src="_blob/${esc(c.assetId)}" alt=""><input type="checkbox" data-ci="${i}" ${c.def?"checked":""} style="position:absolute;top:5px;left:5px;width:20px;height:20px"><span style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;font-size:10.5px;padding:2px 4px">${esc(c.label)}</span></label>`).join("")||`<span class="small mute">Keine Fotos vorhanden.</span>`}</div>
    <div id="st" class="small mute" style="margin-top:8px"></div>
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">✉︎ Jetzt senden</button></div>`,(m,close)=>{
-    renderVordruck(o).then(cs=>{ const show=o.unterschrift?cs:cs.slice(0,1); m.querySelector("#pv").innerHTML=show.map(c=>`<img src="${c.toDataURL("image/jpeg",.8)}" alt="Vorschau" style="width:100%;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:zoom-in" data-z>`).join(""); m.querySelectorAll("#pv [data-z]").forEach(im=>im.onclick=()=>lightbox(im.src)); }).catch(()=>{ m.querySelector("#pv").textContent="Vorschau nicht möglich."; });
+    renderVordruck(o).then(cs=>{ const show=o.unterschrift?cs:cs.slice(0,1); m.querySelector("#pv").innerHTML=show.map(c=>`<img src="${c.toDataURL("image/jpeg",.8)}" alt="Vorschau" style="width:100%;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:zoom-in" data-z>`).join(""); m.querySelectorAll("#pv [data-z]").forEach(im=>im.onclick=()=>vorschauZeigen(show,`Montagebericht ${o.nr}`)); }).catch(()=>{ m.querySelector("#pv").textContent="Vorschau nicht möglich."; });
     m.querySelector("#ok").onclick=async()=>{
       const btn=m.querySelector("#ok"), st=m.querySelector("#st");
       const toV=m.querySelector("#to").value.trim(); if(!/@/.test(toV)) return toast("Empfänger fehlt");
