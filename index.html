@@ -426,7 +426,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="de29f5e32ca4";</script>
+<script>window.JD_BUILD="f1c8e18d4ab5";</script>
 </head>
 <body>
 <header class="top">
@@ -2393,7 +2393,7 @@ function abnahmeDialog(id){
 }
 
 /* ---------- meta-Vordruck: Montagebericht + Sichtabnahmebescheinigung ---------- */
-const BG1="_blob/15d9b4f55478c0e3a07f28f8b6f3ff99", BG2="_blob/555df47188d464b5dd8fbbf853931172";
+const BG1="_blob/meta-montagebericht-v2", BG2="_blob/meta-sichtabnahme-v2"; // meta-Vorlage (PDF von meta, als Bild)
 const ARTEN={lieferung:"Lieferung",fertigmontage:"Fertigmontage",teilmontage:"Teilmontage",restmontage:"Restmontage",rekla:"Rekl. Behebung"};
 function tageText(o){
   const ds=(o.zeiten||[]).map(z=>new Date(z.s)).sort((a,b)=>a-b);
@@ -2499,39 +2499,38 @@ function wrap(ctx,text,maxW){
   return out.filter((l,i,a)=>l!==""||i<a.length-1);
 }
 async function renderVordruck(o){
+  // meta-Vordruck (digitale Vorlage von meta, A4 als Bild 1400 × 1980 px) – alle Angaben in Pixeln dieser Vorlage
   const v=vd(o); const INK="#0d2a6b";
   const [bg1,bg2]=await Promise.all([loadImg(BG1),loadImg(BG2)]);
-  const mk=bg=>{ const c=document.createElement("canvas"); c.width=bg.width; c.height=bg.height; const x=c.getContext("2d"); x.drawImage(bg,0,0); return [c,x,bg.width/910]; };
+  const mk=bg=>{ const c=document.createElement("canvas"); c.width=bg.width; c.height=bg.height; const x=c.getContext("2d"); x.drawImage(bg,0,0); return [c,x,bg.width/1400]; };
   const font=(sz,b)=>`${b?"700 ":""}${sz}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
-  const T=(ctx,k,t,x,y,sz=16,maxW=0,b=false,align="left")=>{ if(!t) return; [x,y]=(ctx._map||((a,c)=>[a,c]))(x,y); ctx.fillStyle=INK; ctx.textAlign=align; ctx.textBaseline="alphabetic"; let s=sz*k; ctx.font=font(s,b); while(maxW && ctx.measureText(t).width>maxW*k && s>9*k){ s-=1; ctx.font=font(s,b); } ctx.fillText(t,x*k,y*k); };
-  const X=(ctx,k,cx,cy)=>{ [cx,cy]=(ctx._map||((a,c)=>[a,c]))(cx,cy); const d=7*k; ctx.strokeStyle=INK; ctx.lineWidth=2.6*k; ctx.beginPath(); ctx.moveTo(cx*k-d,cy*k-d); ctx.lineTo(cx*k+d,cy*k+d); ctx.moveTo(cx*k+d,cy*k-d); ctx.lineTo(cx*k-d,cy*k+d); ctx.stroke(); };
-  const lines=(ctx,k,text,x,ys,maxW,sz=15.5)=>{ ctx.font=font(sz*k); const L=wrap(ctx,text,maxW*k); ys.forEach((y,i)=>{ if(L[i]!==undefined){ let t=L[i]; if(i===ys.length-1 && L.length>ys.length) t+=" …"; T(ctx,k,t,x,y,sz,maxW); } }); };
+  const T=(ctx,k,t,x,y,sz=23,maxW=0,b=false,align="left")=>{ if(!t) return; ctx.fillStyle=INK; ctx.textAlign=align; ctx.textBaseline="alphabetic"; let s=sz*k; ctx.font=font(s,b); while(maxW && ctx.measureText(t).width>maxW*k && s>13*k){ s-=1; ctx.font=font(s,b); } ctx.fillText(t,x*k,y*k); };
+  const X=(ctx,k,cx,cy)=>{ const d=10*k; ctx.strokeStyle=INK; ctx.lineWidth=3.6*k; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(cx*k-d,cy*k-d); ctx.lineTo(cx*k+d,cy*k+d); ctx.moveTo(cx*k+d,cy*k-d); ctx.lineTo(cx*k-d,cy*k+d); ctx.stroke(); };
+  const lines=(ctx,k,text,x,ys,maxW,sz=22)=>{ ctx.font=font(sz*k); const L=wrap(ctx,text,maxW*k); ys.forEach((y,i)=>{ if(L[i]!==undefined){ let t=L[i]; if(i===ys.length-1 && L.length>ys.length) t+=" …"; T(ctx,k,t,x,y,sz,maxW); } }); };
   // Seite 1: Montagebericht
   const [c1,a,k1]=mk(bg1);
-  a._map=(x,y)=>[x+4.7,y*1.0094+9.3]; // an die meta-Vorlage angepasst (Kästchen und Zeilen)
-  T(a,k1,v.datum,146,105,15,128);
-  T(a,k1,o.nr,163,227,22,140,true,"center");
-  const artPos={lieferung:[268,142],fertigmontage:[268,170],teilmontage:[268,198],restmontage:[268,226],rekla:[268,254]};
+  T(a,k1,v.datum,228,304,23,240);
+  T(a,k1,o.nr,266,512,32,235,true,"center");
+  const artPos={lieferung:[440,386],fertigmontage:[440,433],teilmontage:[440,480],restmontage:[440,526],rekla:[440,573]};
   if(artPos[v.art]) X(a,k1,...artPos[v.art]);
-  [147,180,213,246].forEach((y,i)=>{ T(a,k1,v["m"+(i+1)],543,y+6,15,164); T(a,k1,v["n"+(i+1)],744,y+6,15,36,false,"center"); T(a,k1,v["p"+(i+1)],798,y+6,15,36,false,"center"); });
-  X(a,k1,...(v.ok==="nein"?[422,283]:[294,284]));
-  lines(a,k1,v.bemerkungen,80,[347,376,404,433,461,490,519,547,576,604,633,662],530);
-  lines(a,k1,v.fertigung,84,[725,754,782,811,839,866],530);
-  lines(a,k1,v.abrechnung,86,[927,955,984,1012,1041],530);
-  [1097,1125,1154,1182].forEach((y,i)=>{ const q="s"+(i+1); T(a,k1,v[q+"n"],106,y+5,15,22,false,"center"); T(a,k1,v[q+"h"],152,y+5,15,30,false,"center"); T(a,k1,v[q+"f"],242,y+5,14.5,370); });
-  T(a,k1,v.uebern,106,1216,15,22,false,"center");
-  // Seite 2: Zustandsfeststellung / Sichtabnahmebescheinigung
+  [385,435,485,535].forEach((y,i)=>{ T(a,k1,v["m"+(i+1)],806,y+9,22,245); T(a,k1,v["n"+(i+1)],1103,y+9,22,52,false,"center"); T(a,k1,v["p"+(i+1)],1176,y+9,22,52,false,"center"); });
+  X(a,k1,...(v.ok==="nein"?[654,637]:[467,637]));
+  lines(a,k1,v.bemerkungen,132,[732,773,815,856,897,939,980,1021,1063,1104,1145],755);
+  lines(a,k1,v.fertigung,132,[1228,1270,1311,1352,1394,1435],755);
+  lines(a,k1,v.abrechnung,132,[1518,1559,1601,1642,1683],755);
+  [1765,1806,1848,1889].forEach((y,i)=>{ const q="s"+(i+1); T(a,k1,v[q+"n"],165,y,22,34,false,"center"); T(a,k1,v[q+"h"],226,y,22,40,false,"center"); T(a,k1,v[q+"f"],340,y,21,565); });
+  T(a,k1,v.uebern,165,1930,22,34,false,"center");
+  // Seite 2: Sichtabnahme
   const [c2,b,k2]=mk(bg2);
-  b._map=(x,y)=>y<950?[x+15,y*1.015+5.5]:[x+7,y-4]; // oberer Teil der Abnahmebescheinigung; Firma/Name/Unterschrift passen schon
-  T(b,k2,v.monteurAbn,82,208,16,300); T(b,k2,o.nr,442,208,17,215,true); T(b,k2,v.fertigAm||v.datum,718,207,15,132);
-  T(b,k2,adresseOf(o),82,350,16,765);
-  X(b,k2,...({wc:[88,447],schraenke:[366,446],sonst:[587,444]}[v.leistung]||[88,447]));
-  if(v.leistung==="sonst") T(b,k2,v.leistungSonst,624,448,15,230);
-  T(b,k2,v.fertigAm,262,598,16,212);
-  if(v.maengelJa==="ja"&&(v.maengel||"").trim()){ X(b,k2,89,727); lines(b,k2,v.maengel,80,[770,811,851],770,15.5); } else X(b,k2,89,679);
-  T(b,k2,v.firma,80,1008,16,770);
-  T(b,k2,(v.abnahmeName||"").toUpperCase(),80,1125,16,335,true);
-  if(o.unterschrift){ try{ const sg=await loadImg("_blob/"+o.unterschrift.assetId); const bw=330*k2,bh=62*k2; const sc=Math.min(bw/sg.width,bh/sg.height); b.drawImage(sg,516*k2,1127*k2-sg.height*sc,sg.width*sc,sg.height*sc); }catch(e){} }
+  T(b,k2,v.monteurAbn,134,330,23,450); T(b,k2,o.nr,682,331,25,315,true); T(b,k2,v.fertigAm||v.datum,1080,330,23,205);
+  T(b,k2,adresseOf(o),134,476,23,1150);
+  X(b,k2,...({wc:[137,604],schraenke:[570,604],sonst:[870,604]}[v.leistung]||[137,604]));
+  if(v.leistung==="sonst") T(b,k2,v.leistungSonst,915,606,22,380);
+  T(b,k2,v.fertigAm,400,766,23,380);
+  if(v.maengelJa==="ja"&&(v.maengel||"").trim()){ X(b,k2,137,937); lines(b,k2,v.maengel,124,[1003,1070,1136],1170,22); } else X(b,k2,137,870);
+  T(b,k2,v.firma,124,1348,24,1170);
+  T(b,k2,(v.abnahmeName||"").toUpperCase(),875,1520,23,420,true);
+  if(o.unterschrift){ try{ const sg=await loadImg("_blob/"+o.unterschrift.assetId); const bw=700*k2,bh=120*k2; const sc=Math.min(bw/sg.width,bh/sg.height); b.drawImage(sg,135*k2,1526*k2-sg.height*sc,sg.width*sc,sg.height*sc); }catch(e){} }
   return [c1,c2];
 }
 let jsPDFp=null;
