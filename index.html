@@ -422,6 +422,9 @@ body.nav-weg nav.bottom{transform:translateY(calc(100% + 20px));opacity:0;pointe
 .serie-k b{display:block;font-size:15px}.serie-k span{display:block;font-size:12px;color:var(--mute);margin-top:2px}
 .serie-k.on{border-color:var(--brand2);background:var(--infobg);box-shadow:inset 0 0 0 1px var(--brand2)}
 .serie-k:disabled{opacity:.6;cursor:default}
+
+.pl-kopf{font-size:12px;font-weight:750;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin:12px 4px 2px}
+.pl-kopf:first-child{margin-top:2px}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -439,7 +442,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="b320574c3db3";</script>
+<script>window.JD_BUILD="de2bebfe8c58";</script>
 </head>
 <body>
 <header class="top">
@@ -1293,7 +1296,7 @@ function anteilKarte(o){
     ${!P?`<div class="banner info small">Preise in Bearbeitung – trag einfach die Mengen ein. JD Brüder rechnet ab.</div>`:""}
     ${zu?abrechnungTabelle({...d,uid:me},P):`<div id="preisliste">`}`;
   if(zu) return h+`</div>`;
-  h+=(P?posFuer(P):posListe(o)).map(x=>zeile(x.label,x.einheit,P?nn(pr[x.k]):"","data-lq",x.k,d.mengen?.[x.k])).join("");
+  h+=posBloecke(P?posFuer(P):posListe(o),o,x=>zeile(x.label,x.einheit,P?nn(pr[x.k]):"","data-lq",x.k,d.mengen?.[x.k]));
   h+=zeile("km selbst gefahren","km",P?nn(P.kmSelbst):"","data-lf","kmSelbst",d.kmSelbst);
   h+=zeile("km mitgefahren","km",P?nn(P.kmMit):"","data-lf","kmMit",d.kmMit);
   h+=`<div class="pl-z pl-etage"><div class="pl-l">Etagengeld<span>${P?fmtEUR(nn(P.stockSatz))+" je Stockwerk":""}</span></div>
@@ -2118,6 +2121,17 @@ function calcLohn(d,P){
   const km=r2(nn(d.kmMit)*nn(P.kmMit)); if(km) lines.push({label:"km mitgefahren",menge:nn(d.kmMit),ep:nn(P.kmMit),gp:km});
   return {lines,total:r2(lines.reduce((s,l)=>s+l.gp,0))};
 }
+// Preisliste lernt mit: oft genutzte Positionen (in anderen Aufträgen) stehen oben – stabil, solange man in diesem Auftrag tippt
+function nachNutzung(list,o){
+  const n=posNutzung(o?.id), idx=new Map(S.lohnPos.map((p,i)=>[p.k,i]));
+  return [...list].sort((a,b)=>(n[b.k]||0)-(n[a.k]||0)||(b.haeufig?1:0)-(a.haeufig?1:0)||(idx.get(a.k)??999)-(idx.get(b.k)??999));
+}
+// Zeilen mit Überschrift „Oft verwendet“ / „Weitere Positionen“
+function posBloecke(list,o,zeileFn){
+  const n=posNutzung(o?.id), sortiert=nachNutzung(list,o), oft=sortiert.filter(p=>(n[p.k]||0)>=2);
+  if(!oft.length || oft.length===sortiert.length) return sortiert.map(zeileFn).join("");
+  return `<div class="pl-kopf">⭐ Oft verwendet</div>${oft.map(zeileFn).join("")}<div class="pl-kopf">Weitere Positionen</div>${sortiert.filter(p=>!oft.includes(p)).map(zeileFn).join("")}`;
+}
 function posNutzung(ohneAuftrag){
   const n={};
   Object.values(S.lohn).forEach(l=>{ if(l.auftragId===ohneAuftrag) return; Object.entries(l.mengen||{}).forEach(([k,v])=>{ if(nn(v)) n[k]=(n[k]||0)+1; }); });
@@ -2156,10 +2170,10 @@ function lohnCard(o,opts={}){
    <div class="small mute" style="margin:4px 0 10px">Trag bei jeder Position die Menge ein – daraus entsteht der Montagebericht an meta.</div>
    ${istSubUid(uid)&&!subPreiseAn()?`<div class="banner info small">Preise in Bearbeitung – trag einfach die Mengen ein.</div>`:""}
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
-   ${editable?`<div class="pl-liste">${posListe(o).map(zeile).join("")}</div>${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}</div>`;
+   ${editable?`<div class="pl-liste">${posBloecke(posListe(o),o,zeile)}</div>${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}</div>`;
   return `<div class="card"><details id="lohnDet" ${offen?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionsergänzung</b><div class="small mute">${anz?`${anz} Position${anz>1?"en":""} eingetragen`:"Mengen der montierten Positionen eintragen"}${c&&P?` · ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
-   ${editable?`<div class="pl-liste">${posListe(o).map(zeile).join("")}</div>
+   ${editable?`<div class="pl-liste">${posBloecke(posListe(o),o,zeile)}</div>
    ${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}
   </div></details></div>`;
 }
