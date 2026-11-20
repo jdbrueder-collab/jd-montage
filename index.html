@@ -409,6 +409,12 @@ table.abr tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var(--in
 /* ===== Geschosse als Liste ===== */
 .gesch-z{display:grid;grid-template-columns:1fr 92px auto;gap:6px;margin-bottom:6px;align-items:center}
 .gesch-z .btn{min-width:38px}
+
+.thumbs .t{position:relative}
+.rk-x{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:13px;cursor:pointer;line-height:26px;padding:0}
+
+nav.bottom{transition:transform .28s ease,opacity .28s ease}
+body.nav-weg nav.bottom{transform:translateY(calc(100% + 20px));opacity:0;pointer-events:none}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -426,7 +432,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="f1c8e18d4ab5";</script>
+<script>window.JD_BUILD="4d4e0afb41cb";</script>
 </head>
 <body>
 <header class="top">
@@ -1413,7 +1419,6 @@ function viewDetail(id){
     const st=schritt(o);
     if(st==="bericht"||st==="fertig"){
       h+=berichtCard(o,fk);
-      if(S.lohnPos.length) h+=lohnCard(o);
       h+=abnahmeTeil(o,fk);
       h+=abschlussCard(o,fk);
       h+=vordruckCard(o);
@@ -1523,9 +1528,10 @@ function reklaItem(r){
     <div class="row between"><span class="chip ${r.offen?"bad":"ok"}">${r.offen?"● offen":"● erledigt"}</span><span class="small mute">${fmtDT(r.am)} · ${esc(nameOf(r.von))}</span></div>
     <div style="font-weight:650;margin-top:6px">${esc(URSACHEN[r.ursache]||r.ursache)}${r.leerfahrt?" · Leerfahrt":""}</div>
     <div style="white-space:pre-wrap">${esc(r.text||"")}</div>
+    ${r.bearbeitetAm?`<div class="small mute" style="margin-top:2px">bearbeitet ${fmtDT(r.bearbeitetAm)} · ${esc(nameOf(r.bearbeitetVon))}</div>`:""}
     ${r.fotos?.length?`<div class="thumbs" style="margin-top:6px">${r.fotos.map(a=>`<div class="t" data-zoom="_blob/${esc(a)}"><img loading="lazy" src="_blob/${esc(a)}" alt=""></div>`).join("")}</div>`:""}
     ${r.antwort?`<div class="small" style="margin-top:6px;background:var(--greybg);padding:7px 9px;border-radius:8px"><b>Antwort:</b> ${esc(r.antwort)}</div>`:""}
-    ${can.reklaErledigen()?`<div class="row" style="margin-top:8px"><button class="btn sm ${r.offen?"ok":"ghost"}" data-rk-toggle="${esc(r.id)}">${r.offen?"✓ Als erledigt markieren":"Wieder öffnen"}</button><button class="btn sm ghost" data-rk-ans="${esc(r.id)}">Antwort/Notiz</button></div>`:""}
+    ${can.reklaErledigen()||reklaDarfAendern(r)?`<div class="row" style="margin-top:8px">${can.reklaErledigen()?`<button class="btn sm ${r.offen?"ok":"ghost"}" data-rk-toggle="${esc(r.id)}">${r.offen?"✓ Als erledigt markieren":"Wieder öffnen"}</button>`:""}${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}">✏️ Bearbeiten</button>`:""}${can.reklaErledigen()?`<button class="btn sm ghost" data-rk-ans="${esc(r.id)}">Antwort/Notiz</button>`:""}</div>`:""}
   </div>`;
 }
 function kostenAuftrag(oid){ let k=0; Object.values(S.lohn).forEach(l=>{ if(l.auftragId===oid){ const c=calcLohn(l,S.preise); if(c) k+=c.total; } }); return r2(k); }
@@ -1777,43 +1783,11 @@ function sonderVorschlaege(){
   return Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b,"de"));
 }
 function berichtCard(o,fk){
-  const b=o.bericht||{}, e=o.einsatz||{}, fertig=istFertig(o), az=arbeitszeitMin(o);
-  const gem=totalMs(o)?Math.round(totalMs(o)/60000):null;
-  const route=S.settings.firmenAdresse?`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(S.settings.firmenAdresse)}&destination=${encodeURIComponent(adresseOf(o))}`:"";
-  const fahrtKm=Object.values(S.fahrten).filter(f=>f.auftragId===o.id).reduce((a,f)=>a+nn(f.km),0);
-  const sv=sonderVorschlaege();
+  // Montagebericht = nur noch die Preisliste; daraus entsteht der Bericht an meta (km, Personen, Übernachtung kommen aus dem Einsatz)
   const vl=vorleistungZeilen(o);
-  return `<div class="card" id="berichtCard"><h3>Montagebericht</h3>
-   ${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
-   ${fertig?"":`<div class="grid2" style="margin-bottom:8px"><button class="btn pri" id="speak">🎤 Montagebericht einsprechen</button><button class="btn" id="manuell">✏️ Manuell ausfüllen</button></div>
-   <div class="small mute" style="margin-bottom:4px">Beim Einsprechen trägt die App alles in die passenden Felder ein. Prüfe danach die Angaben und ergänze oder korrigiere sie.</div>`}
-   <label class="f">Was wurde gemacht? (Tätigkeit)</label>
-   <textarea class="i" data-b="taetigkeit" id="fTaet" placeholder="z. B. 9 Kabinen in EG, 1. und 2. OG montiert, Passschnitte vor Ort …">${esc(b.taetigkeit??"")}</textarea>
-   <div class="grid2">
-     <div><label class="f">Personen vor Ort</label><input class="i" data-b="personen" inputmode="numeric" value="${esc(b.personen??e.personenVorOrt??"")}"></div>
-     <div><label class="f">Selbst gefahrene km</label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}">${nn(e.anfahrtKm)?`<div class="small mute">Anfahrt: ${fmtZahl(e.anfahrtKm)} km</div>`:""}</div>
-   </div>
-   ${hotelFahrten(o).length||(o.einsatz?.hotelFahrten||[]).length?`<div style="margin-top:8px;background:var(--greybg);border-radius:10px;padding:8px 10px"><div class="small"><b>🏨 Hotelfahrten: ${fmtZahl(hotelKm(o))} km</b> <span class="mute">– werden im Bericht extra aufgeführt</span></div>
-     ${(o.einsatz?.hotelFahrten||[]).map((f,i)=>`<div class="row" style="flex-wrap:nowrap;gap:6px;margin-top:6px"><span class="small" style="flex:1">${esc(nachtTag(f.tag))} · ${f.richtung==="zurueck"?"Hotel → Baustelle":"Baustelle → Hotel"}</span><input class="i" data-hfk="${i}" inputmode="decimal" value="${esc(f.km||"")}" style="width:80px;text-align:right"><span class="small">km</span><button class="btn sm ghost" data-hfdel="${i}" style="width:34px">✕</button></div>`).join("")}</div>`:""}
-   ${geschTeil(o)}
-   ${uebernachtungTeil(o)}
-   ${route&&can.planen()?`<div class="small" style="margin-top:4px"><a href="${esc(route)}" target="_blank" rel="noopener">Strecke Betrieb → Baustelle ansehen ↗</a>${o.sollKm?` · Soll: ${esc(o.sollKm)} km`:""}</div>`:""}
-   <div style="margin-top:14px">${klapp(o.id,"sonder","🛠 Sonderarbeiten",sonderFertig(b).length?`${sonderFertig(b).length} eingetragen`:"keine – antippen zum Ergänzen",`
-   <div class="small mute">Was wurde zusätzlich gemacht? Pro Punkt: Arbeit, Personen, Dauer, Bemerkung und ein Foto.</div>
-   ${sonderListe(b).map((x,i)=>`<div style="margin-top:8px;background:var(--card,#fff);border:1px solid var(--line);border-radius:10px;padding:10px">
-     <div class="row between" style="margin-bottom:6px"><b>Sonderarbeit ${i+1}</b><button class="btn sm ghost" data-sdel="${i}" title="Entfernen">✕</button></div>
-     <input class="i" data-sf="arbeit" data-si="${i}" value="${esc(x.arbeit||"")}" placeholder="Was wurde gemacht? z. B. Füße geklebt und gebohrt">
-     <div class="grid2" style="margin-top:6px"><input class="i" data-sf="personen" data-si="${i}" inputmode="numeric" value="${esc(x.personen??"")}" placeholder="Personen"><input class="i" data-sf="dauer" data-si="${i}" value="${x.min?fmtHMin(x.min):""}" placeholder="Dauer, z. B. 1:30"></div>
-     <textarea class="i" data-sf="bemerkung" data-si="${i}" placeholder="Bemerkung (optional)" style="margin-top:6px;min-height:54px">${esc(x.bemerkung||"")}</textarea>
-     <div class="small mute" style="margin-top:6px">Foto</div>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,true)}
-   </div>`).join("")}
-   <button class="btn block" id="sAdd" style="margin-top:8px">＋ ${(b.sonder||[]).length?"Weitere Sonderarbeit":"Sonderarbeit hinzufügen"}</button>
-`,{card:false})}</div>
-   <label class="f">Weitere Bemerkungen</label>
-   <textarea class="i" data-b="bemerkung" placeholder="Alles, was sonst noch in den Bericht gehört …">${esc(b.bemerkung??"")}</textarea>
-   <label class="f">Fotos</label>${thumbs(fk("nachher"),"nachher",true)}
-   <button class="btn ghost block" id="fahrtAdd" style="margin-top:12px">🚗 Fahrt ins Fahrtenbuch eintragen${fahrtKm?` · bisher ${fahrtKm} km`:""}</button>
-  </div>`;
+  return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
+   ${S.lohnPos.length?lohnCard(o,{montagebericht:true}):""}
+   <div class="card"><h3>Geschosse &amp; Fotos</h3>${geschTeil(o)}<label class="f">Fotos nach der Montage</label>${thumbs(fk("nachher"),"nachher",true)}</div>`;
 }
 function uebernachtungTeil(o,schritt){
   const b=o.bericht||{}, u=uebernachtet(b), n=b.naechte||[], alt=u==="ja"&&!n.length?naechteAnzahl(b):0;
@@ -1845,14 +1819,13 @@ function abnahmeTeil(o,fk){
 }
 function fehlendeAngaben(o,fk){
   const b=o.bericht||{}, r=[];
-  if(leer(b.taetigkeit)) r.push({t:"Tätigkeit fehlt"});
-  if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen"});
-  if(leer(b.istKm)) r.push({t:"Kilometer fehlen"});
+  if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen",soft:true});
+  if(leer(b.istKm)) r.push({t:"Kilometer fehlen",soft:true});
   if(leer(b.geschosse)) r.push({t:"Geschosse fehlen"});
   if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Sonderarbeit: Personen und Dauer angeben"});
   if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true});
   else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben"});
-  if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Positionen fehlen"});
+  if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Keine Positionen im Montagebericht eingetragen"});
   if(fk && !fk("vorher").length) r.push({t:"Vorher-Fotos fehlen",soft:true});
   if(fk && !fk("nachher").length) r.push({t:"Fotos nach der Montage fehlen"});
   if(!abnahmeOk(o)) r.push({t:"Sichtabnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true});
@@ -2124,7 +2097,7 @@ function lohnPersonen(o){
   if(S.role!=="hersteller" && myId()) ids.add(myId());
   return [...ids].filter(Boolean);
 }
-function lohnCard(o){
+function lohnCard(o,opts={}){
   const pers=lohnPersonen(o);
   const darfAndere=can.planen();
   let uid=S.lohnFor[o.id]; if(!uid || (!darfAndere && uid!==myId())) uid=myId();
@@ -2138,6 +2111,10 @@ function lohnCard(o){
   const offen=S.lohnOpen[o.id]??(!!o.gemeinsam&&can.sub());
   const zeile=x=>{ const v=d.mengen?.[x.k]??"", ep=P?nn(pr[x.k]):"";
     return `<div class="pl-z ${nn(v)?"voll":""}" data-ep="${ep}"><div class="pl-l">${esc(x.label)}<span>${esc(x.einheit||"")}${ep!==""?" · "+fmtEUR(ep):""}</span></div><input class="i pl-q" data-lq="${esc(x.k)}" inputmode="decimal" value="${esc(v)}" placeholder="0" ${editable?"":"disabled"}><div class="pl-gp">${nn(v)&&ep!==""?fmtEUR(r2(nn(v)*ep)):""}</div></div>`; };
+  if(opts.montagebericht) return `<div class="card" id="berichtCard"><div class="row between" style="flex-wrap:nowrap;gap:8px"><h3 style="margin:0">📋 Montagebericht</h3><span class="small mute">${anz?`${anz} Position${anz>1?"en":""}`:""}</span></div>
+   <div class="small mute" style="margin:4px 0 10px">Trag bei jeder Position die Menge ein – daraus entsteht der Montagebericht an meta.</div>
+   ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
+   ${editable?`<div class="pl-liste">${S.lohnPos.map(zeile).join("")}</div>${c&&P?`<div class="pl-summe"><b>Summe</b><span>${fmtEUR(c.total)}</span></div>`:""}`:abrechnungTabelle(nurPos,P)}</div>`;
   return `<div class="card"><details id="lohnDet" ${offen?"open":""}><summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:15px">➕ Positionsergänzung</b><div class="small mute">${anz?`${anz} Position${anz>1?"en":""} eingetragen`:"Mengen der montierten Positionen eintragen"}${c&&P?` · ${fmtEUR(c.total)}`:""}</div></span><span class="mute">▾</span></summary><div style="margin-top:10px">
    ${darfAndere&&pers.length>1?`<div class="seg" id="lohnWho" style="margin-bottom:8px">${pers.map(p=>`<button data-lw="${esc(p)}" class="${p===uid?"on":""}">${esc(nameOf(p))}</button>`).join("")}</div>`:""}
    ${editable?`<div class="pl-liste">${S.lohnPos.map(zeile).join("")}</div>
@@ -3063,6 +3040,7 @@ function bind(r){
   app.querySelectorAll("[data-nv-zurueck]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); const o=S.orders[b.dataset.nvZurueck]; if(!o) return;
     await upd(orderPath(o.id),{nichtVerplant:null}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:null}; render(); toast(`${o.nr} steht wieder unter „Abholbereit“`,3000); });
   app.querySelectorAll("[data-rk-toggle]").forEach(b=>b.onclick=async()=>{ const rk=S.reklas[b.dataset.rkToggle]; await upd("reklamationen/"+rk.id,{offen:!rk.offen, erledigtAm:rk.offen?Date.now():null, erledigtVon:rk.offen?myId():null}); toast(rk.offen?"Reklamation erledigt ✓":"Wieder geöffnet"); });
+  app.querySelectorAll("[data-rk-edit]").forEach(b=>b.onclick=()=>reklaBearbeiten(b.dataset.rkEdit));
   app.querySelectorAll("[data-rk-ans]").forEach(b=>b.onclick=()=>{ const rk=S.reklas[b.dataset.rkAns]; modal(`<h2>Antwort / Notiz</h2><textarea class="i" id="ans">${esc(rk.antwort||"")}</textarea><div class="grid2" style="margin-top:12px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd("reklamationen/"+rk.id,{antwort:m.querySelector("#ans").value.trim()}); close(); }; }); });
   if(r.v==="detail") bindNachrichten(r.id);
   if(r.v==="detail") bindAnteil(r.id);
@@ -3318,6 +3296,34 @@ async function abschluss(id,typ){
   await upd(orderPath(id),p); S.orders[id]={...S.orders[id],...p,einsatz:{...(o.einsatz||{}),...(p.einsatz||{})},bericht:{...(o.bericht||{}),...(p.bericht||{})}}; render();
   if(!chef) S.sync?.run({subBericht:id}).catch(()=>{}); // Chefs: Bericht zu prüfen
   toast(chef?"Montage abgeschlossen ✓":"Bericht abgegeben ✓ – JD Brüder prüft ihn jetzt",3500);
+}
+// Reklamation nachträglich ändern: wer sie geschrieben hat oder der Chef (meta nicht)
+const reklaDarfAendern=r=>!!r && (r.von===myId() || can.planen()) && S.role!=="hersteller";
+function reklaBearbeiten(rid){
+  const r=S.reklas[rid]; if(!r) return;
+  let fotos=(r.fotos||[]).map(a=>({id:a,url:"_blob/"+a}));
+  modal(`<h2>Reklamation bearbeiten</h2>
+   <label class="f">Grund</label>
+   <select class="i" id="u" ${r.leerfahrt?"disabled":""}>${Object.entries(URSACHEN).map(([k,l])=>`<option value="${k}" ${r.ursache===k?"selected":""}>${l}</option>`).join("")}</select>
+   <label class="f">Beschreibung – was ist passiert? *</label><textarea class="i" id="t">${esc(r.text||"")}</textarea>
+   <label class="f">Fotos</label><div class="thumbs" id="rf"></div>
+   <label class="btn sm ghost" style="margin-top:6px">＋ Fotos hinzufügen<input type="file" accept="image/*" multiple hidden id="rfi"></label>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    const show=()=>{ m.querySelector("#rf").innerHTML=fotos.map((f,i)=>`<div class="t"><img src="${f.url}" alt=""><button class="rk-x" data-fx="${i}" aria-label="Foto entfernen">✕</button></div>`).join("");
+      m.querySelectorAll("[data-fx]").forEach(b=>b.onclick=e=>{ e.preventDefault(); fotos.splice(Number(b.dataset.fx),1); show(); }); };
+    show();
+    m.querySelector("#rfi").onchange=async e=>{
+      if(!S.assets) return toast("Foto-Upload nicht freigeschaltet");
+      for(const file of e.target.files){ try{ const blob=await shrink(file,1600,.82); const a=await S.assets.upload(blob); fotos.push({id:a.id,url:URL.createObjectURL(blob)}); show(); }catch(err){ toast("Upload fehlgeschlagen"); } }
+    };
+    m.querySelector("#ok").onclick=async()=>{
+      const text=m.querySelector("#t").value.trim(); if(!text) return toast("Bitte Beschreibung eintragen");
+      if(!fotos.length && (r.fotos||[]).length) return toast("Bitte mindestens ein Foto behalten");
+      m.querySelector("#ok").disabled=true;
+      const neu={ursache:r.leerfahrt?r.ursache:m.querySelector("#u").value,text,fotos:fotos.map(f=>f.id),bearbeitetAm:Date.now(),bearbeitetVon:myId()};
+      try{ await upd("reklamationen/"+rid,neu); S.reklas[rid]={...r,...neu}; close(); render(); toast("Reklamation geändert ✓"); }catch(e){ m.querySelector("#ok").disabled=false; }
+    };
+  });
 }
 function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
   const o=S.orders[id];
@@ -3723,6 +3729,15 @@ async function versionPruefen(){
     if(v && v!==window.JD_BUILD){ $("#aktualisieren")?.classList.add("neu"); if(!S.versionGemeldet){ S.versionGemeldet=true; toast("Neue Version da – oben rechts auf ↻ tippen",4500); } } }catch(e){}
 }
 $("#aktualisieren").onclick=jetztAktualisieren;
+// Fußleiste („Insel“): beim Runterscrollen und beim Tippen in Felder ausblenden, beim Hochscrollen wieder zeigen
+{ let letzt=window.scrollY;
+  const setze=weg=>document.body.classList.toggle("nav-weg",weg);
+  window.addEventListener("scroll",()=>{ const y=window.scrollY, d=y-letzt;
+    if(Math.abs(d)>6){ setze(d>0 && y>80); letzt=y; }
+    if(y<40 || window.innerHeight+y>=document.body.scrollHeight-4) setze(false); },{passive:true});
+  document.addEventListener("focusin",e=>{ if(e.target.matches?.("input,textarea,select")) setze(true); });
+  document.addEventListener("focusout",()=>setTimeout(()=>{ if(!document.activeElement?.matches?.("input,textarea,select")) setze(false); },120));
+  window.addEventListener("hashchange",()=>setze(false)); }
 setTimeout(versionPruefen,8000); setInterval(versionPruefen,10*60000);
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") versionPruefen(); });
 
