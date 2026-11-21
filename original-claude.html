@@ -919,7 +919,7 @@ const abhBereit=o=>o.prodStatus==="abholbereit" && !o.nichtVerplant;
 function phase(o){
   if(o.storniert) return "storniert";
   if(o.gemeinsam && can.sub()) return o.subAnteil?.[myId()]?.abgegebenAm?(abgerechnet(o)?"erledigt":"fertig"):terminiert(o)?"arbeit":abhBereit(o)?"abholbereit":"offen"; // gemeinsamer Auftrag: Sub ist fertig, wenn sein Anteil abgegeben ist
-  if(abgerechnet(o)) return "erledigt"; // Vergütung da (Montageabrechnung von meta) → komplett erledigt
+  if(abgerechnet(o) && !(o.berichtNachtragen && !istFertig(o))) return "erledigt"; // Vergütung da (Ausnahme: Bericht wird nachgetragen → erst unter Terminiert) (Montageabrechnung von meta) → komplett erledigt
   if(istFertig(o) || berichtVerschickt(o) || berichtAbgegeben(o)) return "fertig"; // Montagebericht geschrieben → Baustelle fertiggestellt, Vergütung steht noch aus
   if(terminiert(o)) return "arbeit";
   if(abhBereit(o)) return "abholbereit"; // Ware fertig – jetzt einplanen
