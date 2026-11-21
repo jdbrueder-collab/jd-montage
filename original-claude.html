@@ -220,6 +220,18 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvrot.scan{filter:grayscale(1) contrast(1.8) brightness(1.08)}
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
+.ab-liste{display:grid;gap:2px}
+.ber-fakten{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.ber-fakten span{background:var(--greybg);border-radius:999px;padding:4px 10px;font-size:13px;font-weight:600}
+.ab-z{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.ab-z:last-child{border-bottom:0}
+.ab-i{flex:none;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;margin-top:1px}
+.ab-z.ok .ab-i{background:var(--okbg);color:var(--ok)}
+.ab-z.warn .ab-i{background:var(--warnbg);color:var(--warn)}
+.ab-z.bad .ab-i{background:var(--badbg);color:var(--bad)}
+.ab-z.ok b{font-weight:600}
+.ber-k{text-align:center;border:0;cursor:pointer;width:100%;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 8px;margin:0}
+.ber-k b{font-size:13px}.ber-k .small{font-size:11.5px}
 .achtung{margin:0 0 10px;padding:8px 12px;border-radius:12px;background:var(--badbg,#fef3f2);font-size:14px;font-weight:600;display:grid;gap:6px}
 .achtung u,u.rot{text-decoration:underline;text-decoration-color:var(--bad,#d92d20);text-decoration-thickness:2px;text-underline-offset:3px}
 details.bau-mehr{margin-top:4px}
@@ -592,7 +604,7 @@ const S = {
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
   profiles:{},pendingRender:false,anfragen:{},zugang:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
-  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},fzWahl:{},nachrichten:{},
+  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},fzWahl:{},bearbeiten:{},nachrichten:{},
   echt:{isOwner:false,me:null,role:"pending"},ansicht:new URLSearchParams(location.search).get("ansicht")||"chef"
 };
 
@@ -1545,36 +1557,41 @@ function viewDetail(id){
   const erl=phase(o)==="erledigt"||(phase(o)==="fertig"&&(berichtVerschickt(o)||berichtAbgegeben(o)));
   // Nicht verplant / Abholbereit: nur Kopf, Baustelle & Kunde, Unterlagen (+ Knopf „Terminieren“)
   const frueh=phase(o)==="offen"||phase(o)==="abholbereit";
+  // Fertiggestellt / Erledigt: nur Nummer, Stand (zu prüfen / erledigt), Bericht und Unterlagen
+  const kompakt=(phase(o)==="fertig"||phase(o)==="erledigt") && !S.bearbeiten[id] && !(o.gemeinsam&&can.sub()) && !o.storniert;
   // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
   const fold=(key,titel,info,inhalt,offen=false)=>`<details class="card fold" data-fold="${id}:${key}" ${(S.fold[id+":"+key]??offen)?"open":""}><summary><b>${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
-  let h=`<button class="back" data-back>‹ Alle Aufträge</button>${schritt(o)==="ankunft"&&S.fahrten[o.einsatz?.fahrtId]?.offen?"":fahrtLeiste()}`;
+  let h=`<button class="back" data-back>‹ Alle Aufträge</button>${kompakt||schritt(o)==="ankunft"&&S.fahrten[o.einsatz?.fahrtId]?.offen?"":fahrtLeiste()}`;
+  if(S.bearbeiten[id]) h+=`<div class="banner warn" style="display:flex;align-items:center;gap:10px"><span style="flex:1">✏️ Bericht bearbeiten</span><button class="btn sm ok" id="bearbFertig">✓ Fertig</button></div>`;
   if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
   // Kopf
   h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
-     <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
+     <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
-     <div class="kopf-akt">
+     ${kompakt?"":`<div class="kopf-akt">
      ${frueh&&can.planen()?`<button class="btn pri" id="terminieren">📅 Terminieren</button>`:""}
      ${addr?`<button class="btn ${frueh?"":"pri"}" data-zur-baustelle="${esc(id)}">🧭 Zur Baustelle</button>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument</button>`}
      ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument</button>`:""}
      ${can.planen()&&!erl&&!o.storniert&&o.terminStatus!=="fest"?`<button class="btn" id="terminAnfrage">📧 Termin anfragen</button>`:""}
      ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost" data-nv="${esc(id)}">↩ Nicht verplant</button>`:""}
      ${frueh&&can.planen()&&o.nichtVerplant&&o.prodStatus==="abholbereit"?`<button class="btn ghost" data-nv-zurueck="${esc(id)}">✓ Wieder abholbereit</button>`:""}
-     </div>
-     ${(addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel"))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
+     </div>`}
+     ${!kompakt&&((addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel")))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
-  h+=terminAnfrageKarte(o);
+  if(kompakt) h+=abschlussStand(o,f,reklas);
+  if(!kompakt) h+=terminAnfrageKarte(o);
   // Eingeteilte: Termin bestätigen
   if(!erl && terminOffenFuerMich(o)) h+=`<div class="card tbest"><div style="font-weight:750;font-size:16px">📅 ${esc(langDatum(o.termin))} – passt der Termin?</div>
      <div class="small mute" style="margin-top:2px">JD Brüder sieht deine Antwort sofort.</div>
      <div class="grid2" style="margin-top:10px"><button class="btn ok" id="tOk">👍 Passt</button><button class="btn" id="tNein">✋ Passt nicht</button></div></div>`;
-  h+=nachrichtenKarte(o);
+  if(!kompakt||ungelesen(o.id)) h+=nachrichtenKarte(o);
 
   // Planung: Datum eintragen (= terminiert), Auftrag zuteilen, ggf. stornieren
   const knoepfe=[]; // kleine Knöpfe nebeneinander, gehen beim Antippen auf
   const sk=(key,icon,titel,info,inhalt,extra="")=>`<details class="card fold sk" data-fold="${id}:${key}" ${S.fold[id+":"+key]?"open":""} ${extra}><summary><b>${icon} ${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
-  if(!erl && !frueh) knoepfe.push(sk("planung","📅","Planung",[o.termin?kurzDatum(o.termin):"kein Termin",(o.monteure||[]).length?`${(o.monteure||[]).length} 👷`:""].filter(Boolean).join(" · "),`
+  if(kompakt && (o.abschluss||o.bericht||o.berichtStatus)) knoepfe.push(`<button class="card fold sk ber-k" id="berichtAnsehen"><b>${o.berichtTyp==="leerfahrt"?"↩ Leerfahrt":istReklaAuftrag(o)?"🛠 Reklamationsbericht":"📄 Montagebericht"}</b><span class="small mute">ansehen · Bilder</span></button>`);
+  if(!erl && !frueh && !kompakt) knoepfe.push(sk("planung","📅","Planung",[o.termin?kurzDatum(o.termin):"kein Termin",(o.monteure||[]).length?`${(o.monteure||[]).length} 👷`:""].filter(Boolean).join(" · "),`
     <label class="f" style="margin-top:0">Termin</label>
     ${can.planen()?`<input type="date" class="i" id="terminDatum" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">`:`<div style="font-weight:600">${o.termin?new Date(o.termin).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}):`<span class="mute">noch nicht terminiert</span>`}</div>`}
     ${o.prodStatus==="abholbereit"&&o.abholbereitBestaetigt?`<div class="small" style="margin-top:6px;color:var(--ok)">✓ Von meta als abholbereit bestätigt: <b>${esc(o.abholbereitBestaetigt.name)}</b>, ${fmtDT(o.abholbereitBestaetigt.am)}</div>`:""}
@@ -1611,7 +1628,7 @@ function viewDetail(id){
    </details>
    ${!o.bauleiterName&&!o.adresse?`<div class="banner info" style="margin:10px 0 0">Die genauen Baustellendaten stehen auf dem Aufmaß-Deckblatt. ${can.planen()?"Lade das Deckblatt unten bei „Unterlagen“ hoch oder hol es aus der Mail – die App liest es dann aus.":""}</div>`:""}
   `;
-  knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
+  if(!kompakt) knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
 
   // Unterlagen
   const unterInhalt=`${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
@@ -1624,7 +1641,8 @@ function viewDetail(id){
   h+=`<div class="det-grid" style="grid-template-columns:repeat(${knoepfe.length},minmax(0,1fr))">${knoepfe.join("")}</div>`;
 
   // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Sichtabnahme → Versand
-  if(o.gemeinsam && can.sub()){
+  if(kompakt){ /* Bericht steckt im Knopf oben */ }
+  else if(o.gemeinsam && can.sub()){
     if(!frueh) h+=anteilKarte(o);
   } else if(erl || berichtGesperrt(o) || berichtAbgegeben(o)){
     const stand=o.bestaetigtAm?`bestätigt am ${fmtDT(o.bestaetigtAm)} – nicht mehr änderbar`:o.berichtStatus==="gesendet"?"an meta gesendet – nicht mehr änderbar":o.berichtStatus==="pruefung"?"abgegeben – wartet auf Bestätigung durch JD Brüder":"fertig – nicht mehr änderbar";
@@ -1646,19 +1664,21 @@ function viewDetail(id){
   }
 
   // Anteil des Subunternehmers (gemeinsamer Auftrag) – nur für die Abrechnung, geht nicht an meta
-  if(o.gemeinsam && can.planen() && !frueh) h+=anteilChefKarte(o);
+  if(o.gemeinsam && can.planen() && !frueh && (!kompakt||anteilOffen(o))) h+=anteilChefKarte(o);
 
   // Bericht-Versand (beim gemeinsamen Auftrag sieht der Sub nur seinen Anteil)
   if(o.gemeinsam && can.sub()){ /* nichts – der Bericht an meta kommt vom Chef */ }
-  else if(o.berichtStatus==="pruefung"){
+  else if(o.berichtStatus==="pruefung" && (can.planen()||!kompakt)){
     h+=`<div class="card" style="border-left:5px solid var(--accent)"><h3>${can.planen()?"Bericht prüfen":"Montagebericht"}</h3>
      ${can.planen()?(()=>{ const sl=S.lohn[lohnDocId(o.id,o.berichtVonSub)]; const sc=sl&&subPreiseAn()?calcLohn(sl,S.preise):null; const meta=can.finanzen()&&S.fin[o.id]?Number(S.fin[o.id].summe)||0:null;
-       return `<div class="banner warn">Bericht von <b>${esc(nameOf(berichtVonWem(o)))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Sichtabnahme). Du kannst oben noch alles ändern. Nach deiner Bestätigung ist der Bericht <b>gesperrt</b>${o.berichtVonSub?", und der Subunternehmer darf seine Rechnung schreiben":""}.</div>
+       return `<div class="banner warn">Bericht von <b>${esc(nameOf(berichtVonWem(o)))}</b> – bitte prüfen (Fotos, Mengen, Montagebericht &amp; Sichtabnahme). ${kompakt?"Ändern geht über „Bericht ansehen → ✏️ Bericht bearbeiten“.":"Du kannst oben noch alles ändern."} Nach deiner Bestätigung ist der Bericht <b>gesperrt</b>${o.berichtVonSub?", und der Subunternehmer darf seine Rechnung schreiben":""}.</div>
        ${sc?`<div class="grid3" style="text-align:center;margin-bottom:10px"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Sub berechnet</div><b>${fmtEUR(sc.total)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">meta zahlt</div><b>${meta!=null?fmtEUR(meta):"–"}</b></div><div style="background:${meta!=null&&meta-sc.total<0?"var(--badbg)":"var(--okbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b>${meta!=null?fmtEUR(r2(meta-sc.total)):"–"}</b></div></div>
        <div class="small mute" style="margin-bottom:8px">${sc.lines.map(z=>`${z.menge!==""?String(z.menge).replace(".",",")+"× ":""}${esc(z.label)} ${fmtEUR(z.gp)}`).join(" · ")} – Mengen kannst du unter „Positionsergänzung“ korrigieren.</div>`:""}
        <button class="btn ok block" id="subFrei">✓ Alles korrekt – Bericht bestätigen</button>`; })():`<div class="banner info">✓ Dein Bericht ist abgegeben und liegt bei JD Brüder zur Prüfung. Ändern geht jetzt nicht mehr. Du bekommst eine Nachricht, sobald er bestätigt ist${can.sub()?" – dann kannst du deine Rechnung schreiben":""}.</div>`}</div>`;
-  } else if((erl||frueh) && o.berichtStatus==="gesendet"){
+  } else if((erl||frueh||kompakt) && o.berichtStatus==="gesendet"){
     // erledigt und an meta gesendet – nichts mehr zu tun
+  } else if(kompakt && !can.planen()){
+    // steht im „Stand“
   } else if(o.berichtStatus && !can.planen()){
     h+=`<div class="card"><h3>Montagebericht</h3>${o.bestaetigtAm||o.subGeprueftAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(o.bestaetigtAm||o.subGeprueftAm)}${o.berichtStatus==="gesendet"?" und an meta übermittelt":""}. Nicht mehr änderbar.${can.sub()?" Du kannst jetzt deine Rechnung schreiben.":""}</div>`:o.berichtStatus==="gesendet"?`<div class="banner ok">✓ An meta übermittelt. Nicht mehr änderbar.</div>`:`<div class="banner info">Bericht ist fertig und wartet auf JD Brüder.</div>`}</div>`;
   } else if(o.berichtStatus){
@@ -1669,10 +1689,13 @@ function viewDetail(id){
      ${can.senden()?`<button class="btn pri block" id="sendBericht">✉︎ ${o.berichtStatus==="gesendet"?"Erneut senden":"Bericht abschicken"}</button>`:""}
      ${S.isOwner&&!S.mcp?`<div class="small mute">Zum Senden muss Gmail in claude.ai verbunden sein.</div>`:""}</div>`;
   }
-  if(istFertig(o) && (can.einsatz()||can.produktion())) h+=abnahmeCard(o);
+  if(istFertig(o) && (can.einsatz()||can.produktion()) && (!kompakt||!abnahmeOk(o)&&o.berichtTyp!=="leerfahrt")) h+=abnahmeCard(o);
 
   // Reklamationen
-  if(erl){
+  if(kompakt){
+    const off=reklas.filter(r=>r.offen);
+    if(off.length) h+=fold("rekla","⚠ Offene Reklamationen",`${off.length} offen`,reklas.map(reklaItem).join(""));
+  } else if(erl){
     if(reklas.length) h+=fold("rekla","Reklamationen",`${reklas.filter(r=>r.offen).length} offen`,`${can.einsatz()||can.reklaErledigen()?`<div style="text-align:right"><button class="btn sm ghost" id="newRekla">＋ Reklamation</button></div>`:""}${reklas.map(reklaItem).join("")}`,reklas.some(r=>r.offen));
   } else if(!frueh && (reklas.length||can.einsatz())){
     h+=`<div class="card"><div class="row between"><h3 style="margin:0">Reklamationen</h3>${can.einsatz()||can.reklaErledigen()?`<button class="btn sm ghost" id="newRekla">＋ Reklamation</button>`:""}</div>
@@ -1681,7 +1704,7 @@ function viewDetail(id){
 
   // Finanzen (nur Chef/Admin)
   // Abrechnung nur bei erledigten Aufträgen zeigen
-  if(can.finanzen() && erl){ const st=f?(f.rechnungStatus||"offen"):"";
+  if(can.finanzen() && erl && (!kompakt||f)){ const st=f?(f.rechnungStatus||"offen"):"";
     h+=fold("abr","💶 Abrechnung",f?`${fmtEUR(f.summe)} · ${RECHNUNG[st][0]}`:"noch keine Abrechnung von meta",finanzCard(o,f).replace(/^<div class="card"><h3>Abrechnung \(nur für dich sichtbar\)<\/h3>/,"<div>")); }
   return h;
 }
@@ -1710,32 +1733,54 @@ function stornoDialog(id){
   modal(`<h2>Auftrag stornieren?</h2><div class="small mute">Der Auftrag bleibt sichtbar, steht aber unter „Storniert“.</div><label class="f">Grund / Hinweis (optional)</label><textarea class="i" id="sg" placeholder="z. B. Bauherr hat abgesagt"></textarea><div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Stornieren</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd(orderPath(id),{storniert:{am:Date.now(),von:myId(),quelle:"hand",grund:m.querySelector("#sg").value.trim()}}); close(); toast("Als storniert markiert"); }; });
 }
 // Fertiger Montagebericht – nur zum Ansehen
+// Fertiggestellt/Erledigt: was erledigt ist und was noch zu prüfen ist – kurz untereinander
+function abschlussStand(o,f,reklas){
+  const chef=can.planen(), titel=o.berichtTyp==="leerfahrt"?"Leerfahrt-Bericht":istReklaAuftrag(o)?"Reklamationsbericht":"Montagebericht", a=o.abschluss||{};
+  const zeile=(st,txt,sub="")=>`<div class="ab-z ${st}"><span class="ab-i">${st==="ok"?"✓":st==="bad"?"!":"•"}</span><div><b>${txt}</b>${sub?`<div class="small mute">${sub}</div>`:""}</div></div>`;
+  let z="";
+  if(o.abschluss) z+=zeile("ok",a.typ==="rekla"?"Montage abgeschlossen – mit Reklamation":"Montage abgeschlossen",`${fmtDT(a.am)}${a.by?" · "+esc(nameOf(a.by)):""}`);
+  if(o.berichtStatus==="gesendet") z+=zeile("ok",`${titel} an meta gesendet`,`${o.berichtGesendetAm?fmtDT(o.berichtGesendetAm):""}${o.berichtAn?" · "+esc(o.berichtAn):""}`);
+  else if(o.berichtStatus==="pruefung") z+=zeile("warn",chef?`${titel} prüfen`:`${titel} wird von JD Brüder geprüft`,o.berichtVon?"von "+esc(nameOf(berichtVonWem(o))):"");
+  else if(o.bestaetigtAm) z+=zeile(chef?"warn":"ok",chef?`${titel} bestätigt – noch an meta senden`:`${titel} bestätigt`,fmtDT(o.bestaetigtAm));
+  else if(o.berichtStatus) z+=zeile("warn",chef?`${titel} noch an meta senden`:`${titel} fertig – wartet auf Versand`);
+  if(o.abschluss && o.berichtTyp!=="leerfahrt"){ const ab=abnahmeStatus(o);
+    z+=ab==="ok"?zeile("ok","Sichtabnahme unterschrieben",o.unterschrift?`${esc(o.unterschrift.name||"")} · ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?"hochgeladen":"auf Papier")
+      :ab==="versendet"?zeile("warn","Sichtabnahme beim Kunden – wartet",`Frist bis ${new Date(o.abnahmeAnfrage.frist).toLocaleDateString("de-DE")}`)
+      :ab==="verzicht"?zeile("ok","Sichtabnahme nicht angefordert"):zeile(abnahmeFaellig(o)?"bad":"warn","Sichtabnahme fehlt"); }
+  const off=reklas.filter(r=>r.offen).length; if(reklas.length) z+=zeile(off?"warn":"ok",off?`${off} Reklamation${off>1?"en":""} offen`:"Reklamationen erledigt");
+  z+=abgerechnet(o)?zeile("ok","Vergütung von meta erhalten",[o.abgerechnetMit?"Abrechnung "+esc(o.abgerechnetMit):"",can.finanzen()&&f?fmtEUR(f.summe):""].filter(Boolean).join(" · ")):zeile("warn","Vergütung von meta steht noch aus");
+  return `<div class="card ab-k"><div class="ab-liste">${z}</div></div>`;
+}
+// Bericht kurz zusammengefasst – mit allen Bildern (antippen = groß)
 function berichtAnsicht(id){
-  const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o);
+  const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o), rek=istReklaAuftrag(o);
+  const titel=o.berichtTyp==="leerfahrt"?"Leerfahrt":rek?"Reklamationsbericht":"Montagebericht";
   const pos=Object.entries(summeMengen(o)).filter(([k])=>k!=="stunden").map(([k,v])=>`${String(v).replace(".",",")}× ${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}`);
   const z=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
-  const fotos=Object.values(S.fotos).filter(f=>f.kat==="nachher"||f.kat==="vorher").sort((a,c)=>(a.am||0)-(c.am||0));
-  modal(`<h2>Montagebericht ${esc(o.nr)}</h2><div class="small mute" style="margin-bottom:10px">${o.abschluss?`Abgeschlossen am ${fmtDT(o.abschluss.am)}`:""}${o.berichtGesendetAm?` · an meta gesendet am ${fmtDT(o.berichtGesendetAm)}`:""}</div>
+  const gruppe=(t,l)=>l.length?`<label class="f">${t} <span class="mute">(${l.length})</span></label><div class="thumbs">${l.map(u=>`<div class="t" data-z="${esc(u)}"><img loading="lazy" src="${esc(u)}" alt=""></div>`).join("")}</div>`:"";
+  const fk=k=>Object.values(S.fotos).filter(f=>f.kat===k&&!/pdf/i.test(f.typ||"")).sort((a,c)=>(a.am||0)-(c.am||0)).map(f=>"/_blob/"+f.assetId);
+  const rk=Object.values(S.reklas).filter(r=>r.auftragId===id);
+  const darfBearb=can.einsatz() && !berichtGesperrt(o) && (can.planen() || !berichtAbgegeben(o));
+  modal(`<h2>${titel} ${esc(o.nr)}</h2><div class="small mute" style="margin-bottom:10px">${esc(o.bauvorhaben||"")}${o.abschluss?` · abgeschlossen ${fmtDT(o.abschluss.am)}`:""}${o.berichtGesendetAm?` · an meta ${fmtDT(o.berichtGesendetAm)}`:""}</div>
+   ${(()=>{ const nt=naechteText(b); const fa=[rek&&az?"⏱ "+fmtHMin(az)+" Std.":"",b.personen?"👷 "+esc(b.personen)+" Pers.":"",b.istKm?"🚗 "+esc(b.istKm)+" km":"",nt&&nt!=="keine"?"🛏 "+esc(nt):"",b.geschosse?"🏢 "+esc(b.geschosse):""].filter(Boolean);
+     return fa.length?`<div class="ber-fakten">${fa.map(x=>`<span>${x}</span>`).join("")}</div>`:""; })()}
    <dl class="kv">
     ${z("Tätigkeit",esc(b.taetigkeit||"").replace(/\n/g,"<br>"))}
     ${z("Positionen",pos.join(", "))}
-    ${z("Personen",[b.personen?b.personen+" vor Ort":"",b.personenMit?b.personenMit+" mitgefahren":""].filter(Boolean).join(", "))}
-    ${z("Fahrzeug",esc(fahrzeugText(o.einsatz))+(mitAnhaenger(o.einsatz)?" – Anhängerfahrt":""))}
-    ${z("Gefahrene km",esc(b.istKm||""))}
-    ${z("Hotelfahrten",esc(hotelText(o)))}
-    ${z("Geschosse",esc(b.geschosse||""))}
-    ${z("Übernachtungen",esc(naechteText(b)))}
-    ${z("Sonderarbeiten",sonderFertig(b).map(x=>esc(sonderZeile(x))).join("<br>"))}
+    ${z(rek?"Zusatzarbeiten":"Sonderarbeiten",sonderFertig(b).map(x=>esc(sonderZeile(x))).join("<br>"))}
     ${z("Vorleistung",vorleistungZeilen(o).map(esc).join("<br>"))}
-    ${z("Bemerkungen",esc(b.bemerkung||""))}
+    ${z("Reklamationen",rk.map(r=>`${r.offen?"● ":"✓ "}${esc(URSACHEN[r.ursache]||r.ursache||"")}: ${esc(r.text||"")}`).join("<br>"))}
     ${z("Sichtabnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
    </dl>
-   ${fotos.length?`<label class="f">Fotos</label><div class="thumbs">${fotos.map(f=>`<div class="t" data-z="/_blob/${esc(f.assetId)}"><img loading="lazy" src="/_blob/${esc(f.assetId)}" alt=""></div>`).join("")}</div>`:""}
-   <label class="f">Montagebericht (PDF an meta, ohne Preise)</label><div id="pv"><span class="spin"></span> Vorschau wird erstellt …</div>
-   <div class="grid2" style="margin-top:12px"><button class="btn" data-close>Schließen</button><button class="btn pri" id="dl">⬇︎ PDF</button></div>`,(m)=>{
+   ${gruppe("Vorher",fk("vorher"))}${gruppe("Nachher",fk("nachher"))}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["/_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"/_blob/"+a)))}
+   <div style="display:grid;gap:8px;margin-top:14px">
+    <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
+    ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`:""}
+    <button class="btn block" data-close>Schließen</button></div>`,(m,close)=>{
     m.querySelectorAll("[data-z]").forEach(t=>t.onclick=()=>lightbox(t.dataset.z));
-    renderVordruck(o).then(cs=>{ const show=o.unterschrift?cs:cs.slice(0,1); m.querySelector("#pv").innerHTML=show.map(c=>`<img src="${c.toDataURL("image/jpeg",.8)}" alt="" style="width:100%;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:zoom-in" data-zz>`).join(""); m.querySelectorAll("[data-zz]").forEach(im=>im.onclick=()=>lightbox(im.src)); }).catch(()=>{ m.querySelector("#pv").textContent="Vorschau nicht möglich."; });
-    m.querySelector("#dl").onclick=async()=>{ try{ const blob=await makeVordruckPdf(o); const dl=await window.claude.use("downloads").catch(()=>null); if(dl) await dl.save({filename:`Montagebericht_${idOf(o.nr)}.pdf`,data:blob}); }catch(e){ if(e?.code!=="cancelled") toast("PDF fehlgeschlagen: "+(e.message||e)); } };
+    m.querySelector("#pdfAns").onclick=async()=>{ const bt=m.querySelector("#pdfAns"); bt.disabled=true; bt.innerHTML=`<span class="spin"></span> wird erstellt …`;
+      try{ const cs=await renderVordruck(o); vorschauZeigen(o.unterschrift?cs:cs.slice(0,1),`${titel} ${o.nr}`); }catch(e){ toast("Vorschau nicht möglich"); } bt.disabled=false; bt.textContent="📄 Bericht-PDF ansehen"; };
+    m.querySelector("#bearb") && (m.querySelector("#bearb").onclick=()=>{ S.bearbeiten[id]=true; close(); render(); scrollTo(0,0); });
   });
 }
 function thumbs(list, kat, canAdd){
@@ -2277,7 +2322,7 @@ function bindEinsatz(o){
   // Sichtabnahme
   document.querySelectorAll("#abnArt [data-aa]").forEach(b=>b.onclick=()=>upd(P,{bericht:{abnahmeArt:b.dataset.aa}}));
   $("#abnPapier") && ($("#abnPapier").onchange=()=>upd(P,{abnahmePapier:$("#abnPapier").checked?{am:Date.now(),von:myId()}:null}));
-  $("#sigDel") && ($("#sigDel").onclick=async()=>{ if(!await confirmBox("Unterschrift löschen?","Danach kann eine neue Unterschrift erfasst werden.","Löschen","bad")) return; const a=o.unterschrift?.assetId; await upd(P,{unterschrift:null}); if(a&&S.assets){ try{ await S.assets.delete(a); }catch(err){} } toast("Unterschrift gelöscht"); });
+  $("#sigDel") && ($("#sigDel").onclick=async()=>{ if(!await confirmBox("Unterschrift wirklich löschen?",`Die Unterschrift von <b>${esc(o.unterschrift?.name||"")}</b> vom ${o.unterschrift?.am?fmtDT(o.unterschrift.am):""} wird <b>endgültig gelöscht</b>. Das lässt sich nicht rückgängig machen.`,"Ja, Unterschrift löschen","bad")) return; const a=o.unterschrift?.assetId; await upd(P,{unterschrift:null}); if(a&&S.assets){ try{ await S.assets.delete(a); }catch(err){} } toast("Unterschrift gelöscht"); });
 }
 
 /* ---------- Leerfahrt / Schreiben „nicht montagebereit“ ---------- */
@@ -3590,6 +3635,7 @@ function bindDetail(id){
   $("#losJetzt") && ($("#losJetzt").onclick=()=>einsatzLosfahren(o));
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
+  $("#bearbFertig") && ($("#bearbFertig").onclick=()=>{ delete S.bearbeiten[id]; render(); scrollTo(0,0); });
   $("#terminieren") && ($("#terminieren").onclick=()=>terminDialog(id));
   $("#terminSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{terminStatus:b.dataset.t}));
   const td=$("#terminDatum"); if(td) td.onchange=async()=>{ await upd(P,{termin:td.value?new Date(td.value+"T08:00:00").getTime():null, terminStatus:td.value?"fest":o.terminStatus||"zu_terminieren"}); if(td.value) S.sync?.run({termin:id}).catch(()=>{}); };
@@ -3909,8 +3955,9 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
     };
   });
 }
-function signDialog(id){
+async function signDialog(id){
   const o=S.orders[id], v0=vd(o);
+  if(o.unterschrift && !await confirmBox("Neu unterschreiben?",`Es gibt schon eine Unterschrift von <b>${esc(o.unterschrift.name||"")}</b> vom ${fmtDT(o.unterschrift.am)}. Eine neue Unterschrift <b>ersetzt</b> sie.`,"Ja, neu unterschreiben","warn")) return;
   modal(`<h2>Sichtabnahme am Handy</h2>
    <label class="f">1. Was wird abgenommen?</label><div class="seg" id="lst">${Object.entries(LEISTUNG).map(([k,l])=>`<button data-l="${k}" class="${v0.leistung===k?"on":""}">${l}</button>`).join("")}</div>
    <input class="i" id="lso" placeholder="Was genau?" value="${esc(v0.leistungSonst||"")}" style="margin-top:6px;${v0.leistung==="sonst"?"":"display:none"}">
