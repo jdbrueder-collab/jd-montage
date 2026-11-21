@@ -1529,10 +1529,15 @@ function viewDetail(id){
   } else if(can.einsatz() && !frueh){
     h+=einsatzCard(o,fk);
     const st=schritt(o);
-    if(st==="bericht"||st==="fertig"){
+    if(st==="bericht"){
+      h+=berichtCard(o,fk);
+      h+=berichtFertigCard(o,fk);
+      h+=vordruckCard(o);
+    } else if(st==="rekla"||st==="abnahme"){
+      h+=vordruckCard(o);
+    } else if(st==="fertig"){
       h+=berichtCard(o,fk);
       h+=abnahmeTeil(o,fk);
-      h+=abschlussCard(o,fk);
       h+=vordruckCard(o);
     }
   }
@@ -1676,10 +1681,18 @@ function finanzCard(o,f){
 }
 
 /* ---------- Einsatz-Ablauf ---------- */
-const SCHRITTE=[["fahrzeug","Abfahrt"],["ankunft","Ankunft"],["start","Montagestart"],["vorher","Vorher-Fotos"],["nmb","Montagebereit"],["montage","Montage"],["uebernachtung","Übernachtung"],["bericht","Montagebericht"],["fertig","Abgeschlossen"]];
+const SCHRITTE=[["fahrzeug","Losfahren"],["ankunft","Angekommen"],["start","Montagestart"],["vorher","Vorher-Fotos"],["nmb","Montagebereit"],["montage","Montage"],["uebernachtung","Übernachtung"],["bericht","Montagebericht"],["rekla","Reklamation"],["abnahme","Sichtabnahme"],["fertig","Abgeschlossen"]];
 const LEISTUNG={wc:"WC-Trennwände",schraenke:"Schränke",sonst:"Sonstiges"};
 const leer=v=>v===undefined||v===null||String(v).trim()==="";
+// Nach dem Montagebericht: Reklamation? (Ja/Nein) → Sichtabnahme? (Ja/Nein) → Unterschreiben oder Versenden
 function schritt(o){
+  const st=schrittBasis(o); if(st!=="bericht") return st;
+  const b=o.bericht||{};
+  if(!b.fertigAm) return "bericht";
+  if(!b.reklaFertig && !istReklaAuftrag(o)) return "rekla";
+  return "abnahme";
+}
+function schrittBasis(o){
   if(istFertig(o)) return "fertig";
   const e=o.einsatz;
   if(!e){ if(running(o)) return "montage"; if((o.zeiten||[]).length) return "bericht"; return "fahrzeug"; }
@@ -1780,6 +1793,8 @@ function zeitenListe(o){
 }
 function stepBackPatch(o){
   const st=schritt(o), e=o.einsatz||{};
+  if(st==="rekla") return {bericht:{fertigAm:null}};
+  if(st==="abnahme") return istReklaAuftrag(o)?{bericht:{fertigAm:null}}:{bericht:{reklaFertig:null,abnahmeFrage:null}};
   if(!o.einsatz||istFertig(o)) return null;
   if(st==="ankunft") return {einsatz:{fahrzeug:null,fahrzeugText:null,abfahrtAm:null}};
   if(st==="start") return {einsatz:{ankunftAm:null}};
@@ -1860,6 +1875,25 @@ function einsatzCard(o,fk){
      ${tageListe(o)}
      ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}
      <button class="btn ok block" id="montageFertig" style="margin-top:14px;min-height:56px;font-size:16px">■ Timer stoppen – Montage abgeschlossen</button>`;
+  } else if(st==="rekla"){
+    const rl=Object.values(S.reklas).filter(r=>r.auftragId===id&&!r.leerfahrt).sort((a,c)=>a.am-c.am), rf=b.reklaFrage;
+    h+=`<div class="q">Gab es eine Reklamation?</div>
+     <div class="small mute" style="margin-bottom:10px">Zum Beispiel beschädigte oder fehlende Teile, falsche Maße. Reklamationen kommen im Montagebericht unter „Fertigung“.</div>
+     <div class="grid2"><button class="btn" id="rkNein" style="min-height:56px;font-size:16px">✕ Nein</button><button class="btn ${rf==="ja"?"warn":""}" id="rkJa" style="min-height:56px;font-size:16px">⚠ Ja</button></div>
+     ${rf==="ja"?`<div style="margin-top:14px">${rl.length?rl.map(r=>`<div class="rk-z" style="display:flex;gap:8px;align-items:flex-start;background:var(--greybg);border-radius:10px;padding:10px 12px;margin-bottom:6px"><div style="flex:1;min-width:0"><b class="small">${esc(URSACHEN[r.ursache]||r.ursache||"")}</b><div class="small">${esc(r.text||"")}</div></div>${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}">✏️</button>`:""}</div>`).join(""):`<div class="small mute" style="margin-bottom:8px">Noch keine Reklamation eingetragen.</div>`}
+       <button class="btn block" id="rkPos" style="min-height:50px">＋ Reklamation-Position eintragen</button>
+       ${rl.length?`<button class="btn ok block" id="rkWeiter" style="margin-top:8px;min-height:56px;font-size:16px">Weiter → Sichtabnahme</button>`:""}</div>`:""}`;
+  } else if(st==="abnahme"){
+    const af=b.abnahmeFrage, ok=abnahmeOk(o);
+    h+=`<div class="q">Sichtabnahme erfolgt?</div>
+     <div class="grid2"><button class="btn ${af==="ja"?"ok":""}" data-abf="ja" style="min-height:56px;font-size:16px">✓ Ja</button><button class="btn ${af==="nein"?"on":""}" data-abf="nein" style="min-height:56px;font-size:16px">✕ Nein</button></div>
+     ${af?`${ok?`<div class="banner ok small" style="margin:12px 0 0">✓ Sichtabnahme liegt vor${o.unterschrift?` – unterschrieben von <b>${esc(o.unterschrift.name||"")}</b>, ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?" – auf Papier":""}</div>`:""}
+      <div class="grid2" style="margin-top:12px">
+       <button class="btn ${af==="ja"&&!ok?"pri":""}" id="abfSign" style="min-height:66px;flex-direction:column;gap:2px">✍️ Unterschreiben<span class="small" style="font-weight:500;opacity:.85">${ok&&o.unterschrift?"neu unterschreiben":"vor Ort am Handy"}</span></button>
+       <button class="btn ${af==="nein"||ok?"ok":""}" id="abfSend" style="min-height:66px;flex-direction:column;gap:2px">✉️ Versenden<span class="small" style="font-weight:500;opacity:.85">${ok?"Bericht + Sichtabnahme":"Bericht ohne Sichtabnahme"}</span></button></div>
+      <div class="small mute" style="margin-top:8px">${ok?"Der Montagebericht geht mit der Sichtabnahme per Mail raus.":"Der Montagebericht geht ohne Sichtabnahme per Mail raus. Wird die Sichtabnahme später unterschrieben, kommt sie dazu."}${can.planen()?"":" Vorher prüft JD Brüder den Bericht."}</div>
+      ${af==="nein"&&can.planen()&&can.mails()&&!ok&&!o.abnahmeAnfrage?`<button class="btn ghost block sm" id="reqAbn" style="margin-top:8px">👁 Sichtabnahme per Mail an den Kunden senden</button>`:""}
+      ${af==="ja"&&!ok?`<details class="fold" style="margin-top:10px"><summary><span class="small">📄 Auf Papier unterschrieben? Foto hochladen</span></summary><div class="foldin">${abnahmeTeil(o,fk)}</div></details>`:""}`:""}`;
   } else {
     h+=`${istFertig(o)?`<div class="banner ${o.abschluss.typ==="ok"?"ok":"warn"}">Abgeschlossen am ${fmtDT(o.abschluss.am)} von ${esc(nameOf(o.abschluss.by))}${o.abschluss.typ==="rekla"?" – mit Reklamation":""}. ${can.planen()&&!berichtGesperrt(o)?`<button class="btn sm ghost" id="reopen" style="margin-left:6px">Wieder öffnen</button>`:""}</div>`:`<div class="banner ok">✓ Montage beendet${e.fertigAm?" am "+fmtDT(e.fertigAm):""}. Jetzt den Montagebericht ausfüllen.</div>`}
      <div class="row between"><div><div class="small mute">Arbeitszeit <span class="small">(nur intern, nicht im Bericht)</span></div><div class="timer" style="font-size:26px">${fmtDur(totalMs(o))}</div></div>${istFertig(o)?"":`<button class="btn pri" id="toBericht">📝 Montagebericht</button>`}</div>
@@ -1986,6 +2020,12 @@ function fehlendeAngaben(o,fk){
   if(!abnahmeOk(o)) r.push({t:"Sichtabnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true});
   return r;
 }
+function berichtFertigCard(o,fk){
+  const f=fehlendeAngaben(o,fk).filter(x=>!/Sichtabnahme/.test(x.t));
+  return `<div class="card"><h3>Bericht fertig?</h3>
+   ${f.length?`<div class="small"><b>Noch offen:</b></div>${missList(f)}`:`<div class="banner ok small" style="margin:0">Alle Angaben vollständig ✓</div>`}
+   <button class="btn ok block" id="berFertig" style="margin-top:12px;min-height:56px;font-size:16px">✓ Bericht fertig – weiter${istReklaAuftrag(o)?" → Sichtabnahme":" → Reklamation"}</button></div>`;
+}
 const missList=f=>`<ul class="miss">${f.map(x=>`<li class="${x.soft?"soft":""}">• ${esc(x.t)}</li>`).join("")}</ul>`;
 function abschlussCard(o,fk){
   if(istFertig(o)) return "";
@@ -2048,6 +2088,26 @@ function bindEinsatz(o){
     setTimeout(()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}),300);
   });
   $("#toBericht") && ($("#toBericht").onclick=()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}));
+  // Bericht fertig → Reklamation? → Sichtabnahme? → Unterschreiben / Versenden
+  const nachOben=()=>setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),120);
+  $("#berFertig") && ($("#berFertig").onclick=async()=>{
+    const fk2=k=>Object.values(S.fotos).filter(x=>x.kat===k), hart=fehlendeAngaben(o,fk2).filter(x=>!x.soft&&!/Sichtabnahme/.test(x.t));
+    if(hart.length && !await confirmBox("Trotzdem weiter?",`<b>Noch offen:</b>${missList(hart)}<div style="margin-top:6px">Du kannst das über „Schritt zurück“ noch ergänzen.</div>`,"Weiter")) return;
+    await upd(P,{bericht:{fertigAm:Date.now()}}); nachOben(); });
+  $("#rkNein") && ($("#rkNein").onclick=async()=>{
+    const rl=Object.values(S.reklas).filter(r=>r.auftragId===id&&!r.leerfahrt);
+    if(rl.length && !await confirmBox("Keine Reklamation?",`Es sind schon ${rl.length} Reklamation(en) eingetragen. Die bleiben im Bericht – zum Entfernen „✏️“ antippen.`,"Weiter")) return;
+    await upd(P,{bericht:{reklaFrage:rl.length?"ja":"nein",reklaFertig:Date.now()}}); nachOben(); });
+  $("#rkJa") && ($("#rkJa").onclick=async()=>{ await upd(P,{bericht:{reklaFrage:"ja"}}); if(!Object.values(S.reklas).some(r=>r.auftragId===id&&!r.leerfahrt)) reklaDialog(id); });
+  $("#rkPos") && ($("#rkPos").onclick=()=>reklaDialog(id));
+  $("#rkWeiter") && ($("#rkWeiter").onclick=async()=>{ await upd(P,{bericht:{reklaFertig:Date.now()}}); nachOben(); });
+  document.querySelectorAll("[data-abf]").forEach(bt=>bt.onclick=()=>upd(P,{bericht:{abnahmeFrage:bt.dataset.abf}}));
+  $("#abfSign") && ($("#abfSign").onclick=async()=>{ if(o.bericht?.abnahmeFrage!=="ja") await upd(P,{bericht:{abnahmeFrage:"ja",abnahmeArt:"handy"}}); else if(o.bericht?.abnahmeArt!=="handy") upd(P,{bericht:{abnahmeArt:"handy"}}); signDialog(id); });
+  $("#abfSend") && ($("#abfSend").onclick=async()=>{
+    const cur=S.orders[id], typ=Object.values(S.reklas).some(r=>r.auftragId===id&&!r.leerfahrt)?"rekla":"ok";
+    if(!await abschluss(id,typ)) return;
+    if(can.planen()&&can.senden()) setTimeout(()=>berichtDialog(id),250);
+  });
   $("#stepBack") && ($("#stepBack").onclick=async ev=>{ ev.preventDefault(); const p=stepBackPatch(o); if(!p) return; if(!await confirmBox("Einen Schritt zurück?","Die Angabe aus dem letzten Schritt wird zurückgenommen.","Zurück")) return; delete S.bereitWahl[id]; upd(P,p); });
   // Bericht
   $("#manuell") && ($("#manuell").onclick=()=>{ const t=$("#fTaet"); t.scrollIntoView({behavior:"smooth",block:"center"}); setTimeout(()=>t.focus(),350); });
@@ -3593,7 +3653,7 @@ async function abschluss(id,typ){
   const f=fehlendeAngaben(o,fk), hart=f.filter(x=>!x.soft);
   const chef=can.planen();
   const ok=await confirmBox(chef?"Montage abschließen?":"Bericht abgeben?", (f.length?`<b>Bitte prüfen:</b>${missList(f)}${hart.length&&chef?`<div style="margin-top:6px">Du kannst die fehlenden Angaben auch danach noch ergänzen.</div>`:""}`:"")+(chef?`<div style="margin-top:8px">Danach ist der Bericht bereit für den Versand.</div>`:`<div style="margin-top:8px"><b>Danach kannst du nichts mehr ändern.</b> JD Brüder prüft den Bericht und bestätigt ihn – du bekommst eine Nachricht.</div>`), hart.length?(chef?"Trotzdem abschließen":"Trotzdem abgeben"):(chef?"Abschließen":"Bericht abgeben"), hart.length?"warn":"ok");
-  if(!ok) return;
+  if(!ok) return false;
   const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
   const p={zeiten:z,abschluss:{typ,am:now,by:myId()},berichtStatus:chef?"bereit":"pruefung",berichtVonSub:can.sub()?myId():null,berichtVon:myId(),berichtTyp:typ};
   if(o.einsatz && !o.einsatz.fertigAm) p.einsatz={fertigAm:now};
@@ -3601,6 +3661,7 @@ async function abschluss(id,typ){
   await upd(orderPath(id),p); S.orders[id]={...S.orders[id],...p,einsatz:{...(o.einsatz||{}),...(p.einsatz||{})},bericht:{...(o.bericht||{}),...(p.bericht||{})}}; render();
   if(!chef) S.sync?.run({subBericht:id}).catch(()=>{}); // Chefs: Bericht zu prüfen
   toast(chef?"Montage abgeschlossen ✓":"Bericht abgegeben ✓ – JD Brüder prüft ihn jetzt",3500);
+  return true;
 }
 // Reklamation nachträglich ändern: wer sie geschrieben hat oder der Chef (meta nicht)
 const reklaDarfAendern=r=>!!r && (r.von===myId() || can.planen()) && S.role!=="hersteller";
