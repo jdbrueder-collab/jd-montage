@@ -506,7 +506,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="82dc76ff816e";</script>
+<script>window.JD_BUILD="fa577b7a319f";</script>
 </head>
 <body>
 <header class="top">
@@ -2090,7 +2090,7 @@ function einsatzCard(o,fk){
     const lz=(o.zeiten||[]).slice(-1)[0], neuerTag=!r&&lz&&isoTag(lz.s)!==isoTag(Date.now());
     h+=`<div class="row between"><div><div class="small mute">Arbeitszeit gesamt <span class="small">(nur intern)</span></div><div class="timer" data-timer="${esc(id)}">${fmtDur(totalMs(o))}</div></div>
        <span class="chip ${r?"ok":"warn"}">${r?"● läuft":lz?.hotel?"🏨 im Hotel":lz?.feierabend?"🌙 Feierabend":"⏸ Pause"}</span></div>
-     ${r?`<div class="grid2" style="margin-top:12px"><button class="btn" id="pauseBtn" style="min-height:52px">⏸ Pause</button><button class="btn" id="feierabendBtn" style="min-height:52px">🌙 Feierabend – morgen weiter</button></div>
+     ${r?`<button class="btn block" id="pauseBtn" style="margin-top:12px;min-height:52px">⏸ Pause</button>
         <button class="btn block" id="hotelBtn" style="margin-top:8px;min-height:52px">🏨 Feierabend – ab ins Hotel</button>`
         :`<button class="btn ok block" id="weiterBtn" style="margin-top:12px;min-height:56px;font-size:16px">▶ ${neuerTag?"Neuer Arbeitstag – weiterarbeiten":"Weiterarbeiten"}</button>`}
      ${tageListe(o)}
