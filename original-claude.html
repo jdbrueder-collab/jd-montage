@@ -380,6 +380,9 @@ html[data-geraet=android] nav.bottom .nav-ic .badge{box-shadow:0 0 0 2px #f3f4f9
 .tun-p.on{border-color:var(--ink);box-shadow:none!important;background:var(--greybg)!important}
 
 /* ===== Fahrtenbuch mit Kilometerstand ===== */
+.fb-z.in-tour{border-left:4px solid var(--brand2,#2563eb);margin-left:6px}
+.tour-k{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;font-weight:650;color:var(--brand2,#2563eb);margin:10px 2px 4px}
+.tour-k span{color:var(--mute);font-weight:500}
 .fahrt-l{display:flex;align-items:center;gap:10px;background:var(--okbg);border:1px solid #b7e4c7;border-radius:14px;padding:10px 10px 10px 14px;margin-bottom:12px}
 .fahrt-l .btn{flex:none;white-space:nowrap}
 .fb-box{background:var(--greybg);border-radius:12px;padding:10px 12px;margin-bottom:12px}
@@ -1289,7 +1292,13 @@ async function nachrichtSenden(id, text){
 /* ---------- Terminabstimmung mit dem Bauleiter (Mail mit Antwort-Link) ---------- */
 const terminText=t=>t?new Date(t).toLocaleString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})+" Uhr":"";
 const terminLinkBasis=()=>location.pathname.includes("/dev/")?location.origin+"/":location.href.split(/[?#]/)[0].replace(/[^/]*$/,"");
-function terminAnfrageText(o,vs,link){
+// Kalenderwochen für die Terminanfrage: Schlüssel „2026-49“
+const kwSchl=(j,k)=>`${j}-${k}`;
+function kwAusSchl(key){ const [j,k]=String(key).split("-").map(Number); if(!j||!k) return null; const mo=mondayOf(j,k), fr=new Date(mo); fr.setDate(mo.getDate()+4);
+  return {key,kw:k,jahr:j,mo,fr,text:`KW ${k} (${mo.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${fr.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"})})`}; }
+function kwOptionen(n=12){ const out=[]; const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+7-((d.getDay()+6)%7));
+  for(let i=0;i<n;i++){ const mo=new Date(d); mo.setDate(d.getDate()+i*7); const w=isoWeek(mo); out.push(kwAusSchl(kwSchl(w.jahr,w.kw))); } return out; }
+function terminAnfrageText(o,vs,link,kws=null){
   const st=S.settings||{}, tel=st.firmenTelefon||"02684 9572269", firma=st.monteurName||"JD Brüder GbR";
   const adr=adresseOf(o);
   const L=[o.bauleiterName?`Guten Tag ${o.bauleiterName},`:"Sehr geehrte Damen und Herren,","",
@@ -1297,20 +1306,23 @@ function terminAnfrageText(o,vs,link){
     `Bezug: meta-Auftrag ${o.nr}${o.vorgang?` (Vorgang ${o.vorgang})`:""} – laut den uns vorliegenden Unterlagen`,
     o.bauvorhaben?`Bauvorhaben: ${o.bauvorhaben}`:null, adr?`Baustelle: ${adr}`:null, o.kabinen&&o.kabinen!=="0"?`Umfang: ${o.kabinen} Kabinen`:null,"",
     "Für die Montage müssen die Räume fertiggestellt sein (Fliesen verlegt, Wände und Böden fertig, Räume frei zugänglich). Bitte geben Sie uns dafür kurz Ihre Freigabe.","",
-    vs.length>1?"Unsere Terminvorschläge:":"Unser Terminvorschlag:", ...vs.map(v=>`• ${terminText(v)}`),"",
-    "Bitte antworten Sie mit einem Klick – Termin bestätigen, Freigabe geben oder Ihren Wunschtermin nennen:", link,"",
+    ...(kws?(kws.length?[kws.length>1?"Wir können in folgenden Kalenderwochen montieren:":"Wir können in dieser Kalenderwoche montieren:",...kws.map(k=>`• ${kwAusSchl(k)?.text||k}`)]
+       :["Bitte teilen Sie uns mit, in welcher Kalenderwoche die Montage für Sie am besten passt."])
+      :[vs.length>1?"Unsere Terminvorschläge:":"Unser Terminvorschlag:", ...vs.map(v=>`• ${terminText(v)}`)]),"",
+    kws?"Bitte antworten Sie mit einem Klick – Kalenderwoche auswählen, Freigabe geben oder Ihren Wunsch nennen:":"Bitte antworten Sie mit einem Klick – Termin bestätigen, Freigabe geben oder Ihren Wunschtermin nennen:", link,"",
     `Sie können auch einfach auf diese Mail antworten oder uns anrufen: ${tel}`,"",
     "Mit freundlichen Grüßen", firma, `Tel. ${tel}`];
   return L.filter(x=>x!==null).join("\n");
 }
 function terminAnfrageKarte(o){
   const a=o.terminAnfrage; if(!a||!a.am) return "";
-  const st={offen:["info","⏳ Antwort ausstehend"],zugesagt:["ok","✅ Termin bestätigt"],gegenvorschlag:["warn","📅 Anderer Terminwunsch"],nicht_bereit:["bad","⛔ Noch nicht montagebereit"],uebernommen:["ok","✅ Wunschtermin übernommen"]}[a.status]||["info",a.status||""];
+  const st={offen:["info","⏳ Antwort ausstehend"],zugesagt:["ok","✅ Termin bestätigt"],gegenvorschlag:["warn","📅 Anderer Terminwunsch"],nicht_bereit:["bad","⛔ Noch nicht montagebereit"],uebernommen:["ok","✅ Wunschtermin übernommen"],kw_zugesagt:["ok","🗓 KW bestätigt"],kw_wunsch:["warn","🗓 Andere KW gewünscht"]}[a.status]||["info",a.status||""];
   const an=a.antwort;
   return `<div class="card"><div class="row between" style="flex-wrap:nowrap;gap:8px"><h3 style="margin:0">📧 Terminabstimmung</h3><span class="chip ${st[0]}">${st[1]}</span></div>
    <div class="small mute" style="margin-top:4px">Gesendet ${fmtDT(a.am)} an ${esc(a.an||"")}</div>
-   <div class="small" style="margin-top:6px">${(a.vorschlaege||[]).length>1?"Vorschläge":"Vorschlag"}: ${(a.vorschlaege||[]).map(v=>esc(terminText(v))).join(" · ")}</div>
-   ${an?`<div class="banner ${st[0]} small" style="margin:8px 0 0"><b>${esc(an.name||"")}</b> · ${fmtDT(an.am)}<br>${an.status==="nicht_bereit"?"Räume noch nicht fertig":esc(terminText(an.termin))}${an.nachricht?`<br>„${esc(an.nachricht)}“`:""}</div>`:""}
+   <div class="small" style="margin-top:6px">${a.art==="kw"?((a.kws||[]).length?`KW-Vorschläge: ${(a.kws||[]).map(k=>"KW "+esc(k.split("-")[1])).join(" · ")}`:"Kunde sucht sich die KW aus"):`${(a.vorschlaege||[]).length>1?"Vorschläge":"Vorschlag"}: ${(a.vorschlaege||[]).map(v=>esc(terminText(v))).join(" · ")}`}</div>
+   ${an?`<div class="banner ${st[0]} small" style="margin:8px 0 0"><b>${esc(an.name||"")}</b> · ${fmtDT(an.am)}<br>${an.status==="nicht_bereit"?"Räume noch nicht fertig":an.kwKey?esc(kwAusSchl(an.kwKey)?.text||an.kwKey):esc(terminText(an.termin))}${an.nachricht?`<br>„${esc(an.nachricht)}“`:""}</div>`:""}
+   ${can.planen()&&/^kw_/.test(a.status||"")&&o.terminStatus!=="fest"&&an?.kwKey?`<button class="btn ok block" id="taKwTag" style="margin-top:8px">📅 Montagetag in KW ${esc(an.kwKey.split("-")[1])} festlegen</button>`:""}
    ${can.planen()&&a.status==="gegenvorschlag"?`<button class="btn ok block" id="taUebernehmen" style="margin-top:8px">✓ Wunschtermin übernehmen</button>`:""}
    ${can.planen()&&a.status!=="zugesagt"&&a.status!=="uebernommen"?`<button class="btn ghost block sm" id="taNeu" style="margin-top:6px">Neue Anfrage senden</button>`:""}</div>`;
 }
@@ -1326,28 +1338,36 @@ function terminAnfrageDialog(id){
   modal(`<h2>📧 Termin beim Bauleiter anfragen</h2>${testHinweis(o)}
    <label class="f">An (E-Mail aus den Unterlagen)</label><input class="i" id="taAn" type="email" value="${esc(an0)}" placeholder="E-Mail des Bauleiters">
    ${o.bauleiterMail||istTest(o)?"":`<div class="small" style="color:var(--warn)">In den Unterlagen wurde keine E-Mail gefunden${o.bauleiterName?` (Bauleiter: ${esc(o.bauleiterName)})`:""}. Bitte eintragen – oder vorher unter „Unterlagen“ das Deckblatt auslesen.</div>`}
-   <label class="f">Terminvorschläge (Datum und Uhrzeit)</label>
+   <label class="f">Was anfragen?</label><div class="seg" id="taArt"><button data-art="termin" class="on">📅 Feste Termine</button><button data-art="kw">🗓 Kalenderwoche</button></div>
+   <div id="taTermW"><label class="f">Terminvorschläge (Datum und Uhrzeit)</label>
    ${v0.map((d,i)=>`<input class="i" type="datetime-local" data-tv="${i}" value="${lokal(d)}" style="margin-bottom:6px">`).join("")}
-   <div class="small mute">Leere Felder werden nicht mitgeschickt. Der Bauleiter kann einen Vorschlag bestätigen, „noch nicht fertig“ melden oder einen eigenen Termin nennen.</div>
+   <div class="small mute">Leere Felder werden nicht mitgeschickt. Der Bauleiter kann einen Vorschlag bestätigen, „noch nicht fertig“ melden oder einen eigenen Termin nennen.</div></div>
+   <div id="taKwW" style="display:none"><label class="f">Kalenderwochen, in denen ihr könnt</label>
+   <div class="ziel-w" id="taKws">${kwOptionen(12).map(x=>`<button class="fp" data-kw="${x.key}">KW ${x.kw} <span class="n">${x.mo.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}</span></button>`).join("")}</div>
+   <div class="small mute" style="margin-top:6px">KW antippen, die euch passen. <b>Keine gewählt = der Kunde sucht sich die KW selbst aus.</b> Der Kunde kann immer auch eine andere KW nennen.</div></div>
    <label class="f">Betreff</label><input class="i" id="taSj" value="${esc(`Montagetermin WC-Trennwände – ${o.bauvorhaben||""} (meta-Auftrag ${o.nr})`)}">
    <label class="f">Text</label><textarea class="i" id="taTx" style="min-height:300px"></textarea>
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="taOk">✉︎ Senden</button></div>
    <div class="small mute" style="margin-top:8px"><a href="${esc(link.replace(/t=[^&]+/,"t=demo"))}" target="_blank" rel="noopener">So sieht die Antwortseite für den Bauleiter aus ↗</a></div>`,(m,close)=>{
     const vs=()=>[...m.querySelectorAll("[data-tv]")].map(i=>i.value?new Date(i.value).getTime():null).filter(Boolean).sort((a,b)=>a-b);
-    const neu=()=>{ if(!textGeaendert) m.querySelector("#taTx").value=terminAnfrageText(o,vs(),link); };
-    neu(); m.querySelectorAll("[data-tv]").forEach(i=>i.onchange=neu); m.querySelector("#taTx").oninput=()=>{ textGeaendert=true; };
+    let art="termin"; const kws=()=>[...m.querySelectorAll("#taKws [data-kw].on")].map(b=>b.dataset.kw);
+    const neu=()=>{ if(!textGeaendert) m.querySelector("#taTx").value=terminAnfrageText(o,vs(),link,art==="kw"?kws():null); };
+    neu(); m.querySelectorAll("[data-tv]").forEach(i=>i.onchange=neu);
+    m.querySelectorAll("#taArt [data-art]").forEach(b=>b.onclick=()=>{ art=b.dataset.art; m.querySelectorAll("#taArt button").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#taTermW").style.display=art==="kw"?"none":""; m.querySelector("#taKwW").style.display=art==="kw"?"":"none"; neu(); });
+    m.querySelectorAll("#taKws [data-kw]").forEach(b=>b.onclick=()=>{ b.classList.toggle("on"); neu(); }); m.querySelector("#taTx").oninput=()=>{ textGeaendert=true; };
     m.querySelector("#taOk").onclick=async()=>{
       const an=m.querySelector("#taAn").value.trim(), v=vs();
       if(!/^\S+@\S+\.\S+$/.test(an)) return toast("Bitte die E-Mail des Bauleiters eintragen");
-      if(!v.length) return toast("Bitte mindestens einen Terminvorschlag eintragen");
-      if(v.some(x=>x<Date.now())) return toast("Ein Vorschlag liegt in der Vergangenheit");
+      if(art!=="kw" && !v.length) return toast("Bitte mindestens einen Terminvorschlag eintragen");
+      if(art!=="kw" && v.some(x=>x<Date.now())) return toast("Ein Vorschlag liegt in der Vergangenheit");
+      const kk=art==="kw"?kws():[], vv=art==="kw"?[]:v;
       if(!S.mcp) return toast("Mailversand ist hier nicht verfügbar");
       const b=m.querySelector("#taOk"); b.disabled=true; b.textContent="Wird gesendet …";
       try{
-        const anf={auftragId:id,an,am:Date.now(),von:myId(),vonMail:S.echt?.me?.email||S.me?.email||"",vorschlaege:v,status:"offen"};
+        const anf={auftragId:id,an,am:Date.now(),von:myId(),vonMail:S.echt?.me?.email||S.me?.email||"",vorschlaege:vv,art,kws:kk,status:"offen"};
         await setDoc("terminanfragen/"+token,anf);
         await S.mcp.callTool(GM,"send_message",{to:[an],subject:m.querySelector("#taSj").value.trim(),body:m.querySelector("#taTx").value});
-        const patch={terminAnfrage:{token,an,am:anf.am,vorschlaege:v,status:"offen",antwort:null}}; if(!o.bauleiterMail&&!istTest(o)) patch.bauleiterMail=an;
+        const patch={terminAnfrage:{token,an,am:anf.am,vorschlaege:vv,art,kws:kk,status:"offen",antwort:null}}; if(!o.bauleiterMail&&!istTest(o)) patch.bauleiterMail=an;
         await upd(orderPath(id),patch); S.orders[id]={...S.orders[id],...patch};
         close(); render(); toast("Terminanfrage gesendet ✓ – du bekommst Bescheid, sobald der Bauleiter antwortet",4000);
       }catch(e){ b.disabled=false; b.textContent="✉︎ Senden"; toast("Senden fehlgeschlagen: "+(e.message||e.code||e)); }
@@ -1398,6 +1418,7 @@ function bindAnteil(id){
   $("#rkAz") && ($("#rkAz").onchange=()=>{ const m=parseMin($("#rkAz").value); if($("#rkAz").value.trim() && m==null) return toast("Bitte z. B. 3:30 oder 3,5 eintragen"); upd(P,{bericht:{arbeitszeitMin:m}}); });
   $("#terminAnfrage") && ($("#terminAnfrage").onclick=()=>terminAnfrageDialog(id));
   $("#taNeu") && ($("#taNeu").onclick=()=>terminAnfrageDialog(id));
+  $("#taKwTag") && ($("#taKwTag").onclick=()=>terminDialog(id));
   $("#taUebernehmen") && ($("#taUebernehmen").onclick=async()=>{ const a=o.terminAnfrage, t=a?.antwort?.termin; if(!t) return;
     if(!await confirmBox("Wunschtermin übernehmen?",`${esc(terminText(t))} wird als fester Termin eingetragen. Die Eingeteilten bekommen Bescheid, und der Termin geht in den Google Kalender.`,"Übernehmen","ok")) return;
     const ta={...a,status:"uebernommen"}; await upd(P,{termin:t,terminStatus:"fest",terminQuelle:"bauleiter",terminAnfrage:ta}); S.orders[id]={...S.orders[id],termin:t,terminStatus:"fest",terminAnfrage:ta};
@@ -2822,7 +2843,7 @@ function waehleBox(titel,text,opts){
   });
 }
 // Losfahren: offene Fahrt dieses Autos abschließen, Lücke klären (privat / vergessen), neue Fahrt öffnen
-async function fahrtStarten({fzId,startKm,auftragId=null,zweck="",von="",nach="",art="dienst",ziel=null}){
+async function fahrtStarten({fzId,startKm,auftragId=null,zweck="",von="",nach="",art="dienst",ziel=null,vonZiel,vonAuftragId}){
   if(!S.fahrzeuge[fzId]) return null;
   startKm=nn(startKm);
   const offen=offeneFahrtFz(fzId);
@@ -2841,7 +2862,16 @@ async function fahrtStarten({fzId,startKm,auftragId=null,zweck="",von="",nach=""
       await setDoc("fahrten/"+lid,l); S.fahrten[lid]={id:lid,...l};
     }
   }
-  const id=neueFahrtId(), f={fahrzeugId:fzId,datum:isoTag(Date.now()),von,nach,km:0,startKm,offen:true,startAm:Date.now(),am:Date.now(),auftragId,zweck,art,ziel,fahrer:myId()};
+  // Tour: direkt im Anschluss an die vorige Fahrt (z. B. Baustelle → nächste Baustelle) → Fahrten werden verkettet
+  const an=anschlussAn(fzId,startKm,vonZiel);
+  if(vonZiel===undefined) vonZiel=an?an.ziel||null:null;
+  if(vonAuftragId===undefined) vonAuftragId=an&&an.ziel==="baustelle"?an.auftragId||null:null;
+  const kette=an?(an.kette||an.id):null;
+  if(an&&!an.kette){ await upd("fahrten/"+an.id,{kette:an.id}).catch(()=>{}); S.fahrten[an.id]={...S.fahrten[an.id],kette:an.id}; }
+  const vo=S.orders[vonAuftragId];
+  if(vo && vonAuftragId!==auftragId && art!=="privat") zweck=(zweck?zweck+" · ":"")+`weiter von Auftrag ${vo.nr}`;
+  if(vo && !von) von=adresseOf(vo);
+  const id=neueFahrtId(), f={fahrzeugId:fzId,datum:isoTag(Date.now()),von,nach,km:0,startKm,offen:true,startAm:Date.now(),am:Date.now(),auftragId,zweck,art,ziel,fahrer:myId(),vonZiel:vonZiel||null,vonAuftragId:vonAuftragId||null,kette};
   await setDoc("fahrten/"+id,f); S.fahrten[id]={id,...f};
   return id;
 }
@@ -2859,28 +2889,79 @@ async function fahrtBeenden(fid,{endKm,nach,ziel}={}){
   if(o && !istFertig(o) && (ziel||f.ziel)==="baustelle" && schritt(o)==="ankunft") await upd(orderPath(o.id),{einsatz:{ankunftAm:Date.now(),anfahrtKm:String(km)}});
   return km;
 }
+/* ---------- Touren: mehrere Fahrten am Stück (Baustelle → nächste Baustelle → Hotel …) ---------- */
+const VON=[["baustelle","🏗 Baustelle"],["hotel","🏨 Hotel"],["firma","🏢 Firma"],["zuhause","🏠 Zuhause"],["sonst","Sonstiges"]];
+// vorige Fahrt dieses Autos, an die eine neue Fahrt direkt anschließt (gleicher km-Stand, nicht zu Hause/Firma beendet)
+function anschlussAn(fzId,startKm,vonZiel){
+  const v=fahrtenVon(fzId).filter(f=>!f.offen&&!f.nachtrag&&f.art!=="privat").slice(-1)[0]; if(!v) return null;
+  if(Math.abs(nn(v._ende??v.endKm)-nn(startKm))>=0.5) return null;
+  if(["zuhause","firma"].includes(v.ziel) && !["baustelle","hotel"].includes(vonZiel)) return null;
+  const alt=Date.now()-(v.endAm||v.am||0);
+  if(alt>16*3600000 && !["baustelle","hotel"].includes(vonZiel)) return null;
+  if(vonZiel && v.ziel && vonZiel!==v.ziel && vonZiel!=="sonst") return null;
+  return v;
+}
+const tourOrt=f=>{ const o=S.orders[f.auftragId]; return o?o.nr:f.ziel==="hotel"?"Hotel":f.ziel==="firma"?"Firma":f.ziel==="zuhause"?"Zuhause":(f.nach||"…").split(",")[0]; };
+const tourStart=f=>{ const o=S.orders[f.vonAuftragId]; return o?o.nr:f.vonZiel==="hotel"?"Hotel":f.vonZiel==="firma"?"Firma":f.vonZiel==="zuhause"?"Zuhause":(f.von||"Start").split(",")[0]; };
+function tourKopf(gruppe){
+  const km=gruppe.reduce((a,f)=>a+nn(f.km),0);
+  return `<div class="tour-k">🔗<div>Tour ${new Date(gruppe[0].datum).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})}: ${[tourStart(gruppe[0]),...gruppe.map(tourOrt)].map(esc).join(" → ")}<br><span>${gruppe.length} Fahrten · ${kmFmt(Math.round(km*10)/10)} km</span></div></div>`;
+}
+// nachträglich an die vorige Fahrt anhängen / aus der Tour lösen
+async function anTourHaengen(fid){
+  const f=S.fahrten[fid]; if(!f) return;
+  const l=fahrtenVon(f.fahrzeugId), i=l.findIndex(x=>x.id===fid), v=l.slice(0,i).filter(x=>x.art!=="privat"&&!x.nachtrag).slice(-1)[0];
+  if(!v) return toast("Keine vorige Fahrt gefunden");
+  const k=v.kette||v.id;
+  if(!v.kette) await upd("fahrten/"+v.id,{kette:k});
+  const p={kette:k,vonZiel:v.ziel||null,vonAuftragId:v.ziel==="baustelle"?v.auftragId||null:null};
+  if(!f.von) p.von=v.nach||"";
+  const vo=S.orders[p.vonAuftragId]; if(vo && vo.id!==f.auftragId && !/weiter von/.test(f.zweck||"")) p.zweck=(f.zweck?f.zweck+" · ":"")+`weiter von Auftrag ${vo.nr}`;
+  await upd("fahrten/"+fid,p); toast("An die vorige Fahrt angehängt 🔗");
+}
+async function ausTourLoesen(fid){
+  const f=S.fahrten[fid]; if(!f?.kette) return;
+  const rest=Object.values(S.fahrten).filter(x=>x.kette===f.kette&&x.id!==fid).sort((a,b)=>(a.startAm||a.am||0)-(b.startAm||b.am||0));
+  await upd("fahrten/"+fid,{kette:null});
+  if(rest.length===1) await upd("fahrten/"+rest[0].id,{kette:null});
+  else if(f.id===f.kette && rest.length) for(const x of rest) await upd("fahrten/"+x.id,{kette:rest[0].id});
+  toast("Aus der Tour gelöst");
+}
 function losfahrenDialog(vor={}){
   const fzs=meineFahrzeuge(); if(!fzs.length){ toast("Erst ein Fahrzeug anlegen (Fahrten → ＋ Auto)"); go("fahrten"); return; }
   let fzId=vor.fzId||(S.fzSel&&fzs.some(f=>f.id===S.fzSel)?S.fzSel:defaultFahrzeug()), ziel=vor.ziel||(vor.auftragId?"baustelle":"");
-  const letzte=fahrtenVon(fzId).filter(f=>!f.offen).slice(-1)[0];
+  const letzte=fahrtenVon(fzId).filter(f=>!f.offen&&f.art!=="privat"&&!f.nachtrag).slice(-1)[0];
   const auftr=Object.values(S.orders).filter(sichtbar).filter(x=>!istFertig(x)&&!x.storniert&&phase(x)!=="offen").sort((a,b)=>(a.termin||9e15)-(b.termin||9e15));
+  const auftrVon=Object.values(S.orders).filter(sichtbar).filter(x=>!x.storniert&&phase(x)!=="offen"&&(!istFertig(x)||(x.abschluss?.am||0)>Date.now()-21*864e5)).sort((a,b)=>(a.termin||9e15)-(b.termin||9e15));
+  // Woher: aus der letzten Fahrt (z. B. von der Baustelle, auf der man gerade ist)
+  let vonZiel=vor.vonZiel||(letzte&&Date.now()-(letzte.endAm||0)<16*3600000?letzte.ziel:null)||"", vonAu=vor.vonAuftragId||(vonZiel==="baustelle"?letzte?.auftragId:"")||"";
+  if(vor.weiter && !vor.auftragId){ const nx=auftr.find(x=>x.id!==vonAu&&(x.monteure||[]).includes(myId()))||auftr.find(x=>x.id!==vonAu); if(nx) vor={...vor,auftragId:nx.id}; ziel="baustelle"; }
   modal(`<h2>▶ Losfahren</h2>
    <label class="f">Fahrzeug</label><select class="i" id="lfz">${fzs.map(f=>`<option value="${esc(f.id)}" ${f.id===fzId?"selected":""}>${esc(f.kennzeichen)}${f.name?" · "+esc(f.name):""}</option>`).join("")}</select>
    <label class="f">Kilometerstand jetzt *</label><input class="i km-gross" id="lkm" inputmode="numeric" value="${kmStand(fzId)}">
    <div class="small mute" id="lst" style="margin-top:4px"></div>
    <label class="f">Wohin?</label><div class="ziel-w">${ZIELE.map(([k,l])=>`<button class="fp ${ziel===k?"on":""}" data-ziel="${k}">${l}</button>`).join("")}</div>
    <div id="lauW" ${ziel==="baustelle"?"":'style="display:none"'}><label class="f">Auftrag</label><select class="i" id="lau"><option value="">– keiner –</option>${auftr.map(x=>`<option value="${esc(x.id)}" ${x.id===vor.auftragId?"selected":""}>${esc(x.nr)} ${esc(x.bauvorhaben||"")}${x.termin?" · "+kurzDatum(x.termin):""}</option>`).join("")}</select></div>
-   <label class="f">Von</label><input class="i" id="lvon" value="${esc(vor.von||letzte?.nach||S.settings.firmenAdresse||"")}">
+   <label class="f">Woher?</label><div class="ziel-w">${VON.map(([k,l])=>`<button class="fp ${vonZiel===k?"on":""}" data-von="${k}">${l}</button>`).join("")}</div>
+   <div id="lvaW" ${vonZiel==="baustelle"?"":'style="display:none"'}><label class="f">Ich bin auf der Baustelle</label><select class="i" id="lva"><option value="">– Auftrag wählen –</option>${auftrVon.map(x=>`<option value="${esc(x.id)}" ${x.id===vonAu?"selected":""}>${esc(x.nr)} ${esc(x.bauvorhaben||"")}</option>`).join("")}</select></div>
+   <label class="f">Von (Adresse)</label><input class="i" id="lvon" value="${esc(vor.von||(vonAu&&S.orders[vonAu]?adresseOf(S.orders[vonAu]):"")||letzte?.nach||S.settings.firmenAdresse||"")}">
+   <div class="small" id="ltour" style="margin-top:6px;color:var(--brand2,#2563eb);font-weight:650"></div>
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">▶ Losfahren</button></div>
    <div class="small mute" style="margin-top:8px">Bei Baustelle mit Adresse startet danach Google Maps.</div>`,(m,close)=>{
-    const st=()=>{ fzId=m.querySelector("#lfz").value; const of=offeneFahrtFz(fzId); m.querySelector("#lst").innerHTML=`Letzter Stand: <b>${kmFmt(kmStand(fzId))} km</b>${of?` · Fahrt seit ${fmtDT(of.startAm)} noch offen – wird mit diesem Stand abgeschlossen`:""}`; };
-    st(); m.querySelector("#lfz").onchange=()=>{ st(); m.querySelector("#lkm").value=kmStand(fzId); };
+    const tourInfo=()=>{ const an=anschlussAn(fzId,m.querySelector("#lkm").value,vonZiel||undefined); m.querySelector("#ltour").textContent=an?`🔗 Wird als Tour an die Fahrt nach ${tourOrt(an)} angehängt`:""; };
+    const st=()=>{ fzId=m.querySelector("#lfz").value; const of=offeneFahrtFz(fzId); m.querySelector("#lst").innerHTML=`Letzter Stand: <b>${kmFmt(kmStand(fzId))} km</b>${of?` · Fahrt seit ${fmtDT(of.startAm)} noch offen – wird mit diesem Stand abgeschlossen`:""}`; tourInfo(); };
+    st(); m.querySelector("#lfz").onchange=()=>{ m.querySelector("#lkm").value=kmStand(m.querySelector("#lfz").value); st(); };
+    m.querySelector("#lkm").oninput=tourInfo;
+    m.querySelectorAll("[data-von]").forEach(b=>b.onclick=()=>{ vonZiel=b.dataset.von; m.querySelectorAll("[data-von]").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#lvaW").style.display=vonZiel==="baustelle"?"":"none";
+      const o=S.orders[m.querySelector("#lva").value]; const t=vonZiel==="baustelle"&&o?adresseOf(o):vonZiel==="firma"?S.settings.firmenAdresse||"Firma":vonZiel==="hotel"?"Hotel":vonZiel==="zuhause"?"Zuhause":""; if(t) m.querySelector("#lvon").value=t; tourInfo(); });
+    m.querySelector("#lva").onchange=()=>{ const o=S.orders[m.querySelector("#lva").value]; if(o) m.querySelector("#lvon").value=adresseOf(o); };
     m.querySelectorAll("[data-ziel]").forEach(b=>b.onclick=()=>{ ziel=b.dataset.ziel; m.querySelectorAll("[data-ziel]").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#lauW").style.display=ziel==="baustelle"?"":"none"; });
     m.querySelector("#ok").onclick=async()=>{
       const v=m.querySelector("#lkm").value.trim(); if(v===""||isNaN(nn(v))) return toast("Bitte den Kilometerstand eintragen");
       const au=ziel==="baustelle"?m.querySelector("#lau").value||null:null, o=S.orders[au];
       m.querySelector("#ok").disabled=true;
-      const id=await fahrtStarten({fzId,startKm:v,auftragId:au,zweck:o?`Montage Auftrag ${o.nr}`:(ZIELE.find(z=>z[0]===ziel)?.[1].replace(/^\S+\s/,"")||""),von:m.querySelector("#lvon").value.trim(),nach:zielText(ziel,o),art:ziel==="hotel"?"hotel":"dienst",ziel:ziel||null});
+      const id=await fahrtStarten({fzId,startKm:v,auftragId:au,zweck:o?`Montage Auftrag ${o.nr}`:(ZIELE.find(z=>z[0]===ziel)?.[1].replace(/^\S+\s/,"")||""),von:m.querySelector("#lvon").value.trim(),nach:zielText(ziel,o),art:ziel==="hotel"?"hotel":"dienst",ziel:ziel||null,
+        vonZiel:vonZiel||undefined,vonAuftragId:vonZiel==="baustelle"?(m.querySelector("#lva").value||null):vonZiel?null:undefined});
       m.querySelector("#ok").disabled=false; if(!id) return;
       if(o && schritt(o)==="fahrzeug" && (o.monteure||[]).includes(myId())) await upd(orderPath(o.id),{einsatz:{fahrzeug:"auto",fahrzeugText:null,abfahrtAm:Date.now(),von:myId(),fahrtId:id,fahrtFz:fzId}});
       close(); const ziAdr=ziel==="baustelle"&&o?adresseOf(o):["firma"].includes(ziel)?S.settings.firmenAdresse:"";
@@ -3014,17 +3095,19 @@ function viewFahrten(){
   <div class="card"><div class="row between"><div><div class="small mute">${esc(fz.name||"")}${fz.zugeordnet?" · "+esc(nameOf(fz.zugeordnet)):""}</div><div class="small mute">Kilometerstand aktuell</div><div class="big" style="font-size:30px">${kmStand(fz.id).toLocaleString("de-DE")} km</div></div>
    ${can.planen()||fz.zugeordnet===myId()?`<button class="btn sm ghost" id="fzEdit">Bearbeiten</button>`:""}</div>
    ${(()=>{ const of=offeneFahrtFz(fz.id); return of?`<div class="fahrt-l" style="margin:10px 0 0"><div style="min-width:0;flex:1"><b>🚗 Unterwegs</b><div class="small mute">${esc(nameOf(of.fahrer))} · seit ${fmtDT(of.startAm)} · ab ${kmFmt(of.startKm)} km</div></div>${of.fahrer===myId()||can.planen()?`<button class="btn ok" data-ankunft="${esc(of.id)}">🏁 Angekommen</button>`:""}</div>`
-      :`<button class="btn ok block" id="losfahren" style="margin-top:10px;min-height:52px">▶ Losfahren – Kilometerstand eintragen</button>`; })()}
+      :`<button class="btn ok block" id="losfahren" style="margin-top:10px;min-height:52px">▶ Losfahren – Kilometerstand eintragen</button>${(()=>{ const l=list.filter(f=>!f.offen&&f.art!=="privat"&&!f.nachtrag).slice(-1)[0]; return l&&["baustelle","hotel"].includes(l.ziel)&&Date.now()-(l.endAm||0)<16*3600000?`<button class="btn block" id="weiterFahren" style="margin-top:8px;min-height:48px">🔗 Weiter zur nächsten Baustelle <span class="small mute" style="font-weight:500">(ab ${esc(tourOrt(l))})</span></button>`:""; })()}`; })()}
    <button class="btn ghost block sm" id="fahrtNew" style="margin-top:8px">Fahrt nachtragen</button></div>
   <div class="row between" style="margin:14px 2px 6px"><select class="i" id="fzMon" style="width:auto">${(monate.length?monate:[S.fzMonat]).map(mo=>`<option value="${mo}" ${mo===S.fzMonat?"selected":""}>${new Date(mo+"-01").toLocaleDateString("de-DE",{month:"long",year:"numeric"})}</option>`).join("")}</select>
    <div class="row"><button class="btn sm" id="fbPdf">⬇︎ PDF</button>${can.mails()?`<button class="btn sm" id="fbMail">✉︎ Senden</button>`:""}</div></div>`;
   const mon=list.filter(f=>(f.datum||"").startsWith(S.fzMonat)).reverse();
   const sumMon=mon.reduce((a,f)=>a+nn(f.km),0);
   h+=`<div class="small mute" style="margin:0 2px 6px">${mon.length} Fahrten · ${sumMon.toLocaleString("de-DE")} km</div>`;
-  h+=mon.map(f=>{ const o=S.orders[f.auftragId]; return `<div class="card fb-z ${f.art==="privat"?"privat":""} ${f.offen?"offen":""}" style="padding:10px 12px;margin-bottom:6px"><div class="row between"><b>${new Date(f.datum).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})}${f.startAm?` <span class="small mute" style="font-weight:500">${new Date(f.startAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}${f.endAm?"–"+new Date(f.endAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):""}</span>`:""}</b><b>${f.offen?`<span class="kal-st info">unterwegs</span>`:`${nn(f.km).toLocaleString("de-DE")} km`}</b></div>
+  const touren={}; list.forEach(f=>{ if(f.kette) (touren[f.kette]=touren[f.kette]||[]).push(f); }); const tourGez=new Set();
+  h+=mon.map(f=>{ const o=S.orders[f.auftragId]; const tg=f.kette&&touren[f.kette]?.length>1?touren[f.kette]:null; const kopf=tg&&!tourGez.has(f.kette)?(tourGez.add(f.kette),tourKopf(tg)):"";
+    return `${kopf}<div class="card fb-z ${f.art==="privat"?"privat":""} ${f.offen?"offen":""} ${tg?"in-tour":""}" style="padding:10px 12px;margin-bottom:6px"><div class="row between"><b>${new Date(f.datum).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})}${f.startAm?` <span class="small mute" style="font-weight:500">${new Date(f.startAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}${f.endAm?"–"+new Date(f.endAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):""}</span>`:""}</b><b>${f.offen?`<span class="kal-st info">unterwegs</span>`:`${nn(f.km).toLocaleString("de-DE")} km`}</b></div>
    ${f.art==="privat"?`<div class="small"><b>Privatfahrt</b></div>`:`<div class="small">${esc(f.von||"")} → ${esc(f.nach||(f.offen?"…":""))}</div>`}
    <div class="small mute">${o?`Auftrag ${esc(o.nr)} · `:""}${f.art==="privat"?"":esc(f.zweck||"")+" · "}${esc(nameOf(f.fahrer))}${f.routeKm?` · Route ${kmFmt(f.routeKm)} km${!f.offen&&Math.abs(nn(f.km)-f.routeKm)>Math.max(3,f.routeKm*.15)?` <b style="color:var(--warn)">(${nn(f.km)>f.routeKm?"+":""}${kmFmt(Math.round((nn(f.km)-f.routeKm)*10)/10)})</b>`:""}`:""} · Stand ${f._start.toLocaleString("de-DE")} → ${f._ende!=null?f._ende.toLocaleString("de-DE"):"…"}</div>
-   ${(f.fahrer===myId()||can.planen())?`<div style="margin-top:4px"><a href="#" class="small" data-fdel="${esc(f.id)}">löschen</a></div>`:""}</div>`; }).join("")||`<div class="small mute" style="padding:4px">Keine Fahrten in diesem Monat.</div>`;
+   ${(f.fahrer===myId()||can.planen())?`<div style="margin-top:4px;display:flex;gap:14px"><a href="#" class="small" data-fdel="${esc(f.id)}">löschen</a>${f.art!=="privat"&&!f.offen?(tg?`<a href="#" class="small" data-tlos="${esc(f.id)}">aus Tour lösen</a>`:`<a href="#" class="small" data-tan="${esc(f.id)}">🔗 an vorige Fahrt anhängen</a>`):""}</div>`:""}</div>`; }).join("")||`<div class="small mute" style="padding:4px">Keine Fahrten in diesem Monat.</div>`;
   return h;
 }
 function bindFahrten(){
@@ -3034,6 +3117,9 @@ function bindFahrten(){
   $("#fzMon") && ($("#fzMon").onchange=()=>{ S.fzMonat=$("#fzMon").value; render(); });
   $("#fahrtNew") && ($("#fahrtNew").onclick=()=>fahrtDialog(null));
   $("#losfahren") && ($("#losfahren").onclick=()=>losfahrenDialog({fzId:S.fzSel}));
+  $("#weiterFahren") && ($("#weiterFahren").onclick=()=>losfahrenDialog({fzId:S.fzSel,weiter:true}));
+  document.querySelectorAll("[data-tan]").forEach(a=>a.onclick=e=>{ e.preventDefault(); anTourHaengen(a.dataset.tan); });
+  document.querySelectorAll("[data-tlos]").forEach(a=>a.onclick=e=>{ e.preventDefault(); ausTourLoesen(a.dataset.tlos); });
   document.querySelectorAll("[data-fdel]").forEach(a=>a.onclick=async e=>{ e.preventDefault(); if(await confirmBox("Fahrt löschen?","Der Kilometerstand wird neu berechnet.","Löschen","bad")) S.db.doc("fahrten/"+a.dataset.fdel).delete(); });
   $("#fbPdf") && ($("#fbPdf").onclick=async()=>{ try{ const {blob,name}=await fahrtenbuchPdf(S.fzSel,S.fzMonat); const dl=await window.claude.use("downloads").catch(()=>null); if(dl) await dl.save({filename:name,data:blob}); else toast("Speichern ist hier nicht möglich"); }catch(e){ if(e?.code!=="cancelled") toast("PDF fehlgeschlagen: "+(e.message||e.code||e)); } });
   $("#fbMail") && ($("#fbMail").onclick=()=>fahrtenbuchMail(S.fzSel,S.fzMonat));

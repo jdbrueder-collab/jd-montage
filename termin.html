@@ -47,14 +47,21 @@ button.los:disabled{opacity:.6}
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const t = new URLSearchParams(location.search).get("t") || "";
-  const demo = t === "demo";
+  const demo = t === "demo" || t === "demokw";
+  const kwDemo = () => { const out = []; const d = new Date(); d.setDate(d.getDate() + 7 - ((d.getDay() + 6) % 7));
+    for (let i = 0; i < 16; i++) { const mo = new Date(d); mo.setDate(d.getDate() + i * 7); const x = new Date(Date.UTC(mo.getFullYear(), mo.getMonth(), mo.getDate())); const dy = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - dy); const y = x.getUTCFullYear(); const kw = Math.ceil(((x - Date.UTC(y, 0, 1)) / 86400000 + 1) / 7); const fr = new Date(mo); fr.setDate(mo.getDate() + 4);
+      out.push({ key: `${y}-${kw}`, kw, jahr: y, text: `KW ${kw} (${mo.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}–${fr.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })})` }); } return out; };
   const wann = ms => new Date(ms).toLocaleString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " Uhr";
   const telLink = n => n ? `<a class="tel" href="tel:${esc(n.replace(/[^\d+]/g, ""))}">📞 ${esc(n)}</a>` : "";
   async function rufe(body) {
     if (demo) {
       const morgen = new Date(); morgen.setDate(morgen.getDate() + 3); morgen.setHours(7, 30, 0, 0);
-      const info = { nr: "17999/1", bauvorhaben: "Grundschule am Musterweg", adresse: "Musterweg 12, 56305 Puderbach", kabinen: "6", vorschlaege: [morgen.getTime(), morgen.getTime() + 86400000], status: "offen", telefon: "02684 9572269", firma: "JD Brüder GbR" };
-      if (body.terminAntwort) { const r = body.terminAntwort; const st = !r.bereit ? "nicht_bereit" : r.termin ? "zugesagt" : "gegenvorschlag"; return { ...info, ok: true, status: st, termin: r.termin || r.wunsch || null, antwort: { name: r.name } }; }
+      const kl = kwDemo();
+      const info = { nr: "17999/1", bauvorhaben: "Grundschule am Musterweg", adresse: "Musterweg 12, 56305 Puderbach", kabinen: "6", vorschlaege: [morgen.getTime(), morgen.getTime() + 86400000], status: "offen", telefon: "02684 9572269", firma: "JD Brüder GbR",
+        art: t === "demokw" ? "kw" : "termin", kws: t === "demokw" ? [kl[1], kl[2]] : [], kwListe: t === "demokw" ? kl : [] };
+      if (body.terminAntwort) { const r = body.terminAntwort;
+        if (info.art === "kw" && r.bereit) { const k = kl.find(x => x.key === r.kw); return { ...info, ok: true, status: info.kws.some(x => x.key === r.kw) ? "kw_zugesagt" : "kw_wunsch", antwort: { name: r.name, kwText: k?.text } }; }
+        const st = !r.bereit ? "nicht_bereit" : r.termin ? "zugesagt" : "gegenvorschlag"; return { ...info, ok: true, status: st, termin: r.termin || r.wunsch || null, antwort: { name: r.name } }; }
       return info;
     }
     const c = window.JD_CONFIG || {};
@@ -63,7 +70,8 @@ button.los:disabled{opacity:.6}
   }
   function danke(d) {
     const st = d.status, tt = d.termin;
-    const txt = st === "zugesagt" ? `<div class="banner ok"><b>✓ Vielen Dank – der Termin ist bestätigt.</b><br>${esc(wann(tt))}</div><p>Wir kommen wie vereinbart. Sie bekommen keine weitere Bestätigung – der Termin steht.</p>`
+    const txt = /^kw_/.test(st) ? `<div class="banner ok"><b>✓ Vielen Dank – ${esc(d.antwort?.kwText || "die Kalenderwoche")} ist bei uns vorgemerkt.</b></div><p>Wir melden uns mit dem genauen Montagetag bei Ihnen.</p>`
+      : st === "zugesagt" ? `<div class="banner ok"><b>✓ Vielen Dank – der Termin ist bestätigt.</b><br>${esc(wann(tt))}</div><p>Wir kommen wie vereinbart. Sie bekommen keine weitere Bestätigung – der Termin steht.</p>`
       : st === "gegenvorschlag" ? `<div class="banner warn"><b>Vielen Dank – Ihr Wunschtermin ist bei uns angekommen.</b><br>${esc(wann(tt))}</div><p>Wir prüfen den Termin und melden uns kurzfristig bei Ihnen.</p>`
       : `<div class="banner warn"><b>Vielen Dank für Ihre Rückmeldung.</b></div><p>Die Räume sind noch nicht montagebereit. Bitte geben Sie uns Bescheid, sobald es soweit ist – gern auch telefonisch.</p>`;
     $("#inhalt").innerHTML = `<div class="card">${txt}<p class="small mute">${esc(d.firma || "JD Brüder GbR")} · Montage für meta Trennwandanlagen</p>${telLink(d.telefon)}</div>`;
@@ -71,7 +79,9 @@ button.los:disabled{opacity:.6}
   function zeige(d) {
     if (d.fehler && !d.nr) { $("#inhalt").innerHTML = `<div class="card"><h1>Hinweis</h1><p>${esc(d.fehler)}</p>${telLink(d.telefon)}</div>`; return; }
     if (d.status === "zugesagt" && d.termin) { danke(d); return; }
-    const vs = d.vorschlaege || [];
+    const vs = d.vorschlaege || [], kwArt = d.art === "kw";
+    const kwAng = kwArt ? (d.kws && d.kws.length ? d.kws : (d.kwListe || []).slice(0, 6)) : [];
+    const kwRest = kwArt ? (d.kwListe || []).filter(x => !kwAng.some(y => y.key === x.key)) : [];
     let bereit = null, wahl = null;
     $("#inhalt").innerHTML = `
       <div class="card"><h1>Montage der WC-Trennwände</h1>
@@ -81,10 +91,15 @@ button.los:disabled{opacity:.6}
         <div class="small mute" style="margin-bottom:10px">Fliesen verlegt, Wände und Böden fertig, Räume frei zugänglich.</div>
         <div class="wahl"><button class="opt" data-b="ja"><span class="k"></span><div><b>Ja, die Räume sind fertig</b></div></button>
         <button class="opt" data-b="nein"><span class="k"></span><div><b>Nein, noch nicht</b><span>Wir melden uns, sobald es soweit ist</span></div></button></div></div>
-      <div class="card hide" id="termine"><h2>2. Welcher Termin passt?</h2>
+      ${kwArt ? `<div class="card hide" id="termine"><h2>2. Welche Kalenderwoche passt?</h2>
+        <div class="small mute" style="margin-bottom:10px">${d.kws && d.kws.length ? "In diesen Wochen können wir montieren:" : "Bitte wählen Sie die Woche, die für Sie am besten passt:"}</div>
+        <div class="wahl">${kwAng.map(k => `<button class="opt" data-t="${esc(k.key)}"><span class="k"></span><div><b>${esc(k.text)}</b></div></button>`).join("")}
+        ${kwRest.length ? `<button class="opt" data-t="anders"><span class="k"></span><div><b>Andere Kalenderwoche</b><span>Spätere Woche auswählen</span></div></button>` : ""}</div>
+        <div id="wunsch" class="hide"><select id="wkw" style="width:100%;font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin-top:10px">${kwRest.map(k => `<option value="${esc(k.key)}">${esc(k.text)}</option>`).join("")}</select></div></div>`
+      : `<div class="card hide" id="termine"><h2>2. Welcher Termin passt?</h2>
         <div class="wahl">${vs.map(v => `<button class="opt" data-t="${v}"><span class="k"></span><div><b>${esc(wann(v))}</b></div></button>`).join("")}
         <button class="opt" data-t="anders"><span class="k"></span><div><b>Anderer Termin</b><span>Ihren Wunschtermin eintragen</span></div></button></div>
-        <div id="wunsch" class="hide"><div class="zeile" style="margin-top:10px"><input type="date" id="wd"><input type="time" id="wz" value="07:30"></div></div></div>
+        <div id="wunsch" class="hide"><div class="zeile" style="margin-top:10px"><input type="date" id="wd"><input type="time" id="wz" value="07:30"></div></div></div>`}
       <div class="card"><label class="f" for="nm">Ihr Name *</label><input id="nm" autocomplete="name" placeholder="Vor- und Nachname">
         <label class="f" for="nt">Nachricht (optional)</label><textarea id="nt" placeholder="z. B. Zugang über den Hintereingang, Ansprechpartner vor Ort …"></textarea>
         <button class="los" id="los" disabled>Antwort senden</button><div id="fe"></div></div>
@@ -95,7 +110,8 @@ button.los:disabled{opacity:.6}
     $("#los").onclick = async () => {
       const name = $("#nm").value.trim(); if (!name) { $("#fe").innerHTML = `<div class="fehler">Bitte Ihren Namen eintragen.</div>`; $("#nm").focus(); return; }
       const a = { t, bereit, name, nachricht: $("#nt").value.trim() };
-      if (bereit && wahl === "anders") { const dd = $("#wd").value; if (!dd) { $("#fe").innerHTML = `<div class="fehler">Bitte Ihren Wunschtermin eintragen.</div>`; return; } a.wunsch = new Date(`${dd}T${$("#wz").value || "07:30"}:00`).getTime(); }
+      if (bereit && kwArt) a.kw = wahl === "anders" ? $("#wkw").value : wahl;
+      else if (bereit && wahl === "anders") { const dd = $("#wd").value; if (!dd) { $("#fe").innerHTML = `<div class="fehler">Bitte Ihren Wunschtermin eintragen.</div>`; return; } a.wunsch = new Date(`${dd}T${$("#wz").value || "07:30"}:00`).getTime(); }
       else if (bereit) a.termin = Number(wahl);
       $("#los").disabled = true; $("#los").textContent = "Wird gesendet …";
       try { const r = await rufe({ terminAntwort: a }); if (r.fehler) { $("#fe").innerHTML = `<div class="fehler">${esc(r.fehler)}</div>`; $("#los").disabled = false; $("#los").textContent = "Antwort senden"; return; } danke({ ...d, ...r }); }

@@ -234,6 +234,12 @@ async function pushSubFreigabe(db: any, id: string) {
 /** Auftrag terminiert oder neu zugeteilt → die Eingeteilten bekommen eine Nachricht (je Person und Termin einmal) */
 // ---------- Terminabstimmung mit dem Bauleiter ----------
 const berlinZeit = (t: number) => new Date(t).toLocaleString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" });
+// Kalenderwochen (Schlüssel „2026-49“) für die KW-Anfrage
+function isoKw(d: Date) { const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day); const y = x.getUTCFullYear(); return { kw: Math.ceil(((x.getTime() - Date.UTC(y, 0, 1)) / 86400000 + 1) / 7), jahr: y }; }
+function kwMontag(jahr: number, kw: number) { const s = new Date(Date.UTC(jahr, 0, 4)); const d = s.getUTCDay() || 7; s.setUTCDate(s.getUTCDate() - d + 1 + (kw - 1) * 7); return s; }
+const ddmm = (d: Date, j = false) => `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${j ? d.getUTCFullYear() : ""}`;
+function kwInfo(key: string) { const [j, k] = String(key).split("-").map(Number); if (!j || !k || k > 53) return null; const mo = kwMontag(j, k), fr = new Date(mo.getTime() + 4 * 86400000); return { key: `${j}-${k}`, kw: k, jahr: j, text: `KW ${k} (${ddmm(mo)}–${ddmm(fr, true)})` }; }
+function kwListe(n = 16) { const w = isoKw(new Date()); const mo = kwMontag(w.jahr, w.kw); const out: any[] = []; for (let i = 1; i <= n; i++) { const x = isoKw(new Date(mo.getTime() + i * 7 * 86400000)); out.push(kwInfo(`${x.jahr}-${x.kw}`)); } return out; }
 async function terminOeffentlich(db: any, b: any) {
   const t = String(b.terminInfo || b.terminAntwort?.t || "");
   if (!/^[a-z0-9]{20,64}$/i.test(t)) return { fehler: "Dieser Link ist ungültig." };
@@ -247,6 +253,7 @@ async function terminOeffentlich(db: any, b: any) {
     kabinen: o.kabinen || "", vorschlaege: a.vorschlaege || [], status: a.status, antwort: a.antwort || null,
     telefon: s.firmenTelefon || "", firma: s.monteurName || "JD Brüder GbR", mail: s.antwortEmail || "",
     termin: o.terminStatus === "fest" ? o.termin : null,
+    art: a.art || "termin", kws: (a.kws || []).map(kwInfo).filter(Boolean), kwListe: a.art === "kw" ? kwListe(16) : [],
   };
   if (b.terminInfo) return info;
   if (a.status === "zugesagt" && o.terminStatus === "fest") return { ...info, fehler: "Der Termin ist bereits bestätigt. Für Änderungen rufen Sie uns bitte an." };
@@ -254,6 +261,19 @@ async function terminOeffentlich(db: any, b: any) {
   const bereit = r.bereit === true, name = String(r.name || "").trim().slice(0, 80), nachricht = String(r.nachricht || "").trim().slice(0, 1000);
   if (!name) return { ...info, fehler: "Bitte geben Sie Ihren Namen an." };
   let status = "nicht_bereit", termin: number | null = null;
+  if (bereit && a.art === "kw") {
+    const key = String(r.kw || ""), ki = kwInfo(key);
+    const erlaubt = new Set([...(a.kws || []), ...info.kwListe.map((x: any) => x.key)]);
+    if (!ki || !erlaubt.has(ki.key)) return { ...info, fehler: "Bitte wählen Sie eine Kalenderwoche." };
+    status = (a.kws || []).includes(ki.key) ? "kw_zugesagt" : "kw_wunsch";
+    const antwortKw = { am: Date.now(), bereit, status, termin: null, kwKey: ki.key, kwText: ki.text, name, nachricht };
+    await updDoc(db, "terminanfragen", t, { status, antwort: antwortKw });
+    const pk: any = { terminAnfrage: { ...(o.terminAnfrage || {}), token: t, status, antwort: antwortKw }, wunschKw: { kw: ki.kw, jahr: ki.jahr, von: "bauleiter", am: Date.now() } };
+    if (o.terminStatus !== "fest") { pk.kw = ki.kw; pk.jahr = ki.jahr; }
+    await updDoc(db, "auftraege", a.auftragId, pk);
+    await pushSenden(db, await chefIds(db), { titel: `🗓 ${status === "kw_zugesagt" ? "KW bestätigt" : "KW-Wunsch"}: ${o.nr}`, text: `${name}: ${ki.text}${nachricht ? " – " + nachricht : ""}`, url: APP_URL + "#a-" + a.auftragId }).catch((e) => console.error(e));
+    return { ...info, status, antwort: antwortKw, ok: true };
+  }
   if (bereit) {
     const v = Number(r.termin);
     if (v && (a.vorschlaege || []).includes(v)) { status = "zugesagt"; termin = v; }
