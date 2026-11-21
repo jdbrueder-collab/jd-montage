@@ -216,6 +216,20 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvinhalt{position:absolute;left:0;top:0;transform-origin:0 0}
 .dvinhalt img{display:block;user-select:none;-webkit-user-drag:none;max-width:none}
 .dvseite{position:absolute;left:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.dvrot{position:absolute;left:0;top:0;transform-origin:0 0}
+.dvrot.scan{filter:grayscale(1) contrast(1.8) brightness(1.08)}
+.dvb.on{background:#fff;color:#111}
+@media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
+.dok-i{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.dok-i h4{margin:10px 0 6px;font-size:12.5px;color:var(--mute);font-weight:650;text-transform:uppercase;letter-spacing:.03em}
+.dok-k{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.dok-k:last-child{border-bottom:0}
+.dok-k .r{font-size:12px;color:var(--mute);min-width:100%}
+.dok-a{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13.5px;padding:7px 9px;background:var(--greybg);border-radius:9px;margin-bottom:6px}
+.dok-a b{grid-column:1/-1;font-size:14px}
+.dok-h{font-size:14px;padding:5px 0}
+.dok-h b{display:block;font-size:12.5px;color:var(--mute)}
+.dok-d{font-size:13px;padding:4px 0;color:var(--grey)}
 .dvlade{position:fixed;left:0;right:0;top:45%;text-align:center;color:#ddd}
 .dvhint{font-size:12px;text-align:center;opacity:.6;padding:6px 8px;padding-bottom:max(6px,env(safe-area-inset-bottom))}
 .lightbox img{max-width:96vw;max-height:92vh}
@@ -460,7 +474,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="1044f7276dc6";</script>
+<script>window.JD_BUILD="8401ee9db442";</script>
 </head>
 <body>
 <header class="top">
@@ -627,13 +641,16 @@ function loadPdfJs(){ if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib
 function dokViewer(src, art="bild", titel=""){
   const d=document.createElement("div"); d.className="dv";
   d.innerHTML=`<div class="dvbar"><button class="dvb" data-dv="zu" title="Schließen">✕</button><span class="dvt">${esc(titel||(art==="pdf"?"PDF":"Foto"))}</span>
-    <button class="dvb" data-dv="minus" title="Kleiner">−</button><span class="dvp">100 %</span><button class="dvb" data-dv="plus" title="Größer">＋</button><button class="dvb" data-dv="fit" title="Einpassen">⤢</button>
+    <button class="dvb" data-dv="minus" title="Kleiner">−</button><span class="dvp">100 %</span><button class="dvb" data-dv="plus" title="Größer">＋</button><button class="dvb" data-dv="fit" title="Einpassen">⤢</button><button class="dvb" data-dv="dreh" title="Drehen">⟳</button><button class="dvb" data-dv="scan" title="Kontrast verbessern (schlechte Scans)">◐</button>
     ${art==="pdf"?`<a class="dvb" href="${esc(src)}" target="_blank" rel="noopener" title="Im Browser öffnen">↗</a>`:""}</div>
     <div class="dvstage"><div class="dvinhalt"><div class="dvlade"><span class="spin"></span> wird geladen …</div></div></div>
-    <div class="dvhint">Mit zwei Fingern zoomen · doppelt tippen · ziehen zum Verschieben</div>`;
+    <div class="dvhint">Mit zwei Fingern zoomen · doppelt tippen · ⟳ drehen · ◐ schwache Scans deutlicher</div>`;
   document.body.appendChild(d); document.body.style.overflow="hidden";
   const stage=d.querySelector(".dvstage"), inh=d.querySelector(".dvinhalt"), pct=d.querySelector(".dvp");
-  let W=0,H=0,s=1,x=0,y=0,fit=1,einpassenGanz=true;
+  let W=0,H=0,s=1,x=0,y=0,fit=1,einpassenGanz=true,OW=0,OH=0,dreh=0;
+  const rot=document.createElement("div"); rot.className="dvrot";
+  let scanAn=false; try{ scanAn=localStorage.getItem("jdScan")==="1"; }catch(e){}
+  const scanZeigen=()=>{ rot.classList.toggle("scan",scanAn); d.querySelector("[data-dv=scan]")?.classList.toggle("on",scanAn); };
   const zeigen=()=>{ inh.style.transform=`translate(${x}px,${y}px) scale(${s})`; pct.textContent=Math.round(s/fit*100)+" %"; };
   const begrenzen=()=>{ const vw=stage.clientWidth, vh=stage.clientHeight, cw=W*s, ch=H*s;
     x = cw<=vw ? (vw-cw)/2 : Math.min(0,Math.max(vw-cw,x));
@@ -642,7 +659,11 @@ function dokViewer(src, art="bild", titel=""){
   const einpassen=()=>{ const vw=stage.clientWidth, vh=stage.clientHeight; fit=einpassenGanz?Math.min(vw/W,vh/H):vw/W; s=fit; x=0; y=0; begrenzen(); zeigen(); };
   // Fenstergröße ändert sich (Handy gedreht, Browserleiste): Zoom behalten, nur bei „eingepasst“ neu einpassen
   const groesse=()=>{ if(!W) return; const vw=stage.clientWidth, vh=stage.clientHeight, nf=einpassenGanz?Math.min(vw/W,vh/H):vw/W; if(Math.abs(s-fit)<fit*.02) einpassen(); else { fit=nf; begrenzen(); zeigen(); } };
-  const bereit=(w,h,ganz)=>{ W=w; H=h; einpassenGanz=ganz; inh.style.width=w+"px"; inh.style.height=h+"px"; einpassen(); };
+  // Drehen: Inhalt bleibt gleich groß, nur die Box tauscht Breite/Höhe
+  const drehen=()=>{ const r=dreh%360; rot.style.width=OW+"px"; rot.style.height=OH+"px";
+    rot.style.transform=r===90?`translate(${OH}px,0) rotate(90deg)`:r===180?`translate(${OW}px,${OH}px) rotate(180deg)`:r===270?`translate(0,${OW}px) rotate(270deg)`:"";
+    W=r%180?OH:OW; H=r%180?OW:OH; inh.style.width=W+"px"; inh.style.height=H+"px"; einpassen(); };
+  const bereit=(w,h,ganz)=>{ OW=w; OH=h; einpassenGanz=ganz; scanZeigen(); drehen(); };
   const zu=()=>{ d.remove(); document.body.style.overflow=""; window.removeEventListener("resize",groesse); document.removeEventListener("keydown",taste); };
   const taste=e=>{ if(e.key==="Escape") zu(); if(e.key==="+"||e.key==="=") zoomUm(s*1.4,stage.clientWidth/2,stage.clientHeight/2); if(e.key==="-") zoomUm(s/1.4,stage.clientWidth/2,stage.clientHeight/2); };
   document.addEventListener("keydown",taste); window.addEventListener("resize",groesse);
@@ -650,6 +671,8 @@ function dokViewer(src, art="bild", titel=""){
   d.querySelector("[data-dv=plus]").onclick=()=>zoomUm(s*1.5,stage.clientWidth/2,stage.clientHeight/2);
   d.querySelector("[data-dv=minus]").onclick=()=>zoomUm(s/1.5,stage.clientWidth/2,stage.clientHeight/2);
   d.querySelector("[data-dv=fit]").onclick=einpassen;
+  d.querySelector("[data-dv=dreh]").onclick=()=>{ if(!OW) return; dreh=(dreh+90)%360; drehen(); };
+  d.querySelector("[data-dv=scan]").onclick=()=>{ scanAn=!scanAn; try{ localStorage.setItem("jdScan",scanAn?"1":"0"); }catch(e){} scanZeigen(); };
   // Finger und Maus
   const pts=new Map(); let start=null, tapZeit=0, tapX=0, tapY=0, bewegt=false;
   const pos=e=>{ const r=stage.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
@@ -669,7 +692,7 @@ function dokViewer(src, art="bild", titel=""){
   const fehler=t=>{ inh.innerHTML=`<div class="dvlade">${esc(t)}${art==="pdf"?`<br><a href="${esc(src)}" target="_blank" rel="noopener" style="color:#fff">Im Browser öffnen</a>`:""}</div>`; };
   if(art!=="pdf"){
     const img=new Image(); img.alt=""; img.draggable=false;
-    img.onload=()=>{ inh.innerHTML=""; inh.appendChild(img); img.style.width=img.naturalWidth+"px"; img.style.height=img.naturalHeight+"px"; bereit(img.naturalWidth,img.naturalHeight,art!=="seiten"); };
+    img.onload=()=>{ inh.innerHTML=""; inh.appendChild(rot); rot.appendChild(img); img.style.width=img.naturalWidth+"px"; img.style.height=img.naturalHeight+"px"; bereit(img.naturalWidth,img.naturalHeight,art!=="seiten"); };
     img.onerror=()=>fehler("Bild konnte nicht geladen werden."); img.src=src;
   } else {
     (async()=>{ try{
@@ -677,10 +700,10 @@ function dokViewer(src, art="bild", titel=""){
       const pdf=await lib.getDocument({data:buf}).promise; const n=Math.min(pdf.numPages,40);
       const seiten=[]; for(let i=1;i<=n;i++) seiten.push(await pdf.getPage(i));
       const breite=Math.max(...seiten.map(pg=>pg.getViewport({scale:1}).width)), GAP=12; let h=0;
-      inh.innerHTML="";
+      inh.innerHTML=""; inh.appendChild(rot);
       const dpr=Math.min(window.devicePixelRatio||1,2);
       for(const pg of seiten){ const v1=pg.getViewport({scale:1}), k=breite/v1.width, cssH=v1.height*k;
-        const c=document.createElement("canvas"); c.className="dvseite"; c.style.top=h+"px"; c.style.width=breite+"px"; c.style.height=cssH+"px"; inh.appendChild(c); h+=cssH+GAP; c._pg=pg; c._k=k; }
+        const c=document.createElement("canvas"); c.className="dvseite"; c.style.top=h+"px"; c.style.width=breite+"px"; c.style.height=cssH+"px"; rot.appendChild(c); h+=cssH+GAP; c._pg=pg; c._k=k; }
       bereit(breite,h-GAP,n===1);
       // scharf zeichnen: Auflösung so wählen, dass auch starkes Hineinzoomen lesbar bleibt (begrenzt wegen Speicher)
       const malen=async(stufe)=>{ for(const c of inh.querySelectorAll("canvas")){ const v=c._pg.getViewport({scale:c._k*stufe}); if(c.width>=Math.floor(v.width)) continue;
@@ -836,6 +859,21 @@ function vorleistungZeilen(o){
 }
 // Angaben, die beim Auslesen unsicher waren oder fehlen → „bitte im Dokument nachsehen“
 const unsicher=(o,k)=>(o.deckUnsicher||[]).includes(k);
+// Was Claude aus allen Unterlagen gelesen hat – für die Monteure übersichtlich, ohne die PDFs durchsuchen zu müssen
+function dokInfoTeil(o){
+  const d=o.dokInfo; if(!d) return "";
+  const tel=t=>t?`<a href="tel:${esc(String(t).replace(/[^\d+]/g,""))}">📞 ${esc(t)}</a>`:"";
+  const ko=(d.kontakte||[]).filter(k=>k.name||k.tel||k.mail||k.firma);
+  const an=(d.anlagen||[]).filter(a=>a.raum||a.kabinen||a.modell);
+  const hi=(d.hinweise||[]).filter(h=>h.text);
+  if(!ko.length && !an.length && !hi.length) return "";
+  return `<div class="dok-i"><div class="small mute">📄 Aus ${d.dateien||""} Unterlage${d.dateien===1?"":"n"} gelesen · ${fmtDT(d.am)}</div>
+   ${ko.length?`<h4>Ansprechpartner</h4>${ko.map(k=>`<div class="dok-k"><span class="r">${esc(k.rolle||"Kontakt")}${k.firma?" · "+esc(k.firma):""}</span>${k.name?`<b>${esc(k.name)}</b>`:""}${tel(k.tel)}${k.mail?`<a href="mailto:${esc(k.mail)}">✉︎ ${esc(k.mail)}</a>`:""}</div>`).join("")}`:""}
+   ${an.length?`<h4>Anlagen (${an.reduce((s,a)=>s+(parseInt(a.kabinen,10)||0),0)||an.length} ${an.some(a=>parseInt(a.kabinen,10))?"Kabinen":"Bereiche"})</h4>${an.map(a=>`<div class="dok-a"><b>${esc([a.raum,a.geschoss].filter(Boolean).join(" · ")||"Anlage")}${a.kabinen?` – ${esc(a.kabinen)} Kab.`:""}</b>
+      ${[["Modell",a.modell],["Höhe",a.hoehe],["Farbe",a.farbe],["Besonderes",a.besonderes]].filter(([,v])=>v).map(([k,v])=>`<span class="mute">${k}</span><span>${esc(v)}</span>`).join("")}</div>`).join("")}`:""}
+   ${hi.length?`<h4>Hinweise aus den Unterlagen</h4>${hi.map(h=>`<div class="dok-h">${h.titel?`<b>${esc(h.titel)}</b>`:""}${esc(h.text)}</div>`).join("")}`:""}</div>`;
+}
+const dokListe=o=>(o.dokInfo?.liste||[]).filter(x=>x.art||x.inhalt).map(x=>`<div class="dok-d">📄 <b>${esc(x.art||"Datei")}</b>${x.seiten?` · ${esc(x.seiten)} S.`:""}${x.inhalt?` – ${esc(x.inhalt)}`:""}${x.name?` <span class="mute small">(${esc(x.name)})</span>`:""}</div>`).join("");
 const DOK_HINWEIS=`<span class="dokhinweis">⚠️ bitte im Dokument prüfen</span>`;
 // Terminiert: fester Termin eingetragen oder Einsatz schon begonnen
 const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).length>0;
@@ -1549,6 +1587,7 @@ function viewDetail(id){
    ${kv("Vorgang",esc(o.vorgang||""))}
    ${kv("meta-Berater",esc(o.berater||""))}
    </dl>
+   ${dokInfoTeil(o)}
    ${!o.bauleiterName&&!o.adresse?`<div class="banner info" style="margin:10px 0 0">Die genauen Baustellendaten stehen auf dem Aufmaß-Deckblatt. ${can.planen()?"Lade das Deckblatt unten bei „Unterlagen“ hoch oder hol es aus der Mail – die App liest es dann aus.":""}</div>`:""}
    ${o.zusageMail?.viewUrl&&S.isOwner?`<div style="margin-top:10px"><a class="small" href="${esc(o.zusageMail.viewUrl)}" target="_blank" rel="noopener">Montagezusage-Mail in Gmail öffnen ↗</a></div>`:""}
   `;
@@ -1556,8 +1595,9 @@ function viewDetail(id){
 
   // Unterlagen
   const unterInhalt=`${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
+   ${dokListe(o)?`<div style="margin-top:8px">${dokListe(o)}</div>`:""}
    <div class="row" style="margin-top:10px">
-   ${can.planen()&&S.sample?`<button class="btn sm ghost" id="readDeck">🔎 Deckblatt auslesen</button>`:""}
+   ${can.planen()&&(S.isOwner&&S.sync||S.sample)&&fk("unterlagen").length?`<button class="btn sm ghost" id="readDeck">🔎 ${o.dokInfo?"Unterlagen neu auslesen":"Alle Unterlagen auslesen"}</button>`:""}
    ${can.mails()&&o.zusageMail?.att?.length?`<button class="btn sm ghost" id="mailUnterlagen">✉︎ Unterlagen aus Mail holen</button>`:""}
    </div>`;
   knoepfe.push(sk("unter","📂","Unterlagen",`${fk("unterlagen").length} Datei${fk("unterlagen").length===1?"":"en"}`,unterInhalt,'id="unterlagenCard"'));
@@ -3634,7 +3674,12 @@ function bindDetail(id){
   $("#reqAbn") && ($("#reqAbn").onclick=()=>abnahmeDialog(id));
   $("#noAbn") && ($("#noAbn").onclick=async()=>{ if(await confirmBox("Nicht an Kunden senden?","Die Sichtabnahme wird nicht an das Bauvorhaben geschickt. Du kannst das später noch ändern.","Ja, nicht senden")) upd(P,{abnahmeKeinVersand:true}); });
   const au=$("#abnUp"); if(au) au.onchange=async()=>{ const f=au.files[0]; if(!f) return; try{ const b=await shrink(f,2000,.85); const a=await S.assets.upload(b); await upd(P,{abnahmeDatei:{assetId:a.id,typ:b.type,name:f.name,am:Date.now()}}); toast("Unterschriebene Sichtabnahme gespeichert ✓"); }catch(e){ toast("Upload fehlgeschlagen"); } };
-  $("#readDeck") && ($("#readDeck").onclick=()=>deckblattDialog(id));
+  $("#readDeck") && ($("#readDeck").onclick=async()=>{
+    if(!(S.isOwner&&S.sync)) return deckblattDialog(id);
+    const b=$("#readDeck"); b.disabled=true; b.innerHTML=`<span class="spin"></span> Claude liest alle Unterlagen … (bis 1–2 Min.)`;
+    try{ const r=await S.sync.run({dokLesen:id}); toast(r?.fehler||(r?.log||[]).join(" · ")||"Ausgelesen ✓",4500); }
+    catch(e){ toast("Auslesen hat nicht geklappt: "+(e.message||e.code||e),4000); if(S.sample) deckblattDialog(id); }
+    finally{ if(b.isConnected){ b.disabled=false; b.textContent="🔎 Unterlagen neu auslesen"; } } });
   $("#mailUnterlagen") && ($("#mailUnterlagen").onclick=async()=>{ const b=$("#mailUnterlagen"); b.disabled=true; b.innerHTML=`<span class="spin"></span> lädt …`; try{ const n=await importUnterlagen(id, msg=>b.innerHTML=`<span class="spin"></span> ${esc(msg)}`); toast(n?`${n} Unterlagen übernommen`:"Keine Bilder in der Mail gefunden"); }catch(e){ toast("Fehler: "+mcpMsg(e)); } b.disabled=false; render(); });
   // Finanzen
   const FP="finanzen/"+id;

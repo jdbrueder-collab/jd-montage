@@ -51,6 +51,8 @@ Deno.serve(async (req) => {
       // Unterlagen/Zusagen für vorhandene Aufträge aus älteren Mails nachladen – legt keine neuen Aufträge an
       if (body?.ergaenzen) return json(await abruf(db, "ergaenzen", "", { abfrage: String(body.ergaenzen), nurBestehende: true }));
       if (body?.erinnerung) return json(await metaErinnerung(db, false));
+      // Unterlagen vorhandener Aufträge neu auslesen (z. B. nach besserer Auslese) – nur offene Aufträge, wenige pro Lauf
+      if (body?.dokNachlesen) return json(await dokNachlesen(db, Math.min(+body.anzahl || 3, 6), String(body.ab || "")));
     } else {
       const user = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
         global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
@@ -71,6 +73,13 @@ Deno.serve(async (req) => {
       }
       const { data: owner } = await user.rpc("is_owner");
       if (!owner) return json({ code: "approval_required", message: "Nur Admins dürfen Mails abrufen." }, 403);
+      // Admin: Unterlagen eines Auftrags komplett neu auslesen
+      if (body?.dokLesen) {
+        const id = String(body.dokLesen), o = await getDoc(db, "auftraege", id); const log: string[] = [];
+        if (!o) return json({ fehler: "Auftrag nicht gefunden" });
+        const n = await deckblattAusGespeicherten(db, id, o, log);
+        return json({ n, log });
+      }
       // Admin: Erinnerung zum Testen sofort senden (an die eigene Adresse oder an alle Empfänger)
       if (body?.erinnerung) return json(await metaErinnerung(db, true, body.an ? String(body.an) : ""));
     }
@@ -738,10 +747,10 @@ async function claudeLiest(blocks: any[]) {
   const client = new Anthropic();
   const res = await client.beta.messages.create({
     model: "claude-opus-5-5",
-    max_tokens: 4000,
+    max_tokens: 12000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    output_config: { effort: "medium" },
+    output_config: { effort: "high" },
     system: "Du hilfst der Montage-App von JD Brüder. Antworte ausschließlich mit einem einzigen gültigen JSON-Objekt, ohne Erklärung und ohne Markdown. Felder, die du nicht sicher erkennst, lässt du leer statt zu raten.",
     messages: [{ role: "user", content: [...blocks, { type: "text", text: DECK_PROMPT }] }],
   } as any);
@@ -756,41 +765,72 @@ const block = (typ: string, b64: string) =>
 
 /** Direkt aus den Mail-Anhängen lesen (wenn die Auftragsnummer noch unbekannt ist) */
 async function deckblatt(m: any, att: any[], log: string[]) {
-  const blocks: any[] = []; let groesse = 0;
-  for (const a of att.slice(0, 4)) {
+  const blocks: any[] = []; let groesse = 0, nr = 0;
+  for (const a of att.slice(0, 12)) {
     const { b64 } = await laden(m, a);
-    if (groesse + b64.length > 25_000_000) break;
-    groesse += b64.length; blocks.push(block(typVon(a), b64));
+    if (groesse + b64.length > 24_000_000) break;
+    groesse += b64.length; nr++; blocks.push({ type: "text", text: `Datei ${nr}: ${a.filename || "ohne Namen"}` }, block(typVon(a), b64));
   }
   try { return await claudeLiest(blocks); } catch (e: any) { log.push(`⚠ Deckblatt nicht gelesen: ${e.message || e}`); return null; }
 }
 
-/** Aus den gespeicherten Unterlagen eines Auftrags lesen */
+/** Aus den gespeicherten Unterlagen eines Auftrags lesen – alle Dateien, notfalls in mehreren Paketen */
 async function deckblattAusGespeicherten(db: any, id: string, o: any, log: string[]) {
   if (!Deno.env.get("ANTHROPIC_API_KEY")) return -1;
   const { data } = await db.from("docs").select("data").eq("col", "fotos").eq("data->>auftragId", id).eq("data->>kat", "unterlagen");
   const files = (data || []).map((r: any) => r.data).filter((f: any) => /pdf|image/.test(f.typ || ""))
-    .sort((a: any, b: any) => (/pdf/.test(b.typ) ? 1 : 0) - (/pdf/.test(a.typ) ? 1 : 0)).slice(0, 4);
-  const blocks: any[] = []; let groesse = 0;
+    .sort((a: any, b: any) => ((/pdf/.test(b.typ) ? 1 : 0) - (/pdf/.test(a.typ) ? 1 : 0)) || (a.am || 0) - (b.am || 0)).slice(0, 16);
+  const pakete: any[][] = [[]]; let groesse = 0, nr = 0;
   for (const f of files) {
     const { data: blob } = await db.storage.from("assets").download(f.assetId);
     if (!blob) continue;
     const u8 = new Uint8Array(await blob.arrayBuffer()); let s = "";
     for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
     const b64 = btoa(s);
-    if (groesse + b64.length > 25_000_000) break;
-    groesse += b64.length; blocks.push(block(f.typ, b64));
+    if (b64.length > 24_000_000) { log.push(`⚠ ${f.name || "Datei"} ist zu groß zum Auslesen`); continue; }
+    if (groesse + b64.length > 24_000_000) { pakete.push([]); groesse = 0; }
+    groesse += b64.length; nr++;
+    pakete[pakete.length - 1].push({ type: "text", text: `Datei ${nr}: ${f.name || "ohne Namen"}` }, block(f.typ, b64));
   }
-  const res = await claudeLiest(blocks);
-  const n = await deckblattUebernehmen(db, id, o, res);
-  log.push(`🔎 Deckblatt ${o?.nr || id}: ${n} Felder übernommen`);
+  let res: any = null;
+  for (const p of pakete.filter((x) => x.length).slice(0, 3)) res = zusammenfuehren(res, await claudeLiest(p));
+  const n = await deckblattUebernehmen(db, id, o, res, nr);
+  log.push(`🔎 Unterlagen ${o?.nr || id}: ${nr} Datei(en) gelesen, ${n} Felder übernommen`);
   return n;
+}
+/** Vorhandene Aufträge mit Unterlagen neu auslesen (älteste Auslese zuerst, nur nicht abgerechnete/stornierte) */
+async function dokNachlesen(db: any, anzahl: number, ab: string) {
+  const { data } = await db.from("docs").select("id,data").eq("col", "auftraege");
+  const { data: fo } = await db.from("docs").select("data").eq("col", "fotos").eq("data->>kat", "unterlagen");
+  const mitDateien = new Set((fo || []).map((r: any) => r.data?.auftragId));
+  const offen = (data || []).filter((r: any) => mitDateien.has(r.id) && !r.data.storniert && !r.data.abgerechnet && !r.data.test && !r.data.dokInfo && (!ab || r.id > ab))
+    .sort((a: any, b: any) => a.id.localeCompare(b.id));
+  const log: string[] = []; let fertig = 0;
+  for (const r of offen.slice(0, anzahl)) {
+    try { await deckblattAusGespeicherten(db, r.id, r.data, log); fertig++; } catch (e: any) { log.push(`⚠ ${r.data.nr}: ${e.message || e}`); }
+  }
+  return { fertig, rest: Math.max(0, offen.length - fertig), log };
+}
+/** Ergebnisse mehrerer Pakete: erstes nicht leeres Feld gewinnt, Listen werden ergänzt */
+function zusammenfuehren(a: any, b: any) {
+  if (!a) return b; if (!b) return a;
+  const out: any = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    if (Array.isArray(v)) { const alt = Array.isArray(a[k]) ? a[k] : []; const seen = new Set(alt.map((x: any) => JSON.stringify(x))); out[k] = [...alt, ...v.filter((x: any) => !seen.has(JSON.stringify(x)))]; }
+    else if (!String(a[k] ?? "").trim()) out[k] = v;
+  }
+  out.unsicher = (out.unsicher || []).filter((k: string) => !String(out[k] ?? "").trim());
+  return out;
 }
 
 /** Nur leere Felder füllen – von Hand Eingetragenes bleibt */
-async function deckblattUebernehmen(db: any, id: string, o: any, res: any) {
+async function deckblattUebernehmen(db: any, id: string, o: any, res: any, dateien = 0) {
   if (!res || !o) return 0;
   const p: any = {};
+  // Alles Gelesene für die Monteure aufheben (Kontakte, Anlagen, Hinweise, was in welcher Datei steht)
+  const liste = (x: any, n = 40) => (Array.isArray(x) ? x.filter((y) => y && typeof y === "object").slice(0, n) : []);
+  const felder: any = {}; for (const [k, v] of Object.entries(res)) if (typeof v === "string" || typeof v === "number") { const t = String(v).trim(); if (t && t !== "-") felder[k] = t; }
+  p.dokInfo = { am: Date.now(), dateien: dateien || liste(res.dateien).length, felder, kontakte: liste(res.kontakte, 20), anlagen: liste(res.anlagen), hinweise: liste(res.hinweise), liste: liste(res.dateien, 20) };
   for (const k of DECK_FELDER) { const v = String(res[k] ?? "").trim(); if (v && v !== "-" && !o[k]) p[k] = v; }
   if (!o.bauvorhaben && res.bauvorhabenName) p.bauvorhaben = String(res.bauvorhabenName).trim();
   if (!o.plzOrt && res.adresse) { const m = String(res.adresse).match(/(\d{5}\s+[^,]+)$/); if (m) p.plzOrt = m[1].trim(); }
@@ -800,5 +840,5 @@ async function deckblattUebernehmen(db: any, id: string, o: any, res: any) {
   for (const k of ["bauleiterTel", "adresse"]) if (!o[k] && !p[k] && !unsicher.includes(k)) unsicher.push(k);
   p.deckUnsicher = unsicher;
   await updDoc(db, "auftraege", id, { ...p, deckblattGelesenAm: Date.now() }); Object.assign(o, p);
-  return Object.keys(p).filter((k) => k !== "deckUnsicher").length;
+  return Object.keys(p).filter((k) => k !== "deckUnsicher" && k !== "dokInfo").length;
 }

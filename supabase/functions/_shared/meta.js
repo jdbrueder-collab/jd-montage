@@ -160,11 +160,17 @@ export function findeAuftrag(orders, nr) {
   return treffer.length === 1 ? treffer[0] : null;
 }
 
-export const DECK_PROMPT = `Du bekommst Unterlagen eines Montageauftrags der Firma meta Trennwandanlagen (Aufmaß-Deckblatt, Produktdeckblatt, Zeichnungen) als PDF oder Bild.
-Lies die Felder aus und antworte NUR mit einem JSON-Objekt mit diesen Schlüsseln (leerer String, wenn nicht vorhanden):
-{"fertigungsNr":"Fertigungs-Auftrags-Nr. z.B. 17714/1","vorgang":"Auftrags-Vorgangs-Nr.","berater":"meta-Berater mit Telefon","adresse":"Baustellenanschrift: Straße Nr, PLZ Ort","bauvorhabenName":"z.B. Wohnquartier","bauleiterName":"","bauleiterTel":"","bauleiterMail":"","oeffnungszeiten":"","geschosse":"Montage in Geschoss","aufzug":"","montageHinweise":"","kaufmHinweise":"Kaufmännische Hinweise kurz","technHinweise":"Technische Hinweise vom Produktdeckblatt","aufbau":"Was aufgebaut wird: Modell/Design, Anzahl Kabinen, Anlagenhöhe, Farben, Bodenanschluss – kurz in einer Zeile","kabinen":"Anzahl Kabinen als Zahl","zahlungspflichtiger":"Firma, Ort","kw":"gewünschte Montage-KW als Zahl"}
-Handschriftliche Werte mit lesen. Nichts erfinden.
-Zusätzlich: "unsicher": Liste der Schlüssel, die du NICHT sicher lesen konntest (unleserlich, abgeschnitten, mehrdeutig) oder die im Dokument fehlen, aber wichtig wären – besonders "bauleiterTel" und "adresse". Beispiel: "unsicher":["bauleiterTel"].`;
+export const DECK_PROMPT = `Du bekommst ALLE Unterlagen eines Montageauftrags der Firma meta Trennwandanlagen (Aufmaß-Deckblatt, Produktdeckblatt, Zeichnungen, Grundrisse, Stücklisten, Fotos oder Scans) als PDF oder Bild. Vor jeder Datei steht „Datei N: Name“.
+Lies JEDE Seite vollständig: auch Kleingedrucktes, Stempel, Tabellen, Planköpfe, Legenden, gedrehte oder schief gescannte Seiten und handschriftliche Notizen. Die Monteure sollen später nichts mehr in den PDFs suchen müssen.
+Antworte NUR mit einem JSON-Objekt mit diesen Schlüsseln (leerer String bzw. leere Liste, wenn nicht vorhanden):
+{"fertigungsNr":"Fertigungs-Auftrags-Nr. z.B. 17714/1","vorgang":"Auftrags-Vorgangs-Nr.","berater":"meta-Berater mit Telefon","adresse":"Baustellenanschrift: Straße Nr, PLZ Ort","bauvorhabenName":"z.B. Wohnquartier","bauleiterName":"","bauleiterTel":"","bauleiterMail":"","oeffnungszeiten":"","geschosse":"Montage in Geschoss","aufzug":"","montageHinweise":"","kaufmHinweise":"Kaufmännische Hinweise kurz","technHinweise":"Technische Hinweise vom Produktdeckblatt","aufbau":"Was aufgebaut wird: Modell/Design, Anzahl Kabinen, Anlagenhöhe, Farben, Bodenanschluss – kurz in einer Zeile","kabinen":"Anzahl Kabinen als Zahl","zahlungspflichtiger":"Firma, Ort","kw":"gewünschte Montage-KW als Zahl",
+"kontakte":[{"rolle":"z.B. Bauleiter, Polier, Architekt, Hausmeister, Ansprechpartner vor Ort, meta-Berater, Auftraggeber","name":"","firma":"","tel":"mit Vorwahl","mail":""}],
+"anlagen":[{"raum":"Raum/Bereich, z.B. WC Damen","geschoss":"z.B. EG, 1. OG","kabinen":"Anzahl","modell":"Serie/Modell/Design","hoehe":"Anlagenhöhe","farbe":"Farbe/Dekor","besonderes":"Türanschlag, Urinaltrennwand, Sonderteile, Maße …"}],
+"hinweise":[{"titel":"Stichwort, z.B. Anlieferung, Zufahrt, Parken, Schlüssel, Arbeitszeiten, Boden, Befestigung, Wandaufbau, Maße, Sonderteile, Termin","text":"vollständig, wie im Dokument"}],
+"dateien":[{"nr":1,"name":"Dateiname","art":"Aufmaß-Deckblatt | Produktdeckblatt | Zeichnung | Grundriss | Stückliste | Foto | Sonstiges","seiten":"Anzahl Seiten","inhalt":"was drinsteht, ein kurzer Satz"}],
+"unsicher":[]}
+Regeln: Handschriftliches mit lesen. Nichts erfinden. Telefonnummern vollständig mit Vorwahl. Gleiche Kontakte nur einmal. Alles, was für Montage, Anfahrt, Material oder Abrechnung wichtig sein könnte und in kein Feld passt, kommt unter "hinweise" – lieber einmal zu viel als zu wenig.
+"unsicher": Liste der Schlüssel, die du NICHT sicher lesen konntest (unleserlich, abgeschnitten, mehrdeutig) oder die in den Unterlagen fehlen, aber wichtig wären – besonders "bauleiterTel" und "adresse". Beispiel: "unsicher":["bauleiterTel"].`;
 // Welche Deckblatt-Felder in den Auftrag übernommen werden (nur wenn dort noch leer)
 export const DECK_FELDER = ["vorgang", "berater", "adresse", "bauleiterName", "bauleiterTel", "bauleiterMail", "oeffnungszeiten", "geschosse", "aufzug", "montageHinweise", "kaufmHinweise", "technHinweise", "aufbau", "kabinen", "zahlungspflichtiger"];
 
