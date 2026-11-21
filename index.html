@@ -49,6 +49,8 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:8px 6px;font-weight:650;font-size:13px;cursor:pointer;color:var(--grey);min-height:38px}
 .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .seg.phasen button{display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.15;min-width:70px}
+.seg.phasen{flex-wrap:nowrap}
+@media(max-width:560px){.seg.phasen button{min-width:0;flex:1 1 0;padding:7px 2px;font-size:12px;hyphens:manual;overflow-wrap:normal}}
 .seg.phasen .n{font-size:11px;font-weight:700;background:var(--line);color:var(--grey);border-radius:9px;padding:0 7px}
 .seg.phasen button.on .n{background:var(--brand);color:#fff}
 .seg.phasen button.st.on .n{background:var(--bad)}
@@ -458,7 +460,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="e97fff85aa31";</script>
+<script>window.JD_BUILD="1044f7276dc6";</script>
 </head>
 <body>
 <header class="top">
@@ -802,7 +804,7 @@ function offeneReklas(id){ return Object.values(S.reklas).filter(r=>r.auftragId=
 function istFertig(o){ return !!o.abschluss; }
 // Bereiche der Startansicht: nicht verplant → verplant & in Arbeit → erledigt; stornierte extra
 // Weg eines Auftrags: nicht verplant → abholbereit → terminiert → erledigt (Storniert steht abseits)
-const PHASEN=[["offen","Nicht verplant"],["abholbereit","Abholbereit"],["arbeit","Terminiert"],["erledigt","Erledigt"],["storniert","Storniert"]];
+const PHASEN=[["offen","Nicht verplant"],["abholbereit","Abholbereit"],["arbeit","Terminiert"],["fertig","Fertig­gestellt"],["erledigt","Erledigt"],["storniert","Storniert"]];
 const HAUPT_PHASEN=PHASEN.filter(([k])=>k!=="storniert");
 // Land der Baustelle: von Hand festgelegt, sonst aus der Adresse erkannt (L-1234, 4-stellige PLZ, „Luxemburg“)
 const LAENDER={de:["🇩🇪","Deutschland"],lu:["🇱🇺","Luxemburg"]};
@@ -841,14 +843,15 @@ const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).len
 const abhBereit=o=>o.prodStatus==="abholbereit" && !o.nichtVerplant;
 function phase(o){
   if(o.storniert) return "storniert";
-  if(o.gemeinsam && can.sub()) return o.subAnteil?.[myId()]?.abgegebenAm?"erledigt":terminiert(o)?"arbeit":abhBereit(o)?"abholbereit":"offen"; // gemeinsamer Auftrag: Sub ist fertig, wenn sein Anteil abgegeben ist
-  if(abgerechnet(o) || berichtVerschickt(o) || berichtAbgegeben(o)) return "erledigt"; // Bericht verschickt/abgegeben oder Abrechnung da
+  if(o.gemeinsam && can.sub()) return o.subAnteil?.[myId()]?.abgegebenAm?(abgerechnet(o)?"erledigt":"fertig"):terminiert(o)?"arbeit":abhBereit(o)?"abholbereit":"offen"; // gemeinsamer Auftrag: Sub ist fertig, wenn sein Anteil abgegeben ist
+  if(abgerechnet(o)) return "erledigt"; // Vergütung da (Montageabrechnung von meta) → komplett erledigt
+  if(istFertig(o) || berichtVerschickt(o) || berichtAbgegeben(o)) return "fertig"; // Montagebericht geschrieben → Baustelle fertiggestellt, Vergütung steht noch aus
   if(terminiert(o)) return "arbeit";
   if(abhBereit(o)) return "abholbereit"; // Ware fertig – jetzt einplanen
   return "offen";
 }
-// Bereiche je Rolle: Subunternehmer nur Terminiert/Erledigt, Mitarbeiter ohne „Nicht verplant“
-const meinePhasen=()=>can.sub()?HAUPT_PHASEN.filter(([k])=>k==="arbeit"||k==="erledigt"):can.planen()?HAUPT_PHASEN:HAUPT_PHASEN.filter(([k])=>k!=="offen");
+// Bereiche je Rolle: Subunternehmer nur Terminiert/Fertiggestellt/Erledigt, Mitarbeiter ohne „Nicht verplant“
+const meinePhasen=()=>can.sub()?HAUPT_PHASEN.filter(([k])=>k==="arbeit"||k==="fertig"||k==="erledigt"):can.planen()?HAUPT_PHASEN:HAUPT_PHASEN.filter(([k])=>k!=="offen");
 
 /* ---------- Nachrichten pro Auftrag (Chef ↔ Eingeteilte) ---------- */
 // „gelesen“ merkt sich das Gerät; Nachrichten von vor dem ersten Öffnen gelten als gelesen
@@ -1087,7 +1090,7 @@ function statusPills(o, imKal){
     const un=ungelesen(o.id); if(un) q.push(["msg",un]); return q; }
   const p=[], chef=can.planen(), ph=phase(o);
   if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o)) p.push(["gold","NEU"]);
-  if(istFertig(o) || ph==="erledigt"){
+  if(istFertig(o) || ph==="erledigt" || ph==="fertig"){
     if(chef){
       if(o.berichtStatus==="pruefung") p.push(["warn","📥 prüfen"]);
       else if(o.berichtStatus==="bereit" && !berichtVerschickt(o) && !abgerechnet(o)) p.push(["warn","Bericht senden"]);
@@ -1123,7 +1126,7 @@ function avatare(o){
     return `<span class="kal-av ${fest?(ok?"ok":"wartet"):""}" title="${esc(nameOf(m))}${fest?(ok?" – Termin bestätigt":" – Termin noch nicht bestätigt"):""}">${esc(initials(m))}</span>`; }).join("");
 }
 function liKarte(o, imKal){
-  const ph=phase(o), fertig=istFertig(o)||ph==="erledigt";
+  const ph=phase(o), fertig=istFertig(o)||ph==="erledigt"||ph==="fertig";
   const cls=o.storniert?"storno":fertig?"fertig":running(o)?"laeuft":ueberfaellig(o)?"ueber":ph==="abholbereit"?"abh":ph==="offen"?"offen":"";
   const p=statusPills(o, imKal), av=avatare(o);
   return `<a class="kal-o ${imKal?"":"li"} ${cls}" href="#a-${esc(o.id)}">
@@ -1136,7 +1139,7 @@ function liKarte(o, imKal){
 function gruppen(list){
   const groups={};
   list.forEach(o=>{ const w=planWeek(o); const k=w.kw?wkKey(w.jahr,w.kw):0; (groups[k]=groups[k]||{w,items:[]}).items.push(o); });
-  const absteigend=S.filter==="erledigt"||S.filter==="storniert";
+  const absteigend=S.filter==="erledigt"||S.filter==="fertig"||S.filter==="storniert";
   const keys=Object.keys(groups).map(Number).sort((a,b)=>absteigend?b-a:a-b);
   const nowK=wkKey(NOW.jahr,NOW.kw);
   const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Nicht verplant“</button>`:"";
@@ -1219,6 +1222,8 @@ function viewListe(){
   if(spez && !suche) h+=`<div class="spez-kopf"><b>${esc(SPEZIAL[S.filter].t)}</b><span class="mute">${list.length}</span><button class="btn sm ghost" data-f="zurueck">✕</button></div>`;
   if(suche) h+=`<div class="small mute" style="margin:10px 2px 0">Suche in allen Bereichen · ${list.length} Treffer</div>`;
   if(S.filter==="storniert" && !suche) h+=`<div class="small mute" style="margin:10px 2px 0">Aufträge, die meta wieder storniert hat.</div>`;
+  if(S.filter==="fertig" && !suche && !spez) h+=`<div class="small mute" style="margin:10px 2px 0">Baustellen mit geschriebenem Montagebericht – die Vergütung von meta steht noch aus.</div>`;
+  if(S.filter==="erledigt" && !suche && !spez) h+=`<div class="small mute" style="margin:10px 2px 0">Komplett fertig – die Vergütung (Montageabrechnung von meta) ist da.</div>`;
   if(!Object.keys(S.orders).length){
     h+=`<div class="empty">Noch keine Aufträge.<br>${can.mails()?"Tippe oben auf „Mails abrufen“, um die Aufträge von meta zu holen.":"Sobald der Chef die Mails abruft, erscheinen sie hier."}</div>`;
     return h;
@@ -1479,7 +1484,7 @@ function viewDetail(id){
   const route=S.settings.firmenAdresse?`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(S.settings.firmenAdresse)}&destination=${encodeURIComponent(addr)}`:"";
   const reklas=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,b)=>b.am-a.am);
   const w=planWeek(o);
-  const erl=phase(o)==="erledigt";
+  const erl=phase(o)==="erledigt"||(phase(o)==="fertig"&&(berichtVerschickt(o)||berichtAbgegeben(o)));
   // Nicht verplant / Abholbereit: nur Kopf, Baustelle & Kunde, Unterlagen (+ Knopf „Terminieren“)
   const frueh=phase(o)==="offen"||phase(o)==="abholbereit";
   // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
