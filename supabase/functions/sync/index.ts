@@ -36,6 +36,8 @@ Deno.serve(async (req) => {
     // Anmeldung neuer Leute (ohne Login): Zugang anfragen / persönlichen Code einlösen
     const vorab = await req.clone().json().catch(() => ({}));
     if (vorab?.zugang) return json(await zugang(db, vorab.zugang));
+    // Terminabstimmung: Antwortseite für den Bauleiter (termin.html, ohne Login – Zugang nur über den geheimen Link)
+    if (vorab?.terminInfo || vorab?.terminAntwort) return json(await terminOeffentlich(db, vorab));
     // Zugriff: Zeitplan mit Geheimnis aus der Datenbank, sonst nur Admins
     const secret = req.headers.get("x-sync-secret");
     if (secret) {
@@ -55,7 +57,7 @@ Deno.serve(async (req) => {
       });
       const body = await req.json().catch(() => ({}));
       // Benachrichtigungen: meta meldet „abholbereit“, oder Test an die eigenen Geräte (alle freigegebenen Nutzer)
-      if (body?.abholbereit || body?.pushTest || body?.reklamation || body?.subBericht || body?.subFreigabe || body?.termin || body?.nachricht) {
+      if (body?.abholbereit || body?.pushTest || body?.reklamation || body?.subBericht || body?.subFreigabe || body?.termin || body?.nachricht || body?.kalender) {
         const { data: member } = await user.rpc("is_member");
         const { data: u } = await user.auth.getUser();
         if (!member || !u?.user) return json({ code: "approval_required", message: "Kein Zugriff." }, 403);
@@ -64,6 +66,7 @@ Deno.serve(async (req) => {
         if (body.subFreigabe) return json(await pushSubFreigabe(db, String(body.subFreigabe)));
         if (body.termin) return json(await pushTermin(db, String(body.termin), u.user.id));
         if (body.nachricht) return json(await pushNachricht(db, String(body.nachricht), u.user.id));
+        if (body.kalender) return json(await kalenderEintrag(db, String(body.kalender), u.user.email || ""));
         return json(body.pushTest ? await pushTest(db, u.user.id) : await pushAbholbereit(db, String(body.abholbereit)));
       }
       const { data: owner } = await user.rpc("is_owner");
@@ -229,6 +232,83 @@ async function pushSubFreigabe(db: any, id: string) {
   });
 }
 /** Auftrag terminiert oder neu zugeteilt → die Eingeteilten bekommen eine Nachricht (je Person und Termin einmal) */
+// ---------- Terminabstimmung mit dem Bauleiter ----------
+const berlinZeit = (t: number) => new Date(t).toLocaleString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" });
+async function terminOeffentlich(db: any, b: any) {
+  const t = String(b.terminInfo || b.terminAntwort?.t || "");
+  if (!/^[a-z0-9]{20,64}$/i.test(t)) return { fehler: "Dieser Link ist ungültig." };
+  const a = await getDoc(db, "terminanfragen", t);
+  if (!a) return { fehler: "Diese Anfrage gibt es nicht mehr." };
+  const o = await getDoc(db, "auftraege", a.auftragId);
+  if (!o || o.storniert) return { fehler: "Dieser Auftrag ist nicht mehr aktiv. Bitte rufen Sie uns an." };
+  const s = (await getDoc(db, "einstellungen", "allgemein")) || {};
+  const info: any = {
+    nr: o.nr, bauvorhaben: o.bauvorhaben || "", adresse: o.adresse || [o.bauvorhaben, o.plzOrt].filter(Boolean).join(", "),
+    kabinen: o.kabinen || "", vorschlaege: a.vorschlaege || [], status: a.status, antwort: a.antwort || null,
+    telefon: s.firmenTelefon || "", firma: s.monteurName || "JD Brüder GbR", mail: s.antwortEmail || "",
+    termin: o.terminStatus === "fest" ? o.termin : null,
+  };
+  if (b.terminInfo) return info;
+  if (a.status === "zugesagt" && o.terminStatus === "fest") return { ...info, fehler: "Der Termin ist bereits bestätigt. Für Änderungen rufen Sie uns bitte an." };
+  const r = b.terminAntwort || {};
+  const bereit = r.bereit === true, name = String(r.name || "").trim().slice(0, 80), nachricht = String(r.nachricht || "").trim().slice(0, 1000);
+  if (!name) return { ...info, fehler: "Bitte geben Sie Ihren Namen an." };
+  let status = "nicht_bereit", termin: number | null = null;
+  if (bereit) {
+    const v = Number(r.termin);
+    if (v && (a.vorschlaege || []).includes(v)) { status = "zugesagt"; termin = v; }
+    else {
+      const w = Number(r.wunsch);
+      if (!w || w < Date.now() - 86400000) return { ...info, fehler: "Bitte wählen Sie einen Termin oder tragen Sie Ihren Wunschtermin ein." };
+      status = "gegenvorschlag"; termin = w;
+    }
+  }
+  const antwort = { am: Date.now(), bereit, status, termin, name, nachricht };
+  await updDoc(db, "terminanfragen", t, { status, antwort });
+  const patch: any = { terminAnfrage: { ...(o.terminAnfrage || {}), token: t, status, antwort } };
+  if (status === "zugesagt") { patch.termin = termin; patch.terminStatus = "fest"; patch.terminQuelle = "bauleiter"; }
+  await updDoc(db, "auftraege", a.auftragId, patch);
+  const wann = termin ? berlinZeit(termin) : "";
+  const titel = status === "zugesagt" ? `✅ Termin bestätigt: ${o.nr}` : status === "gegenvorschlag" ? `📅 Anderer Terminwunsch: ${o.nr}` : `⛔ Noch nicht montagebereit: ${o.nr}`;
+  const text = status === "nicht_bereit" ? `${name}: ${nachricht || "Räume noch nicht fertig"}` : `${name}${status === "gegenvorschlag" ? " wünscht" : ":"} ${wann}${nachricht ? " – " + nachricht : ""}`;
+  await pushSenden(db, await chefIds(db), { titel, text, url: APP_URL + "#a-" + a.auftragId }).catch((e) => console.error(e));
+  if (status === "zugesagt") {
+    await kalenderEintrag(db, a.auftragId, a.vonMail || "").catch((e) => console.error(e));
+    await pushTermin(db, a.auftragId, "").catch(() => {});
+  }
+  return { ...info, status, antwort, termin, ok: true };
+}
+
+// Kalendereinladung (.ics) an die Kalender-Adresse – Google Kalender übernimmt sie
+const b64utf8 = (x: string) => { const by = new TextEncoder().encode(x); let s = ""; by.forEach((c) => (s += String.fromCharCode(c))); return btoa(s).replace(/.{1,76}/g, "$&\r\n").trim(); };
+async function kalenderEintrag(db: any, id: string, mail: string) {
+  const o = await getDoc(db, "auftraege", id);
+  if (!o?.termin) return { gesendet: 0, grund: "kein Termin" };
+  const s = (await getDoc(db, "einstellungen", "allgemein")) || {};
+  const an = String(s.kalenderEmail || mail || "").trim();
+  if (!/@/.test(an)) return { gesendet: 0, grund: "keine Kalender-Adresse (Setup → Betrieb)" };
+  const absender = (await gmail("profile")).emailAddress;
+  const f = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const ic = (x: string) => String(x || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  const adr = o.adresse || [o.bauvorhaben, o.plzOrt].filter(Boolean).join(", ");
+  const besch = [`meta-Auftrag ${o.nr}${o.kabinen ? ` · ${o.kabinen} Kabinen` : ""}`, o.bauleiterName ? `Bauleiter: ${o.bauleiterName}${o.bauleiterTel ? `, ${o.bauleiterTel}` : ""}` : "",
+    o.terminAnfrage?.antwort?.name ? `Bestätigt von ${o.terminAnfrage.antwort.name}` : "", `In der App: ${APP_URL}#a-${id}`].filter(Boolean).join("\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JD Brueder//Montage//DE", "METHOD:REQUEST", "BEGIN:VEVENT",
+    `UID:montage-${id.replace(/[^\w-]/g, "")}@jd-montage`, `SEQUENCE:${Math.floor(Date.now() / 1000) % 2000000000}`, `DTSTAMP:${f(new Date())}`,
+    `DTSTART:${f(new Date(o.termin))}`, `DTEND:${f(new Date(o.termin + 8 * 3600000))}`,
+    `SUMMARY:${ic(`Montage ${o.nr}${o.bauvorhaben ? " – " + o.bauvorhaben : ""}`)}`, `LOCATION:${ic(adr)}`, `DESCRIPTION:${ic(besch)}`,
+    `ORGANIZER;CN=JD Brüder Montage:mailto:${absender}`, `ATTENDEE;CN=JD Brüder;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${an}`,
+    "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  const bnd = "jd" + crypto.randomUUID().replace(/-/g, "");
+  const betreff = `Montage ${o.nr} – ${berlinZeit(o.termin)}`;
+  const raw = [`To: ${an}`, `Subject: =?UTF-8?B?${b64utf8(betreff).replace(/\r\n/g, "")}?=`, "MIME-Version: 1.0", `Content-Type: multipart/alternative; boundary="${bnd}"`, "",
+    `--${bnd}`, 'Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64", "", b64utf8(`${betreff}\n${adr}\n\n${besch}`),
+    `--${bnd}`, 'Content-Type: text/calendar; charset="UTF-8"; method=REQUEST', "Content-Transfer-Encoding: base64", "", b64utf8(ics), `--${bnd}--`, ""].join("\r\n");
+  const rawB64 = btoa(String.fromCharCode(...new TextEncoder().encode(raw))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  await gmail("messages/send", { method: "POST", body: JSON.stringify({ raw: rawB64 }) });
+  await updDoc(db, "auftraege", id, { kalender: { am: Date.now(), an, termin: o.termin } });
+  return { gesendet: 1, an };
+}
 async function pushTermin(db: any, id: string, von: string) {
   const o = await getDoc(db, "auftraege", id);
   if (!o || !o.termin || o.terminStatus !== "fest" || o.storniert) return { gesendet: 0, grund: "kein Termin" };

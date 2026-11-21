@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Terminabstimmung – JD Brüder Montage</title>
+<link rel="icon" href="icon-192.png">
+<script src="config.js"></script>
+<style>
+:root{--bg:#f2f4f7;--card:#fff;--ink:#101828;--mute:#667085;--line:#e4e7ec;--brand:#1d3a5f;--ok:#15803d;--okbg:#ecfdf3;--warn:#b54708;--warnbg:#fff6e5;--bad:#d92d20;--badbg:#fef3f2;--info:#1d4ed8;--infobg:#eff4ff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1419;--card:#1a2129;--ink:#e6e9ee;--mute:#98a2b3;--line:#2b3440;--brand:#9cc3ff;--okbg:#0f2a1b;--warnbg:#2e2210;--badbg:#2e1513;--infobg:#132139}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+main{max-width:560px;margin:0 auto;padding:20px 16px 40px}
+.kopf{display:flex;align-items:center;gap:10px;margin-bottom:16px}.kopf img{width:40px;height:40px;border-radius:10px}
+.kopf b{font-size:17px;display:block}.kopf span{font-size:12.5px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+h1{font-size:20px;margin:0 0 6px}h2{font-size:16px;margin:0 0 10px}
+.mute{color:var(--mute)}.small{font-size:14px}
+dl{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;margin:10px 0 0;font-size:15px}dt{color:var(--mute)}dd{margin:0;font-weight:600}
+.wahl{display:grid;gap:8px}
+.opt{display:flex;align-items:center;gap:12px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;background:var(--card);color:var(--ink);font:inherit;text-align:left;width:100%}
+.opt.on{border-color:var(--brand);background:var(--infobg);box-shadow:inset 0 0 0 1px var(--brand)}
+.opt .k{width:20px;height:20px;border-radius:50%;border:2px solid var(--mute);flex:none}.opt.on .k{border:6px solid var(--brand)}
+.opt b{display:block}.opt span{font-size:13px;color:var(--mute)}
+label.f{display:block;font-size:13px;font-weight:650;color:var(--mute);margin:12px 0 4px}
+input,textarea{width:100%;font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+textarea{min-height:80px;resize:vertical}
+.zeile{display:grid;grid-template-columns:1fr 120px;gap:8px}
+button.los{width:100%;border:0;border-radius:12px;padding:15px;font:inherit;font-weight:700;font-size:17px;background:var(--brand);color:#fff;cursor:pointer;margin-top:14px}
+button.los:disabled{opacity:.6}
+.fehler{background:var(--badbg);color:var(--bad);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14px}
+.ok{background:var(--okbg);color:var(--ok)}.warn{background:var(--warnbg);color:var(--warn)}
+.banner{border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:15px}
+.tel{display:inline-block;margin-top:6px;font-weight:700;color:var(--brand);text-decoration:none}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <div class="kopf"><img src="icon-192.png" alt=""><div><b>JD Brüder Montage</b><span>Terminabstimmung</span></div></div>
+  <div id="inhalt"><div class="card mute">Wird geladen …</div></div>
+</main>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const t = new URLSearchParams(location.search).get("t") || "";
+  const demo = t === "demo";
+  const wann = ms => new Date(ms).toLocaleString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " Uhr";
+  const telLink = n => n ? `<a class="tel" href="tel:${esc(n.replace(/[^\d+]/g, ""))}">📞 ${esc(n)}</a>` : "";
+  async function rufe(body) {
+    if (demo) {
+      const morgen = new Date(); morgen.setDate(morgen.getDate() + 3); morgen.setHours(7, 30, 0, 0);
+      const info = { nr: "17999/1", bauvorhaben: "Grundschule am Musterweg", adresse: "Musterweg 12, 56305 Puderbach", kabinen: "6", vorschlaege: [morgen.getTime(), morgen.getTime() + 86400000], status: "offen", telefon: "02684 9572269", firma: "JD Brüder GbR" };
+      if (body.terminAntwort) { const r = body.terminAntwort; const st = !r.bereit ? "nicht_bereit" : r.termin ? "zugesagt" : "gegenvorschlag"; return { ...info, ok: true, status: st, termin: r.termin || r.wunsch || null, antwort: { name: r.name } }; }
+      return info;
+    }
+    const c = window.JD_CONFIG || {};
+    const res = await fetch(`${c.url}/functions/v1/sync`, { method: "POST", headers: { "Content-Type": "application/json", apikey: c.key, Authorization: `Bearer ${c.key}` }, body: JSON.stringify(body) });
+    return res.json();
+  }
+  function danke(d) {
+    const st = d.status, tt = d.termin;
+    const txt = st === "zugesagt" ? `<div class="banner ok"><b>✓ Vielen Dank – der Termin ist bestätigt.</b><br>${esc(wann(tt))}</div><p>Wir kommen wie vereinbart. Sie bekommen keine weitere Bestätigung – der Termin steht.</p>`
+      : st === "gegenvorschlag" ? `<div class="banner warn"><b>Vielen Dank – Ihr Wunschtermin ist bei uns angekommen.</b><br>${esc(wann(tt))}</div><p>Wir prüfen den Termin und melden uns kurzfristig bei Ihnen.</p>`
+      : `<div class="banner warn"><b>Vielen Dank für Ihre Rückmeldung.</b></div><p>Die Räume sind noch nicht montagebereit. Bitte geben Sie uns Bescheid, sobald es soweit ist – gern auch telefonisch.</p>`;
+    $("#inhalt").innerHTML = `<div class="card">${txt}<p class="small mute">${esc(d.firma || "JD Brüder GbR")} · Montage für meta Trennwandanlagen</p>${telLink(d.telefon)}</div>`;
+  }
+  function zeige(d) {
+    if (d.fehler && !d.nr) { $("#inhalt").innerHTML = `<div class="card"><h1>Hinweis</h1><p>${esc(d.fehler)}</p>${telLink(d.telefon)}</div>`; return; }
+    if (d.status === "zugesagt" && d.termin) { danke(d); return; }
+    const vs = d.vorschlaege || [];
+    let bereit = null, wahl = null;
+    $("#inhalt").innerHTML = `
+      <div class="card"><h1>Montage der WC-Trennwände</h1>
+        <div class="small mute">Wir sind von meta Trennwandanlagen mit der Montage beauftragt und stimmen den Termin direkt mit Ihnen ab.</div>
+        <dl><dt>Bauvorhaben</dt><dd>${esc(d.bauvorhaben)}</dd><dt>Adresse</dt><dd>${esc(d.adresse)}</dd><dt>meta-Auftrag</dt><dd>${esc(d.nr)}${d.kabinen && d.kabinen !== "0" ? ` · ${esc(d.kabinen)} Kabinen` : ""}</dd></dl></div>
+      <div class="card"><h2>1. Sind die Räume montagebereit?</h2>
+        <div class="small mute" style="margin-bottom:10px">Fliesen verlegt, Wände und Böden fertig, Räume frei zugänglich.</div>
+        <div class="wahl"><button class="opt" data-b="ja"><span class="k"></span><div><b>Ja, die Räume sind fertig</b></div></button>
+        <button class="opt" data-b="nein"><span class="k"></span><div><b>Nein, noch nicht</b><span>Wir melden uns, sobald es soweit ist</span></div></button></div></div>
+      <div class="card hide" id="termine"><h2>2. Welcher Termin passt?</h2>
+        <div class="wahl">${vs.map(v => `<button class="opt" data-t="${v}"><span class="k"></span><div><b>${esc(wann(v))}</b></div></button>`).join("")}
+        <button class="opt" data-t="anders"><span class="k"></span><div><b>Anderer Termin</b><span>Ihren Wunschtermin eintragen</span></div></button></div>
+        <div id="wunsch" class="hide"><div class="zeile" style="margin-top:10px"><input type="date" id="wd"><input type="time" id="wz" value="07:30"></div></div></div>
+      <div class="card"><label class="f" for="nm">Ihr Name *</label><input id="nm" autocomplete="name" placeholder="Vor- und Nachname">
+        <label class="f" for="nt">Nachricht (optional)</label><textarea id="nt" placeholder="z. B. Zugang über den Hintereingang, Ansprechpartner vor Ort …"></textarea>
+        <button class="los" id="los" disabled>Antwort senden</button><div id="fe"></div></div>
+      <div class="card small"><b>Fragen?</b> Rufen Sie uns gern an.<br>${telLink(d.telefon)}</div>`;
+    const pruef = () => { $("#los").disabled = !(bereit === false || (bereit === true && wahl)); };
+    document.querySelectorAll("[data-b]").forEach(b => b.onclick = () => { bereit = b.dataset.b === "ja"; document.querySelectorAll("[data-b]").forEach(x => x.classList.toggle("on", x === b)); $("#termine").classList.toggle("hide", !bereit); pruef(); });
+    document.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { wahl = b.dataset.t; document.querySelectorAll("[data-t]").forEach(x => x.classList.toggle("on", x === b)); $("#wunsch").classList.toggle("hide", wahl !== "anders"); pruef(); });
+    $("#los").onclick = async () => {
+      const name = $("#nm").value.trim(); if (!name) { $("#fe").innerHTML = `<div class="fehler">Bitte Ihren Namen eintragen.</div>`; $("#nm").focus(); return; }
+      const a = { t, bereit, name, nachricht: $("#nt").value.trim() };
+      if (bereit && wahl === "anders") { const dd = $("#wd").value; if (!dd) { $("#fe").innerHTML = `<div class="fehler">Bitte Ihren Wunschtermin eintragen.</div>`; return; } a.wunsch = new Date(`${dd}T${$("#wz").value || "07:30"}:00`).getTime(); }
+      else if (bereit) a.termin = Number(wahl);
+      $("#los").disabled = true; $("#los").textContent = "Wird gesendet …";
+      try { const r = await rufe({ terminAntwort: a }); if (r.fehler) { $("#fe").innerHTML = `<div class="fehler">${esc(r.fehler)}</div>`; $("#los").disabled = false; $("#los").textContent = "Antwort senden"; return; } danke({ ...d, ...r }); }
+      catch (e) { $("#fe").innerHTML = `<div class="fehler">Senden hat nicht geklappt – bitte nochmal versuchen oder anrufen.</div>`; $("#los").disabled = false; $("#los").textContent = "Antwort senden"; }
+    };
+  }
+  if (!t) { $("#inhalt").innerHTML = `<div class="card">Dieser Link ist unvollständig.</div>`; return; }
+  rufe({ terminInfo: t }).then(zeige).catch(() => { $("#inhalt").innerHTML = `<div class="card">Die Seite konnte nicht geladen werden. Bitte versuchen Sie es später noch einmal.</div>`; });
+})();
+</script>
+</body>
+</html>
