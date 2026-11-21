@@ -178,6 +178,19 @@ details.sk>summary .chip{flex:none}
 details.sk:not([open])>summary::after{display:none}
 details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:0 0 6px}
 .konto-k{display:grid;gap:8px;margin-top:12px}
+/* Auftrag: kleine Knöpfe oben, Bereiche als aufklappbare Knöpfe */
+.kopf-akt{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.kopf-akt .btn{min-height:36px;padding:6px 13px;font-size:13.5px;border-radius:999px;flex:0 1 auto;white-space:nowrap}
+.det-grid{display:grid;gap:8px;align-items:start;margin-bottom:12px}
+.det-grid>details.sk{margin:0;padding:10px 8px}
+.det-grid>details.sk[open]{grid-column:1/-1;padding:14px 16px}
+.det-grid>details.sk:not([open])>summary{flex-direction:column;align-items:center;gap:3px;text-align:center}
+.det-grid>details.sk:not([open])>summary b{font-size:13px;text-align:center}
+.det-grid>details.sk:not([open])>summary .small{font-size:11.5px;max-width:100%;text-align:center;flex:none}
+.det-grid>details.sk[open]>summary b{font-size:15px;flex:none}
+.det-grid>details.sk[open]>summary::after{display:block}
+.los-k{display:grid;gap:8px;margin-top:12px}
+.los-k .btn{min-height:56px;font-size:16px}
 .konto-k .btn{display:flex;align-items:center;gap:8px;justify-content:flex-start;width:100%}
 @media(min-width:720px){.konto-k{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}}
 .kal-monat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
@@ -551,7 +564,7 @@ const S = {
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
   profiles:{},pendingRender:false,anfragen:{},zugang:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
-  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},nachrichten:{},
+  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},fzWahl:{},nachrichten:{},
   echt:{isOwner:false,me:null,role:"pending"},ansicht:new URLSearchParams(location.search).get("ansicht")||"chef"
 };
 
@@ -1440,12 +1453,14 @@ function viewDetail(id){
   h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
-     ${frueh&&can.planen()?`<button class="btn pri block" id="terminieren" style="margin-top:12px">📅 Terminieren</button>`:""}
-     ${can.planen()&&!erl&&!o.storniert&&o.terminStatus!=="fest"?`<button class="btn block" id="terminAnfrage" style="margin-top:8px">📧 Termin beim Bauleiter anfragen</button>`:""}
-     ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost block" data-nv="${esc(id)}" style="margin-top:8px">↩ Nach „Nicht verplant“ verschieben</button>`:""}
-     ${frueh&&can.planen()&&o.nichtVerplant&&o.prodStatus==="abholbereit"?`<button class="btn ghost block" data-nv-zurueck="${esc(id)}" style="margin-top:8px">✓ Wieder nach „Abholbereit“</button>`:""}
-     <div class="grid2" style="margin-top:12px">${addr?`<a class="btn pri" href="${esc(nav)}" target="_blank" rel="noopener">🧭 Zur Baustelle fahren</a>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument nachsehen</button>`}
-     ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 ${esc(o.bauleiterTel)}</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument nachsehen</button>`:`<span class="btn" style="opacity:.5">📞 keine Nummer</span>`}</div>
+     <div class="kopf-akt">
+     ${frueh&&can.planen()?`<button class="btn pri" id="terminieren">📅 Terminieren</button>`:""}
+     ${addr?`<button class="btn ${frueh?"":"pri"}" data-zur-baustelle="${esc(id)}">🧭 Zur Baustelle</button>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument</button>`}
+     ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument</button>`:""}
+     ${can.planen()&&!erl&&!o.storniert&&o.terminStatus!=="fest"?`<button class="btn" id="terminAnfrage">📧 Termin anfragen</button>`:""}
+     ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost" data-nv="${esc(id)}">↩ Nicht verplant</button>`:""}
+     ${frueh&&can.planen()&&o.nichtVerplant&&o.prodStatus==="abholbereit"?`<button class="btn ghost" data-nv-zurueck="${esc(id)}">✓ Wieder abholbereit</button>`:""}
+     </div>
      ${(addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel"))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
   h+=terminAnfrageKarte(o);
@@ -1456,8 +1471,10 @@ function viewDetail(id){
   h+=nachrichtenKarte(o);
 
   // Planung: Datum eintragen (= terminiert), Auftrag zuteilen, ggf. stornieren
-  if(!erl && !frueh) h+=`<div class="card"><h3>Planung</h3>
-    <label class="f">Termin</label>
+  const knoepfe=[]; // kleine Knöpfe nebeneinander, gehen beim Antippen auf
+  const sk=(key,icon,titel,info,inhalt,extra="")=>`<details class="card fold sk" data-fold="${id}:${key}" ${S.fold[id+":"+key]?"open":""} ${extra}><summary><b>${icon} ${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
+  if(!erl && !frueh) knoepfe.push(sk("planung","📅","Planung",[o.termin?kurzDatum(o.termin):"kein Termin",(o.monteure||[]).length?`${(o.monteure||[]).length} 👷`:""].filter(Boolean).join(" · "),`
+    <label class="f" style="margin-top:0">Termin</label>
     ${can.planen()?`<input type="date" class="i" id="terminDatum" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">`:`<div style="font-weight:600">${o.termin?new Date(o.termin).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}):`<span class="mute">noch nicht terminiert</span>`}</div>`}
     ${o.prodStatus==="abholbereit"&&o.abholbereitBestaetigt?`<div class="small" style="margin-top:6px;color:var(--ok)">✓ Von meta als abholbereit bestätigt: <b>${esc(o.abholbereitBestaetigt.name)}</b>, ${fmtDT(o.abholbereitBestaetigt.am)}</div>`:""}
     <label class="f">Auftrag zuteilen</label>
@@ -1467,7 +1484,7 @@ function viewDetail(id){
     ${can.planen()&&SERIEN().length&&!o.einsatz?.fertigAm?serieWahl(o,true):""}
     ${can.planen()&&(o.monteure||[]).some(m=>S.roles[m]==="sub")?`<label class="gem-k"><input type="checkbox" id="gemeinsam" ${o.gemeinsam?"checked":""}><span><b>🤝 Zusammen mit dem Subunternehmer</b><span class="small mute" style="display:block">Der Sub trägt nur seinen Anteil ein (Zeit, Positionen) – für seine Abrechnung. Den Montagebericht an meta schreibst du.</span></span></label>`:""}
     ${can.planen()&&!o.storniert?`<button class="btn sm ghost" id="stornoSetzen" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}
-  </div>`;
+  `));
 
   // Baustelle
   const kv=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
@@ -1492,7 +1509,7 @@ function viewDetail(id){
    ${!o.bauleiterName&&!o.adresse?`<div class="banner info" style="margin:10px 0 0">Die genauen Baustellendaten stehen auf dem Aufmaß-Deckblatt. ${can.planen()?"Lade das Deckblatt unten bei „Unterlagen“ hoch oder hol es aus der Mail – die App liest es dann aus.":""}</div>`:""}
    ${o.zusageMail?.viewUrl&&S.isOwner?`<div style="margin-top:10px"><a class="small" href="${esc(o.zusageMail.viewUrl)}" target="_blank" rel="noopener">Montagezusage-Mail in Gmail öffnen ↗</a></div>`:""}
   `;
-  h+=erl?fold("bau","Baustelle &amp; Kunde",esc(adresseOf(o)||""),bauInhalt):`<div class="card"><h3>Baustelle &amp; Kunde</h3>${bauInhalt}</div>`;
+  knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
 
   // Unterlagen
   const unterInhalt=`${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
@@ -1500,7 +1517,8 @@ function viewDetail(id){
    ${can.planen()&&S.sample?`<button class="btn sm ghost" id="readDeck">🔎 Deckblatt auslesen</button>`:""}
    ${can.mails()&&o.zusageMail?.att?.length?`<button class="btn sm ghost" id="mailUnterlagen">✉︎ Unterlagen aus Mail holen</button>`:""}
    </div>`;
-  h+=erl?`<div id="unterlagenCard">${fold("unter","Unterlagen &amp; Zeichnungen",`${fk("unterlagen").length} Datei(en)`,unterInhalt)}</div>`:`<div class="card" id="unterlagenCard"><h3>Unterlagen &amp; Zeichnungen</h3>${unterInhalt}</div>`;
+  knoepfe.push(sk("unter","📂","Unterlagen",`${fk("unterlagen").length} Datei${fk("unterlagen").length===1?"":"en"}`,unterInhalt,'id="unterlagenCard"'));
+  h+=`<div class="det-grid" style="grid-template-columns:repeat(${knoepfe.length},minmax(0,1fr))">${knoepfe.join("")}</div>`;
 
   // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Sichtabnahme → Versand
   if(o.gemeinsam && can.sub()){
@@ -1780,19 +1798,24 @@ function einsatzCard(o,fk){
    <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
   if(st==="fahrzeug"){
     if((o.leerfahrten||[]).length) h+=`<div class="banner warn small">${vorleistungZeilen(o).map(esc).join("<br>")}</div>`;
-    const fzE=meineFahrzeuge(), fzD=einsatzFz(o);
-    if(fzE.length) h+=`<div class="fb-box"><div class="small" style="font-weight:700;margin-bottom:2px">🚗 Fahrtenbuch</div>
-       <div class="grid2"><div><label class="f">Fahrzeug</label><select class="i" id="eFz">${fzE.map(f=>`<option value="${esc(f.id)}" ${f.id===fzD?"selected":""}>${esc(f.kennzeichen)}</option>`).join("")}<option value="">anderes / ohne Fahrtenbuch</option></select></div>
-       <div><label class="f">Kilometerstand jetzt</label><input class="i" id="eKm" inputmode="numeric" value="${fzD?kmStand(fzD):""}"></div></div>
-       <div class="small mute" style="margin-top:4px">Beim Ankommen wirst du nach dem neuen Stand gefragt – die km rechnet die App aus.</div></div>`;
+    const fzE=meineFahrzeuge(), fzD=einsatzFz(o), wahl=S.fzWahl[id];
+    if(wahl){ // Fahrzeug gewählt → jetzt losfahren (Kilometerstand + Google Maps)
+      h+=`<div class="q">🚗 ${esc(wahl.fahrzeug==="sonst"?wahl.fahrzeugText:FAHRZEUGE[wahl.fahrzeug]||"")} <a href="#" class="small" id="fzWahlAendern" style="font-weight:500">ändern</a></div>
+       ${fzE.length?`<div class="fb-box"><div class="grid2"><div><label class="f" style="margin-top:0">Fahrzeug</label><select class="i" id="eFz">${fzE.map(f=>`<option value="${esc(f.id)}" ${f.id===(wahl.fzId??fzD)?"selected":""}>${esc(f.kennzeichen)}</option>`).join("")}<option value="" ${wahl.fzId===""?"selected":""}>ohne Fahrtenbuch</option></select></div>
+         <div><label class="f" style="margin-top:0">Kilometerstand jetzt</label><input class="i km-gross" id="eKm" inputmode="numeric" value="${fzD?kmStand(wahl.fzId||fzD):""}"></div></div></div>`:""}
+       <div class="los-k"><button class="btn ok block" id="losJetzt">▶ Losfahren${adresseOf(o)?" – Navigation starten":""}</button></div>
+       <div class="small mute" style="margin-top:6px">${adresseOf(o)?"Google Maps öffnet sich mit der Route. Die km der Strecke trägt die App beim Ankommen vor – du gleichst nur mit dem Tacho ab.":"Keine Adresse hinterlegt – ohne Navigation."}</div>`;
+    } else {
+    if(fzE.length) h+=`<div class="small mute" style="margin-bottom:8px">🚗 Fahrtenbuch: nach der Auswahl trägst du den Kilometerstand ein und fährst los.</div>`;
     h+=`<div class="q">Womit wird gefahren?</div><div class="choice">${Object.entries(FAHRZEUGE).map(([k,l])=>`<button class="btn ${e.fahrzeug===k?"on":""}" data-fz="${k}">🚐 ${l}</button>`).join("")}</div>
      <label class="f" style="margin-top:14px">Oder selbst eintragen</label>
      <div class="row" style="flex-wrap:nowrap"><input class="i" id="fzText" placeholder="z. B. 2 Autos, 2 Anhänger" value="${esc(e.fahrzeug==="sonst"?e.fahrzeugText||"":"")}"><button class="btn pri" id="fzTextOk" style="white-space:nowrap">Übernehmen</button></div>`;
+    }
   } else if(st==="ankunft"){
     h+=`<div class="q">Auf der Baustelle angekommen?</div>
      <div class="small mute" style="margin-bottom:10px">Abfahrt ${fmtDT(e.abfahrtAm)} · ${esc(adresseOf(o))}</div>
      ${S.fahrten[e.fahrtId]?.offen?`<div class="fb-box"><label class="f" style="margin-top:0">🚗 Kilometerstand jetzt (${esc(S.fahrzeuge[S.fahrten[e.fahrtId].fahrzeugId]?.kennzeichen||"")}, losgefahren bei ${kmFmt(S.fahrten[e.fahrtId].startKm)} km)</label>
-       <input class="i km-gross" id="eKmAn" inputmode="numeric" placeholder="mind. ${kmFmt(S.fahrten[e.fahrtId].startKm)}"><div class="small" id="eKmDiff" style="margin-top:4px;font-weight:700"></div></div>`:""}
+       <input class="i km-gross" id="eKmAn" inputmode="numeric" placeholder="mind. ${kmFmt(S.fahrten[e.fahrtId].startKm)}" value="${routeVorschlag(S.fahrten[e.fahrtId])}"><div class="small" id="eKmDiff" style="margin-top:4px;font-weight:700"></div>${routeHinweis(S.fahrten[e.fahrtId])}</div>`:""}
      <button class="btn ok block" id="ankunft" style="min-height:56px;font-size:16px">✓ Ja, wir sind angekommen</button>`;
   } else if(st==="vorher"){
     const n=fk("vorher").length, frei=n||!S.assets||e.vorherSkip, w=S.bereitWahl[id];
@@ -1980,13 +2003,16 @@ function bindEinsatz(o){
     const fzW=$("#eFz")?.value, kmW=($("#eKm")?.value||"").trim(); let extra={};
     if(fzW){ if(kmW===""||isNaN(nn(kmW))){ $("#eKm")?.focus(); return toast("Bitte den Kilometerstand eintragen"); }
       const fid=await fahrtStarten({fzId:fzW,startKm:kmW,auftragId:id,zweck:`Montage Auftrag ${o.nr}`,von:(fahrtenVon(fzW).filter(f=>!f.offen).slice(-1)[0]?.nach)||S.settings.firmenAdresse||"",nach:adresseOf(o),ziel:"baustelle"});
-      if(!fid) return; extra={fahrtId:fid,fahrtFz:fzW}; }
+      if(!fid) return false; extra={fahrtId:fid,fahrtFz:fzW}; startGeoMerken(fid); }
     await upd(P,{einsatz:{...patch,abfahrtAm:Date.now(),von:myId(),...extra}}); if(fzW) toast("Gute Fahrt 🚗 – Kilometerstand gespeichert",3000);
+    return true;
   };
-  document.querySelectorAll("[data-fz]").forEach(b=>b.onclick=()=>abfahrt({fahrzeug:b.dataset.fz,fahrzeugText:null}));
-  $("#fzTextOk") && ($("#fzTextOk").onclick=()=>{ const t=($("#fzText").value||"").trim(); if(!t) return toast("Bitte eintragen, womit gefahren wird"); abfahrt({fahrzeug:"sonst",fahrzeugText:t}); });
+  document.querySelectorAll("#einsatzCard [data-fz]").forEach(b=>b.onclick=()=>{ S.fzWahl[id]={fahrzeug:b.dataset.fz,fahrzeugText:null}; render(); });
+  $("#fzTextOk") && ($("#fzTextOk").onclick=()=>{ const t=($("#fzText").value||"").trim(); if(!t) return toast("Bitte eintragen, womit gefahren wird"); S.fzWahl[id]={fahrzeug:"sonst",fahrzeugText:t}; render(); });
+  $("#eFz") && S.fzWahl[id] && ($("#eFz").onchange=()=>{ S.fzWahl[id].fzId=$("#eFz").value; if($("#eFz").value) $("#eKm").value=kmStand($("#eFz").value); });
+  einsatzAbfahrt[id]=abfahrt;
   // Ankommen: offene Fahrt mit Kilometerstand abschließen → gefahrene km stehen schon drin
-  $("#eKmAn") && ($("#eKmAn").oninput=()=>{ const f=S.fahrten[e.fahrtId], d=nn($("#eKmAn").value)-nn(f?.startKm); $("#eKmDiff").textContent=$("#eKmAn").value&&d>=0?`= ${kmFmt(Math.round(d*10)/10)} km gefahren`:""; });
+  $("#eKmAn") && ($("#eKmAn").oninput=()=>{ $("#eKmDiff").textContent=kmDiffText(S.fahrten[e.fahrtId],$("#eKmAn").value); }) && $("#eKmAn").oninput();
   $("#ankunft") && ($("#ankunft").onclick=async()=>{
     const f=S.fahrten[e.fahrtId];
     if(f?.offen && $("#eKmAn")){ const v=$("#eKmAn").value.trim(); if(v===""||isNaN(nn(v))){ $("#eKmAn").focus(); return toast("Bitte den Kilometerstand eintragen"); }
@@ -2785,7 +2811,8 @@ function losfahrenDialog(vor={}){
    <label class="f">Wohin?</label><div class="ziel-w">${ZIELE.map(([k,l])=>`<button class="fp ${ziel===k?"on":""}" data-ziel="${k}">${l}</button>`).join("")}</div>
    <div id="lauW" ${ziel==="baustelle"?"":'style="display:none"'}><label class="f">Auftrag</label><select class="i" id="lau"><option value="">– keiner –</option>${auftr.map(x=>`<option value="${esc(x.id)}" ${x.id===vor.auftragId?"selected":""}>${esc(x.nr)} ${esc(x.bauvorhaben||"")}${x.termin?" · "+kurzDatum(x.termin):""}</option>`).join("")}</select></div>
    <label class="f">Von</label><input class="i" id="lvon" value="${esc(vor.von||letzte?.nach||S.settings.firmenAdresse||"")}">
-   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">▶ Losfahren</button></div>`,(m,close)=>{
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">▶ Losfahren</button></div>
+   <div class="small mute" style="margin-top:8px">Bei Baustelle mit Adresse startet danach Google Maps.</div>`,(m,close)=>{
     const st=()=>{ fzId=m.querySelector("#lfz").value; const of=offeneFahrtFz(fzId); m.querySelector("#lst").innerHTML=`Letzter Stand: <b>${kmFmt(kmStand(fzId))} km</b>${of?` · Fahrt seit ${fmtDT(of.startAm)} noch offen – wird mit diesem Stand abgeschlossen`:""}`; };
     st(); m.querySelector("#lfz").onchange=()=>{ st(); m.querySelector("#lkm").value=kmStand(fzId); };
     m.querySelectorAll("[data-ziel]").forEach(b=>b.onclick=()=>{ ziel=b.dataset.ziel; m.querySelectorAll("[data-ziel]").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#lauW").style.display=ziel==="baustelle"?"":"none"; });
@@ -2795,21 +2822,24 @@ function losfahrenDialog(vor={}){
       m.querySelector("#ok").disabled=true;
       const id=await fahrtStarten({fzId,startKm:v,auftragId:au,zweck:o?`Montage Auftrag ${o.nr}`:(ZIELE.find(z=>z[0]===ziel)?.[1].replace(/^\S+\s/,"")||""),von:m.querySelector("#lvon").value.trim(),nach:zielText(ziel,o),art:ziel==="hotel"?"hotel":"dienst",ziel:ziel||null});
       m.querySelector("#ok").disabled=false; if(!id) return;
-      close(); toast("Gute Fahrt 🚗 – beim Ankommen „Angekommen“ tippen",3500); render();
+      if(o && schritt(o)==="fahrzeug" && (o.monteure||[]).includes(myId())) await upd(orderPath(o.id),{einsatz:{fahrzeug:"auto",fahrzeugText:null,abfahrtAm:Date.now(),von:myId(),fahrtId:id,fahrtFz:fzId}});
+      close(); const ziAdr=ziel==="baustelle"&&o?adresseOf(o):["firma"].includes(ziel)?S.settings.firmenAdresse:"";
+      await startGeoMerken(id);
+      if(ziAdr && vor.navi!==false) navOeffnen(ziAdr); else toast("Gute Fahrt 🚗 – beim Ankommen „Angekommen“ tippen",3500); render();
     };
   });
 }
-function ankunftDialog(fid){
+function ankunftDialog(fid,{da=false}={}){
   const f=S.fahrten[fid]; if(!f) return;
   const o=S.orders[f.auftragId]; let ziel=f.ziel||(f.art==="hotel"?"hotel":o?"baustelle":"");
-  modal(`<h2>🏁 Angekommen</h2><div class="small mute">${esc(S.fahrzeuge[f.fahrzeugId]?.kennzeichen||"")} · losgefahren ${fmtDT(f.startAm)} bei ${kmFmt(f.startKm)} km</div>
-   <label class="f">Kilometerstand jetzt *</label><input class="i km-gross" id="akm" inputmode="numeric" placeholder="mind. ${kmFmt(f.startKm)}">
-   <div class="small" id="adiff" style="margin-top:4px;font-weight:700"></div>
+  modal(`<h2>${da?"📍 Du bist da – angekommen?":"🏁 Angekommen"}</h2><div class="small mute">${esc(S.fahrzeuge[f.fahrzeugId]?.kennzeichen||"")} · losgefahren ${fmtDT(f.startAm)} bei ${kmFmt(f.startKm)} km</div>
+   <label class="f">Kilometerstand jetzt *</label><input class="i km-gross" id="akm" inputmode="numeric" placeholder="mind. ${kmFmt(f.startKm)}" value="${routeVorschlag(f)}">
+   <div class="small" id="adiff" style="margin-top:4px;font-weight:700"></div>${routeHinweis(f)}
    <label class="f">Wo bist du?</label><div class="ziel-w">${ZIELE.map(([k,l])=>`<button class="fp ${ziel===k?"on":""}" data-ziel="${k}">${l}</button>`).join("")}</div>
    <label class="f">Ziel / Adresse</label><input class="i" id="anach" value="${esc(f.nach||zielText(ziel,o))}">
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Später</button><button class="btn ok" id="ok">🏁 Angekommen</button></div>`,(m,close)=>{
     const ki=m.querySelector("#akm"); setTimeout(()=>ki.focus(),80);
-    ki.oninput=()=>{ const d=nn(ki.value)-nn(f.startKm); m.querySelector("#adiff").textContent=ki.value&&d>=0?`= ${kmFmt(Math.round(d*10)/10)} km gefahren`:""; };
+    ki.oninput=()=>{ m.querySelector("#adiff").textContent=kmDiffText(f,ki.value); }; ki.oninput();
     m.querySelectorAll("[data-ziel]").forEach(b=>b.onclick=()=>{ ziel=b.dataset.ziel; m.querySelectorAll("[data-ziel]").forEach(x=>x.classList.toggle("on",x===b)); const t=zielText(ziel,o); if(t) m.querySelector("#anach").value=t; });
     m.querySelector("#ok").onclick=async()=>{
       if(ki.value.trim()===""||isNaN(nn(ki.value))) return toast("Bitte den Kilometerstand eintragen");
@@ -2817,6 +2847,93 @@ function ankunftDialog(fid){
       close(); toast(`Angekommen ✓ – ${kmFmt(km)} km im Fahrtenbuch`,3500); render();
     };
   });
+}
+/* ---------- Navigation & Route: Google Maps starten, Strecken-km ermitteln, Ankunft erkennen ---------- */
+const einsatzAbfahrt={};
+const navUrl=adr=>`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(adr)}&travelmode=driving&dir_action=navigate`;
+function navOeffnen(adr){
+  const u=navUrl(adr); let w=null;
+  try{ w=window.open(u,"_blank"); if(w) w.opener=null; }catch(e){}
+  if(!w) modal(`<h2>🚗 Gute Fahrt</h2><div class="mute">Die Fahrt läuft. Jetzt die Navigation starten:</div><a class="btn ok block" href="${esc(u)}" target="_blank" rel="noopener" style="margin-top:14px;min-height:56px;font-size:16px" data-close>🧭 Google Maps öffnen</a><button class="btn ghost block" data-close style="margin-top:8px">Später</button>`);
+  else toast("Gute Fahrt 🚗 – wenn du zurück in die App kommst, fragt sie nach der Ankunft",4000);
+}
+// „Zur Baustelle“: mit dem Auto (Fahrtenbuch) oder nur Navigation
+async function zurBaustelle(id){
+  const o=S.orders[id]; if(!o) return; const adr=adresseOf(o);
+  const meine=offeneFahrt(), istEinsatz=!istFertig(o)&&schritt(o)==="fahrzeug"&&(o.monteure||[]).includes(myId());
+  if(meine || !meineFahrzeuge().length || istFertig(o)){ if(!meine&&istEinsatz){ S.fzWahl[id]={fahrzeug:"auto",fahrzeugText:null}; render(); setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),60); return; } return navOeffnen(adr); }
+  const w=await waehleBox("Zur Baustelle",esc(adr),[["auto","🚗 Ich fahre mit dem Auto"],["navi","🧭 Nur Navigation"]]);
+  if(w==="navi") return navOeffnen(adr);
+  if(w!=="auto") return;
+  if(istEinsatz){ S.fzWahl[id]={fahrzeug:"auto",fahrzeugText:null}; render(); setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),60); return; }
+  losfahrenDialog({auftragId:id,ziel:"baustelle"});
+}
+// Einsatz-Schritt: „Losfahren“ → Fahrt öffnen, dann Google Maps
+async function einsatzLosfahren(o){
+  const w=S.fzWahl[o.id], ab=einsatzAbfahrt[o.id]; if(!w||!ab) return;
+  const b=$("#losJetzt"); if(b) b.disabled=true;
+  const ok=await ab({fahrzeug:w.fahrzeug,fahrzeugText:w.fahrzeugText||null}).catch(()=>false);
+  if(b) b.disabled=false; if(!ok) return;
+  delete S.fzWahl[o.id];
+  if(adresseOf(o)) navOeffnen(adresseOf(o));
+}
+const geoAbst=(a,b)=>{ const R=6371000,r=x=>x*Math.PI/180, dl=r(b.lat-a.lat), dn=r(b.lon-a.lon); const h=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.sqrt(h)); };
+async function geoErlaubt(){ try{ const p=await navigator.permissions?.query({name:"geolocation"}); return p?p.state:"unbekannt"; }catch(e){ return "unbekannt"; } }
+function geoPos(ms=6000){
+  return new Promise(res=>{ if(!navigator.geolocation) return res(null); let fertig=false; const t=setTimeout(()=>{ if(!fertig){ fertig=true; res(null); } },ms+500);
+    navigator.geolocation.getCurrentPosition(p=>{ if(fertig) return; fertig=true; clearTimeout(t); res({lat:p.coords.latitude,lon:p.coords.longitude}); },()=>{ if(!fertig){ fertig=true; clearTimeout(t); res(null); } },{enableHighAccuracy:false,maximumAge:120000,timeout:ms}); });
+}
+// Adresse → Koordinaten (OpenStreetMap), im Gerät gemerkt
+async function geoAdresse(adr){
+  adr=String(adr||"").trim(); if(adr.length<6||!/\d/.test(adr)) return null;
+  const k="jdGeo:"+adr.toLowerCase(); try{ const c=JSON.parse(localStorage.getItem(k)||"null"); if(c) return c; }catch(e){}
+  try{ const r=await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=de&q=${encodeURIComponent(adr)}`)).json();
+    if(!r?.[0]) return null; const g={lat:+r[0].lat,lon:+r[0].lon}; try{ localStorage.setItem(k,JSON.stringify(g)); }catch(e){} return g; }catch(e){ return null; }
+}
+// Strecken-km mit dem Auto (wie die Route in Google Maps)
+async function strasseKm(a,b){
+  try{ const r=await (await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`)).json();
+    const m=r?.routes?.[0]?.distance; return m?Math.round(m/100)/10:null; }catch(e){ return null; }
+}
+async function fahrtPatch(fid,patch){ const f=S.fahrten[fid]; if(!f) return; S.fahrten[fid]={...f,...patch}; try{ await upd("fahrten/"+fid,patch); }catch(e){} }
+// beim Losfahren: Standort merken (kurz, damit Maps gleich aufgeht)
+async function startGeoMerken(fid){ const p=await geoPos(2500); if(p) await fahrtPatch(fid,{startGeo:p}); }
+const fahrtZielAdr=f=>{ const o=S.orders[f.auftragId]; return f.ziel==="baustelle"&&o?adresseOf(o):f.ziel==="firma"?S.settings.firmenAdresse||"":/\d/.test(f.nach||"")?f.nach:""; };
+async function routeErmitteln(f){
+  if(f.routeKm||f._routeVersucht) return f.routeKm||null; S.fahrten[f.id]._routeVersucht=true;
+  const zA=fahrtZielAdr(f); if(!zA) return null;
+  const ziel=f.zielGeo||await geoAdresse(zA); if(!ziel) return null;
+  const start=f.startGeo||await geoAdresse(f.von); if(!start) { await fahrtPatch(f.id,{zielGeo:ziel}); return null; }
+  const km=await strasseKm(start,ziel);
+  await fahrtPatch(f.id,km?{zielGeo:ziel,routeKm:km}:{zielGeo:ziel});
+  return km;
+}
+const routeVorschlag=f=>f?.routeKm?Math.round(nn(f.startKm)+f.routeKm):"";
+const routeHinweis=f=>f?.routeKm?`<div class="small mute" style="margin-top:2px">🗺 Strecke laut Route: <b>${kmFmt(f.routeKm)} km</b> – Stand ist vorgeschlagen, bitte mit dem Tacho abgleichen.</div>`:"";
+function kmDiffText(f,v){
+  if(!f||String(v).trim()==="") return ""; const d=Math.round((nn(v)-nn(f.startKm))*10)/10; if(d<0) return "";
+  let t=`= ${kmFmt(d)} km gefahren`;
+  if(f.routeKm){ const ab=Math.round((d-f.routeKm)*10)/10; if(Math.abs(ab)>Math.max(3,f.routeKm*.15)) t+=` · ${ab>0?"+":""}${kmFmt(ab)} km gegenüber der Route${ab>0?" (Umweg?)":""}`; }
+  return t;
+}
+// Zurück in der App: liegt die Baustelle in der Nähe → Ankunft bestätigen lassen
+let ankunftLaeuft=false;
+async function ankunftPruefen(){
+  const f=offeneFahrt(); if(!f||ankunftLaeuft||document.visibilityState!=="visible") return;
+  ankunftLaeuft=true;
+  try{
+    await routeErmitteln(f);
+    const g=S.fahrten[f.id]; if(!g?.zielGeo||S.ankunftGefragt===f.id) return;
+    if(Date.now()-(g.startAm||0)<4*60000) return;
+    if(await geoErlaubt()==="denied") return;
+    const p=await geoPos(); if(!p) return;
+    if(geoAbst(p,g.zielGeo)>700) return;
+    S.ankunftGefragt=f.id;
+    if(document.querySelector("#modalRoot .modalbg")) return;
+    const o=S.orders[g.auftragId];
+    if(o&&o.einsatz?.fahrtId===g.id&&schritt(o)==="ankunft"){ go("a-"+o.id); setTimeout(()=>{ $("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}); toast("📍 Du bist an der Baustelle – Kilometerstand prüfen und Ankunft bestätigen",4500); },300); }
+    else ankunftDialog(g.id,{da:true});
+  } finally { ankunftLaeuft=false; }
 }
 // Hinweis „Fahrt läuft“ (oben in Aufträgen und Fahrten)
 function fahrtLeiste(){
@@ -2846,7 +2963,7 @@ function viewFahrten(){
   h+=`<div class="small mute" style="margin:0 2px 6px">${mon.length} Fahrten · ${sumMon.toLocaleString("de-DE")} km</div>`;
   h+=mon.map(f=>{ const o=S.orders[f.auftragId]; return `<div class="card fb-z ${f.art==="privat"?"privat":""} ${f.offen?"offen":""}" style="padding:10px 12px;margin-bottom:6px"><div class="row between"><b>${new Date(f.datum).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})}${f.startAm?` <span class="small mute" style="font-weight:500">${new Date(f.startAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}${f.endAm?"–"+new Date(f.endAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):""}</span>`:""}</b><b>${f.offen?`<span class="kal-st info">unterwegs</span>`:`${nn(f.km).toLocaleString("de-DE")} km`}</b></div>
    ${f.art==="privat"?`<div class="small"><b>Privatfahrt</b></div>`:`<div class="small">${esc(f.von||"")} → ${esc(f.nach||(f.offen?"…":""))}</div>`}
-   <div class="small mute">${o?`Auftrag ${esc(o.nr)} · `:""}${f.art==="privat"?"":esc(f.zweck||"")+" · "}${esc(nameOf(f.fahrer))} · Stand ${f._start.toLocaleString("de-DE")} → ${f._ende!=null?f._ende.toLocaleString("de-DE"):"…"}</div>
+   <div class="small mute">${o?`Auftrag ${esc(o.nr)} · `:""}${f.art==="privat"?"":esc(f.zweck||"")+" · "}${esc(nameOf(f.fahrer))}${f.routeKm?` · Route ${kmFmt(f.routeKm)} km${!f.offen&&Math.abs(nn(f.km)-f.routeKm)>Math.max(3,f.routeKm*.15)?` <b style="color:var(--warn)">(${nn(f.km)>f.routeKm?"+":""}${kmFmt(Math.round((nn(f.km)-f.routeKm)*10)/10)})</b>`:""}`:""} · Stand ${f._start.toLocaleString("de-DE")} → ${f._ende!=null?f._ende.toLocaleString("de-DE"):"…"}</div>
    ${(f.fahrer===myId()||can.planen())?`<div style="margin-top:4px"><a href="#" class="small" data-fdel="${esc(f.id)}">löschen</a></div>`:""}</div>`; }).join("")||`<div class="small mute" style="padding:4px">Keine Fahrten in diesem Monat.</div>`;
   return h;
 }
@@ -3237,6 +3354,13 @@ function bindDetail(id){
   const P=orderPath(id);
   bindLohn(o); bindVordruck(o); bindEinsatz(o);
   document.querySelectorAll("[data-fold]").forEach(d=>d.ontoggle=()=>{ S.fold[d.dataset.fold]=d.open; });
+  // Knöpfe Planung / Baustelle / Unterlagen: immer nur einer offen
+  document.querySelectorAll(".det-grid>details.sk").forEach(d=>d.addEventListener("toggle",()=>{ if(!d.open) return;
+    d.parentElement.querySelectorAll("details.sk[open]").forEach(x=>{ if(x!==d){ x.open=false; S.fold[x.dataset.fold]=false; } });
+    setTimeout(()=>d.scrollIntoView({block:"nearest",behavior:"smooth"}),30); }));
+  document.querySelectorAll("[data-zur-baustelle]").forEach(b=>b.onclick=()=>zurBaustelle(b.dataset.zurBaustelle));
+  $("#losJetzt") && ($("#losJetzt").onclick=()=>einsatzLosfahren(o));
+  $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
   $("#terminieren") && ($("#terminieren").onclick=()=>terminDialog(id));
   $("#terminSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{terminStatus:b.dataset.t}));
@@ -3246,7 +3370,7 @@ function bindDetail(id){
   document.querySelectorAll("[data-rm-m]").forEach(b=>b.onclick=()=>upd(P,{monteure:(o.monteure||[]).filter(x=>x!==b.dataset.rmM)}));
   const am=$("#addMonteur"); if(am) am.onclick=()=>pickPerson(id);
   const eb=$("#editBau"); if(eb) eb.onclick=()=>editBauDialog(id);
-  document.querySelectorAll("[data-dok]").forEach(b=>b.onclick=e=>{ e.preventDefault(); const c=$("#unterlagenCard"); c?.scrollIntoView({behavior:"smooth",block:"start"}); const d=Object.values(S.fotos).filter(f=>f.kat==="unterlagen").sort((a,b)=>(/pdf/.test(b.typ||"")?1:0)-(/pdf/.test(a.typ||"")?1:0))[0]; if(d){ setTimeout(()=>{ /pdf/.test(d.typ||"")?dokViewer("/_blob/"+d.assetId,"pdf",d.name||"Unterlagen"):lightbox("/_blob/"+d.assetId); },400); } else toast("Noch keine Unterlagen – bitte hochladen oder aus der Mail holen"); });
+  document.querySelectorAll("[data-dok]").forEach(b=>b.onclick=e=>{ e.preventDefault(); const c=$("#unterlagenCard"); if(c&&!c.open){ c.open=true; S.fold[id+":unter"]=true; } c?.scrollIntoView({behavior:"smooth",block:"start"}); const d=Object.values(S.fotos).filter(f=>f.kat==="unterlagen").sort((a,b)=>(/pdf/.test(b.typ||"")?1:0)-(/pdf/.test(a.typ||"")?1:0))[0]; if(d){ setTimeout(()=>{ /pdf/.test(d.typ||"")?dokViewer("/_blob/"+d.assetId,"pdf",d.name||"Unterlagen"):lightbox("/_blob/"+d.assetId); },400); } else toast("Noch keine Unterlagen – bitte hochladen oder aus der Mail holen"); });
   $("#stornoSetzen") && ($("#stornoSetzen").onclick=()=>modal(`<h2>Auftrag stornieren?</h2><div class="small mute">Der Auftrag bleibt sichtbar, steht aber unter „Storniert“.</div><label class="f">Grund / Hinweis (optional)</label><textarea class="i" id="sg" placeholder="z. B. Bauherr hat abgesagt"></textarea><div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="ok">Stornieren</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ await upd(P,{storniert:{am:Date.now(),von:myId(),quelle:"hand",grund:m.querySelector("#sg").value.trim()}}); close(); toast("Als storniert markiert"); }; }));
   $("#stornoAuf") && ($("#stornoAuf").onclick=async()=>{ if(await confirmBox("Storno aufheben?","Der Auftrag kommt wieder in die normale Liste.","Aufheben")) upd(P,{storniert:null,stornoAufgehobenAm:Date.now()}); });
   // Pause / Feierabend: Zeit anhalten · Weiterarbeiten: neuer Zeitblock (am neuen Tag mit Personen von heute)
@@ -3926,7 +4050,8 @@ $("#aktualisieren").onclick=jetztAktualisieren;
   document.addEventListener("focusout",()=>setTimeout(()=>{ if(!document.activeElement?.matches?.("input,textarea,select")) setze(false); },120));
   window.addEventListener("hashchange",()=>setze(false)); }
 setTimeout(versionPruefen,8000); setInterval(versionPruefen,10*60000);
-document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") versionPruefen(); });
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ versionPruefen(); setTimeout(ankunftPruefen,800); } });
+setInterval(()=>{ if(S.user&&document.visibilityState==="visible") ankunftPruefen(); },45000);
 
 boot();
 </script>
