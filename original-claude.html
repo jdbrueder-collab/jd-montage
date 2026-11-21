@@ -1174,7 +1174,8 @@ function statusPills(o, imKal){
       else p.push(["ok","✓ fertig"]);
       if(can.finanzen() && S.fin[o.id]){ const st=S.fin[o.id].rechnungStatus||"offen"; if(st==="offen"||st==="freigegeben") p.push(["warn","✏️ Rechnung"]); else if(st==="erstellt") p.push(["warn","Rechnung versenden"]); }
       if(abnahmeFaellig(o)) p.push(["bad","⏰ Sichtabnahme"]);
-    } else p.push(o.bestaetigtAm?["ok",can.sub()?"✓ bestätigt · Rechnung schreiben":"✓ bestätigt"]:o.abschluss?["info","⏳ wartet auf Bestätigung"]:["ok","✓ erledigt"]);
+    } else if(o.nachgetragen?.[myId()] && !o.subAnteil?.[myId()]?.abgegebenAm) p.push(["warn","🤝 Anteil eintragen"]);
+    else p.push(o.bestaetigtAm?["ok",can.sub()?"✓ bestätigt · Rechnung schreiben":"✓ bestätigt"]:o.abschluss?["info","⏳ wartet auf Bestätigung"]:["ok","✓ erledigt"]);
   } else if(ph==="arbeit"){
     if(running(o)) p.push(["info","⏱ läuft"]);
     else if(o.einsatz?.bereit==="nein" && !o.einsatz?.nmb?.weiter) p.push(["bad","⛔ nicht montagebereit"]);
@@ -1475,7 +1476,7 @@ function terminAnfrageDialog(id){
 /* ---------- Gemeinsamer Auftrag: Anteil des Subunternehmers ---------- */
 function anteilKarte(o){
   const me=myId(), a=o.subAnteil?.[me]||{}, zu=!!a.abgegebenAm||!!a.bestaetigtAm;
-  const d=S.lohn[lohnDocId(o.id,me)]||{}, P=S.preise&&subPreiseAn()?preisFuer(me):null, pr=P?.preise||{};
+  const d=S.lohn[lohnDocId(o.id,me)]||{}, P=S.preise&&(!istSubUid(me)||subPreiseAn())?preisFuer(me,S.preise,o.serie):null, pr=P?.preise||{};
   const c=calcLohn({...d,uid:me},P)||{lines:[],total:0};
   const inp=(attr,k,v)=>`<input class="i pl-q" ${attr}="${esc(k)}" inputmode="decimal" value="${esc(v??"")}" placeholder="0" ${zu?"disabled":""}>`;
   const zeile=(label,einheit,ep,attr,k,v)=>`<div class="pl-z ${nn(v)?"voll":""}" data-ep="${ep}"><div class="pl-l">${esc(label)}<span>${esc(einheit||"")}${ep!==""?" · "+fmtEUR(ep):""}</span></div>${inp(attr,k,v)}<div class="pl-gp">${nn(v)&&ep!==""?fmtEUR(r2(nn(v)*ep)):""}</div></div>`;
@@ -1503,12 +1504,12 @@ function abrechnungTabelle(l,P){
     <tfoot><tr><td colspan="3">Gesamt</td><td>${fmtEUR(c.total)}</td></tr></tfoot></table>`;
 }
 function anteilChefKarte(o){
-  const subs=[...new Set([...(o.monteure||[]).filter(m=>S.roles[m]==="sub"),...Object.keys(o.subAnteil||{})])]; if(!subs.length) return "";
-  return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Montageabrechnung Subunternehmer</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)];
+  const subs=[...new Set([...(o.gemeinsam?(o.monteure||[]).filter(m=>S.roles[m]==="sub"):[]),...Object.keys(o.nachgetragen||{}),...Object.keys(o.subAnteil||{})])]; if(!subs.length) return "";
+  return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Anteile der Mitmonteure</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)];
     return `<div class="anteil"><div class="row between" style="flex-wrap:nowrap;gap:8px;margin-bottom:6px"><b>${esc(nameOf(u))}</b>${a.bestaetigtAm?`<span class="chip ok">✓ bestätigt</span>`:a.abgegebenAm?`<span class="chip warn">📥 zu prüfen</span>`:`<span class="chip">noch nicht abgegeben</span>`}</div>
-      ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&subPreiseAn()?S.preise:null):`<div class="small mute">Der Subunternehmer trägt seine Positionen gerade ein.</div>`}
+      ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,o.serie):null):`<div class="small mute">${esc(nameOf(u))} trägt die Positionen gerade ein.</div>`}
       ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Abrechnung bestätigen</button>`:""}</div>`; }).join("")}
-    <div class="small mute" style="margin-top:6px">Nur für die Abrechnung mit dem Subunternehmer – geht nicht an meta.</div></div>`;
+    <div class="small mute" style="margin-top:6px">Nur für die interne Abrechnung – geht nicht an meta.</div></div>`;
 }
 function bindAnteil(id){
   const o=S.orders[id]; if(!o) return; const P=orderPath(id);
@@ -1533,12 +1534,13 @@ function bindAnteil(id){
     z.classList.toggle("voll",!!nn(i.value)); z.querySelector(".pl-gp").textContent=nn(i.value)&&ep!==""?fmtEUR(r2(nn(i.value.replace(",","."))*nn(ep))):""; }));
   $("#anteilAb") && ($("#anteilAb").onclick=async()=>{
     if(document.activeElement?.closest?.("#preisliste")){ document.activeElement.dispatchEvent(new Event("change")); document.activeElement.blur(); await new Promise(r=>setTimeout(r,300)); }
-    const l=S.lohn[lohnDocId(id,myId())], c=l?calcLohn({...l,uid:myId()},S.preise&&subPreiseAn()?preisFuer(myId()):{preise:Object.fromEntries(S.lohnPos.map(x=>[x.k,0]))}):null;
+    const mitPreis=!!S.preise&&(!istSubUid(myId())||subPreiseAn());
+    const l=S.lohn[lohnDocId(id,myId())], c=l?calcLohn({...l,uid:myId()},mitPreis?preisFuer(myId(),S.preise,o.serie):{preise:Object.fromEntries(S.lohnPos.map(x=>[x.k,0]))}):null;
     if(!l||!Object.values(l.mengen||{}).some(v=>nn(v))) return toast("Bitte mindestens eine Position mit Menge eintragen",3000);
-    if(!await confirmBox("Abrechnung abgeben?",`${c.lines.length} Position${c.lines.length>1?"en":""}${subPreiseAn()?` · <b>${fmtEUR(c.total)}</b>`:""}<br>JD Brüder prüft und bestätigt sie – danach kannst du deine Rechnung schreiben. Ändern geht nach dem Abgeben nicht mehr.`,"Abgeben","ok")) return;
+    if(!await confirmBox("Abrechnung abgeben?",`${c.lines.length} Position${c.lines.length>1?"en":""}${mitPreis?` · <b>${fmtEUR(c.total)}</b>`:""}<br>JD Brüder prüft und bestätigt sie – danach kannst du deine Rechnung schreiben. Ändern geht nach dem Abgeben nicht mehr.`,"Abgeben","ok")) return;
     const a={...(o.subAnteil?.[myId()]||{}),summe:c.total};
     const neu={...a,abgegebenAm:Date.now()}; await upd(P,{subAnteil:{[myId()]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[myId()]:neu}};
-    nachrichtSenden(id,`🤝 Meine Montageabrechnung ist fertig${subPreiseAn()?` (${fmtEUR(a.summe)})`:""} – bitte prüfen und bestätigen.`); toast("Abgegeben ✓ – JD Brüder bekommt Bescheid",3000); render();
+    nachrichtSenden(id,`🤝 Meine Montageabrechnung ist fertig${mitPreis?` (${fmtEUR(a.summe)})`:""} – bitte prüfen und bestätigen.`); toast("Abgegeben ✓ – JD Brüder bekommt Bescheid",3000); render();
   });
   document.querySelectorAll("[data-anteil-ok]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.anteilOk;
     if(!await confirmBox("Abrechnung bestätigen?",`Ist die Montageabrechnung von <b>${esc(nameOf(u))}</b> korrekt? Danach ist sie gesperrt und ${esc(nameOf(u))} kann die Rechnung schreiben.`,"Bestätigen","ok")) return;
@@ -1646,7 +1648,7 @@ function viewDetail(id){
   h+=`<div class="det-grid" style="grid-template-columns:repeat(${knoepfe.length},minmax(0,1fr))">${knoepfe.join("")}</div>`;
 
   // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Sichtabnahme → Versand
-  if(kompakt){ /* Bericht steckt im Knopf oben */ }
+  if(kompakt){ if(!can.planen() && o.nachgetragen?.[myId()]) h+=anteilKarte(o); }
   else if(o.gemeinsam && can.sub()){
     if(!frueh) h+=anteilKarte(o);
   } else if(erl || berichtGesperrt(o) || berichtAbgegeben(o)){
@@ -1669,7 +1671,7 @@ function viewDetail(id){
   }
 
   // Anteil des Subunternehmers (gemeinsamer Auftrag) – nur für die Abrechnung, geht nicht an meta
-  if(o.gemeinsam && can.planen() && !frueh && (!kompakt||anteilOffen(o))) h+=anteilChefKarte(o);
+  if((o.gemeinsam||o.nachgetragen) && can.planen() && !frueh && (!kompakt||anteilOffen(o)||Object.keys(o.nachgetragen||{}).some(u=>!o.subAnteil?.[u]?.bestaetigtAm))) h+=anteilChefKarte(o);
 
   // Bericht-Versand (beim gemeinsamen Auftrag sieht der Sub nur seinen Anteil)
   if(o.gemeinsam && can.sub()){ /* nichts – der Bericht an meta kommt vom Chef */ }
@@ -1694,7 +1696,7 @@ function viewDetail(id){
      ${can.senden()?`<button class="btn pri block" id="sendBericht">✉︎ ${o.berichtStatus==="gesendet"?"Erneut senden":"Bericht abschicken"}</button>`:""}
      ${S.isOwner&&!S.mcp?`<div class="small mute">Zum Senden muss Gmail in claude.ai verbunden sein.</div>`:""}</div>`;
   }
-  if(istFertig(o) && (can.einsatz()||can.produktion()) && (!kompakt||!abnahmeOk(o)&&o.berichtTyp!=="leerfahrt")) h+=abnahmeCard(o);
+  if(istFertig(o) && (can.einsatz()||can.produktion()) && !(o.gemeinsam&&can.sub()) && (!kompakt||!abnahmeOk(o)&&o.berichtTyp!=="leerfahrt")) h+=abnahmeCard(o);
 
   // Reklamationen
   if(kompakt){
@@ -1754,7 +1756,7 @@ function abschlussStand(o,f,reklas){
       :ab==="verzicht"?zeile("ok","Sichtabnahme nicht angefordert"):zeile(abnahmeFaellig(o)?"bad":"warn","Sichtabnahme fehlt"); }
   const off=reklas.filter(r=>r.offen).length; if(reklas.length) z+=zeile(off?"warn":"ok",off?`${off} Reklamation${off>1?"en":""} offen`:"Reklamationen erledigt");
   z+=abgerechnet(o)?zeile("ok","Vergütung von meta erhalten",[o.abgerechnetMit?"Abrechnung "+esc(o.abgerechnetMit):"",can.finanzen()&&f?fmtEUR(f.summe):""].filter(Boolean).join(" · ")):zeile("warn","Vergütung von meta steht noch aus");
-  return `<div class="card ab-k"><div class="ab-liste">${z}</div></div>`;
+  return `<div class="card ab-k"><div class="ab-liste">${z}</div>${chef?`<button class="btn sm ghost block" id="mitDazu" style="margin-top:8px">👷 Mitmonteur / Subunternehmer dazunehmen</button>`:""}</div>`;
 }
 // Bericht kurz zusammengefasst – mit allen Bildern (antippen = groß)
 function berichtAnsicht(id){
@@ -3651,6 +3653,7 @@ function bindDetail(id){
   $("#losJetzt") && ($("#losJetzt").onclick=()=>einsatzLosfahren(o));
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
+  $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
   $("#bearbFertig") && ($("#bearbFertig").onclick=()=>{ delete S.bearbeiten[id]; render(); scrollTo(0,0); });
   $("#terminieren") && ($("#terminieren").onclick=()=>terminDialog(id));
   $("#terminSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{terminStatus:b.dataset.t}));
@@ -3871,6 +3874,26 @@ function editBauDialog(id){
   modal(`<h2>Baustelle bearbeiten</h2><label class="f">Land</label><select class="i" id="landSel"><option value="" ${!o.land?"selected":""}>Automatisch erkennen (jetzt: ${LAENDER[landOf({...o,land:null})][1]})</option><option value="de" ${o.land==="de"?"selected":""}>🇩🇪 Deutschland</option><option value="lu" ${o.land==="lu"?"selected":""}>🇱🇺 Luxemburg</option></select>${F.map(([k,l])=>`<label class="f">${l}</label>${/Hinweise|aufbau/.test(k)?`<textarea class="i" data-k="${k}">${esc(o[k]||"")}</textarea>`:`<input class="i" data-k="${k}" value="${esc(o[k]||"")}">`}`).join("")}
   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
     m.querySelector("#ok").onclick=async()=>{ const p={}; m.querySelectorAll("[data-k]").forEach(i=>{ if((o[i.dataset.k]||"")!==i.value.trim()) p[i.dataset.k]=i.value.trim(); }); const ld=m.querySelector("#landSel").value||null; if((o.land||null)!==ld) p.land=ld; if(Object.keys(p).length) await upd(orderPath(id),p); close(); };
+  });
+}
+// Nachträglich: wer war bei der Montage noch dabei? → trägt danach seinen Anteil (Preisliste) selbst ein
+async function mitDazuDialog(id){
+  const o=S.orders[id];
+  const cands=[...new Set([S.settings.ownerId,...Object.keys(S.roles)].filter(Boolean))].filter(k=>S.roles[k]!=="hersteller"&&k!==myId()&&!(o.monteure||[]).includes(k)&&(k!=="test-sub"||istTest(o)));
+  await loadProfiles(cands);
+  modal(`<h2>👷 Wer war noch dabei?</h2><div class="small mute" style="margin-bottom:10px">Die ausgewählten Personen bekommen eine Nachricht und tragen in diesem Auftrag ihren Anteil (Preisliste) selbst ein. Du bestätigst ihn danach. Der Bericht an meta bleibt, wie er ist.</div>
+   ${cands.length?cands.map(c=>`<label class="person" style="cursor:pointer"><input type="checkbox" value="${esc(c)}" style="width:20px;height:20px"><span class="av">${esc(initials(c))}</span><b style="flex:1">${esc(nameOf(c))}</b><span class="chip">${S.roles[c]==="sub"?"Subunternehmer":"Monteur"}</span></label>`).join(""):`<div class="small mute">Alle aus dem Team sind schon eingetragen.</div>`}
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Dazunehmen</button></div>`,(m,close)=>{
+    m.querySelector("#ok").onclick=async()=>{
+      const sel=[...m.querySelectorAll("input:checked")].map(i=>i.value); if(!sel.length) return toast("Bitte mindestens eine Person wählen");
+      const ng={...(o.nachgetragen||{})}; sel.forEach(u=>ng[u]={am:Date.now(),von:myId()});
+      const patch={monteure:[...new Set([...(o.monteure||[]),...sel])],nachgetragen:ng};
+      if(sel.some(u=>S.roles[u]==="sub")) patch.gemeinsam=true;
+      await upd(orderPath(id),patch); S.orders[id]={...S.orders[id],...patch};
+      close(); render();
+      nachrichtSenden(id,`👷 ${sel.map(nameOf).join(", ")}: Du warst bei dieser Montage mit dabei. Bitte trag in der App unter „🤝 Mein Anteil“ deine Positionen ein und gib sie ab.`);
+      toast(`${sel.length===1?nameOf(sel[0])+" ist":sel.length+" Personen sind"} dazugenommen ✓ – Nachricht ist raus`,3500);
+    };
   });
 }
 async function pickPerson(id){
