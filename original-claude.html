@@ -220,6 +220,14 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvrot.scan{filter:grayscale(1) contrast(1.8) brightness(1.08)}
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
+.achtung{margin:0 0 10px;padding:8px 12px;border-radius:12px;background:var(--badbg,#fef3f2);font-size:14px;font-weight:600;display:grid;gap:6px}
+.achtung u,u.rot{text-decoration:underline;text-decoration-color:var(--bad,#d92d20);text-decoration-thickness:2px;text-underline-offset:3px}
+details.bau-mehr{margin-top:4px}
+details.bau-mehr>summary{cursor:pointer;list-style:none;font-size:13.5px;font-weight:650;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;color:var(--brand2,#2563eb)}
+details.bau-mehr>summary::-webkit-details-marker{display:none}
+details.bau-mehr>summary::before{content:"▸ "}
+details.bau-mehr[open]>summary::before{content:"▾ "}
+details.bau-mehr[open]>summary{margin-bottom:8px}
 .bau-top{background:var(--greybg);border-radius:12px;padding:4px 12px;margin-bottom:10px}
 .dok-i{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .dok-i h4{margin:10px 0 6px;font-size:12.5px;color:var(--mute);font-weight:650;text-transform:uppercase;letter-spacing:.03em}
@@ -859,6 +867,19 @@ function adresseKontakte(o){
      :`<div class="dok-k"><span class="r">Ansprechpartner</span>${o.deckblattGelesenAm?DOK_HINWEIS:`<span class="mute">noch keiner bekannt</span>`}</div>`}
   </div>`;
 }
+// Sehr wichtige Punkte für die Monteure – immer sichtbar, rot unterstrichen
+const WICHTIG_RX=/zugang|anfahrt|zufahrt|avis|anmeld|vorher anruf|schlüssel|versiegel|bauseits|achtung|wichtig|unbedingt|nur nach|nicht fertig|ohne fliesen|noch keine fliesen|sperr|parken|kran|gerüst|asbest|lärm|ruhezeit|arbeitszeit/i;
+function achtungListe(o){
+  const d=o.dokInfo||{};
+  if(Array.isArray(d.achtung)&&d.achtung.length) return d.achtung.map(String).filter(Boolean).slice(0,6);
+  // noch ohne Markierung von Claude: nur die Sätze, die nach „unbedingt beachten“ klingen
+  const saetze=t=>String(t||"").split(/(?<=[a-zäöüß0-9)]{2}[.!?])\s+/).map(x=>x.trim()).filter(x=>x&&WICHTIG_RX.test(x)&&!/arbeitsschutz|gbu|gefährdungsbeurteilung|rechnung/i.test(x));
+  const l=[], dazu=t=>{ const k=t.toLowerCase().slice(0,40); if(!l.some(x=>x.toLowerCase().includes(k)||k.includes(x.toLowerCase().slice(0,40))||t.toLowerCase().includes(x.toLowerCase()))) l.push(t.length>160?t.slice(0,157)+"…":t); };
+  saetze(o.montageHinweise).forEach(dazu);
+  (d.hinweise||[]).filter(h=>h.text&&!/arbeitsschutz|gbu/i.test(h.titel||"")).forEach(h=>saetze(h.text).slice(0,2).forEach(dazu));
+  return l.slice(0,5);
+}
+const achtungTeil=o=>{ const l=achtungListe(o); return l.length?`<div class="achtung">${l.map(t=>`<div>⚠️ <u>${esc(t)}</u></div>`).join("")}</div>`:""; };
 // Was Claude aus allen Unterlagen gelesen hat – für die Monteure übersichtlich, ohne die PDFs durchsuchen zu müssen
 function dokInfoTeil(o){
   const d=o.dokInfo; if(!d) return "";
@@ -870,7 +891,7 @@ function dokInfoTeil(o){
   return `<div class="dok-i"><div class="small mute">📄 Aus ${d.dateien||""} Unterlage${d.dateien===1?"":"n"} gelesen · ${fmtDT(d.am)}</div>
    ${an.length?`<h4>Anlagen (${an.reduce((s,a)=>s+(parseInt(a.kabinen,10)||0),0)||an.length} ${an.some(a=>parseInt(a.kabinen,10))?"Kabinen":"Bereiche"})</h4>${an.map(a=>`<div class="dok-a"><b>${esc([a.raum,a.geschoss].filter(Boolean).join(" · ")||"Anlage")}${a.kabinen?` – ${esc(a.kabinen)} Kab.`:""}</b>
       ${[["Modell",a.modell],["Höhe",a.hoehe],["Farbe",a.farbe],["Besonderes",a.besonderes]].filter(([,v])=>v).map(([k,v])=>`<span class="mute">${k}</span><span>${esc(v)}</span>`).join("")}</div>`).join("")}`:""}
-   ${hi.length?`<h4>Hinweise aus den Unterlagen</h4>${hi.map(h=>`<div class="dok-h">${h.titel?`<b>${esc(h.titel)}</b>`:""}${esc(h.text)}</div>`).join("")}`:""}</div>`;
+   ${hi.length?`<h4>Hinweise aus den Unterlagen</h4>${hi.map(h=>`<div class="dok-h">${h.titel?`<b>${esc(h.titel)}</b>`:""}${h.wichtig||(!/arbeitsschutz|gbu/i.test(h.titel||"")&&WICHTIG_RX.test((h.titel||"")+" "+h.text))?`<u class="rot">${esc(h.text)}</u>`:esc(h.text)}</div>`).join("")}`:""}</div>`;
 }
 const dokListe=o=>(o.dokInfo?.liste||[]).filter(x=>x.art||x.inhalt).map(x=>`<div class="dok-d">📄 <b>${esc(x.art||"Datei")}</b>${x.seiten?` · ${esc(x.seiten)} S.`:""}${x.inhalt?` – ${esc(x.inhalt)}`:""}${x.name?` <span class="mute small">(${esc(x.name)})</span>`:""}</div>`).join("");
 const DOK_HINWEIS=`<span class="dokhinweis">⚠️ bitte im Dokument prüfen</span>`;
@@ -1570,6 +1591,8 @@ function viewDetail(id){
   const kv=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
   const bauInhalt=`${can.planen()?`<div style="text-align:right;margin-bottom:6px"><button class="btn sm ghost" id="editBau">Bearbeiten</button></div>`:""}
    ${adresseKontakte(o)}
+   ${achtungTeil(o)}
+   <details class="bau-mehr" data-fold="${id}:baumehr" ${S.fold[id+":baumehr"]?"open":""}><summary>Mehr zur Baustelle <span class="mute">– Geschosse, Aufbau, Hinweise, Anlagen …</span></summary>
    <dl class="kv">
    ${kv("Land",`${LAENDER[landOf(o)].join(" ")}${o.land?"":` <span class="mute small">(erkannt)</span>`}`)}
    ${kv("Geschosse",esc(o.geschosse||""))}
@@ -1584,8 +1607,9 @@ function viewDetail(id){
    ${kv("meta-Berater",esc(o.berater||""))}
    </dl>
    ${dokInfoTeil(o)}
-   ${!o.bauleiterName&&!o.adresse?`<div class="banner info" style="margin:10px 0 0">Die genauen Baustellendaten stehen auf dem Aufmaß-Deckblatt. ${can.planen()?"Lade das Deckblatt unten bei „Unterlagen“ hoch oder hol es aus der Mail – die App liest es dann aus.":""}</div>`:""}
    ${o.zusageMail?.viewUrl&&S.isOwner?`<div style="margin-top:10px"><a class="small" href="${esc(o.zusageMail.viewUrl)}" target="_blank" rel="noopener">Montagezusage-Mail in Gmail öffnen ↗</a></div>`:""}
+   </details>
+   ${!o.bauleiterName&&!o.adresse?`<div class="banner info" style="margin:10px 0 0">Die genauen Baustellendaten stehen auf dem Aufmaß-Deckblatt. ${can.planen()?"Lade das Deckblatt unten bei „Unterlagen“ hoch oder hol es aus der Mail – die App liest es dann aus.":""}</div>`:""}
   `;
   knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
 

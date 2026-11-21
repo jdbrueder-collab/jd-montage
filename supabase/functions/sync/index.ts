@@ -830,7 +830,8 @@ async function deckblattUebernehmen(db: any, id: string, o: any, res: any, datei
   // Alles Gelesene für die Monteure aufheben (Kontakte, Anlagen, Hinweise, was in welcher Datei steht)
   const liste = (x: any, n = 40) => (Array.isArray(x) ? x.filter((y) => y && typeof y === "object").slice(0, n) : []);
   const felder: any = {}; for (const [k, v] of Object.entries(res)) if (typeof v === "string" || typeof v === "number") { const t = String(v).trim(); if (t && t !== "-") felder[k] = t; }
-  p.dokInfo = { am: Date.now(), dateien: dateien || liste(res.dateien).length, felder, kontakte: liste(res.kontakte, 20), anlagen: liste(res.anlagen), hinweise: liste(res.hinweise), liste: liste(res.dateien, 20) };
+  p.dokInfo = { am: Date.now(), dateien: dateien || liste(res.dateien).length, felder, kontakte: liste(res.kontakte, 20), anlagen: liste(res.anlagen), hinweise: liste(res.hinweise), liste: liste(res.dateien, 20),
+    achtung: (Array.isArray(res.achtung) ? res.achtung : []).map((x: any) => String(x || "").trim()).filter(Boolean).slice(0, 6) };
   for (const k of DECK_FELDER) { const v = String(res[k] ?? "").trim(); if (v && v !== "-" && !o[k]) p[k] = v; }
   if (!o.bauvorhaben && res.bauvorhabenName) p.bauvorhaben = String(res.bauvorhabenName).trim();
   if (!o.plzOrt && res.adresse) { const m = String(res.adresse).match(/(\d{5}\s+[^,]+)$/); if (m) p.plzOrt = m[1].trim(); }
