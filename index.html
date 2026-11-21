@@ -502,7 +502,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="cfe71c08613d";</script>
+<script>window.JD_BUILD="8d4567cf2e91";</script>
 </head>
 <body>
 <header class="top">
@@ -968,7 +968,7 @@ const tagHeute=()=>tagKey(new Date());
 const terminTag=o=>o.termin?tagKey(new Date(o.termin)):"";
 const terminOffenFuer=(o,uid)=>o.terminStatus==="fest" && !!o.termin && (o.monteure||[]).includes(uid) && !terminBestaetigt(o,uid) && !istFertig(o) && !o.storniert && terminTag(o)>=tagHeute();
 const terminOffenFuerMich=o=>terminOffenFuer(o,myId());
-const ueberfaellig=o=>phase(o)==="arbeit" && !istFertig(o) && !running(o) && !!o.termin && terminTag(o)<tagHeute();
+const ueberfaellig=o=>phase(o)==="arbeit" && !istTest(o) && !istFertig(o) && !running(o) && !!o.termin && terminTag(o)<tagHeute();
 const kurzDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"}).replace(".,",",");
 const langDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"});
 
