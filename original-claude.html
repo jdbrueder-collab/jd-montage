@@ -220,6 +220,7 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvrot.scan{filter:grayscale(1) contrast(1.8) brightness(1.08)}
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
+.bau-top{background:var(--greybg);border-radius:12px;padding:4px 12px;margin-bottom:10px}
 .dok-i{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .dok-i h4{margin:10px 0 6px;font-size:12.5px;color:var(--mute);font-weight:650;text-transform:uppercase;letter-spacing:.03em}
 .dok-k{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
@@ -842,6 +843,22 @@ function vorleistungZeilen(o){
 }
 // Angaben, die beim Auslesen unsicher waren oder fehlen → „bitte im Dokument nachsehen“
 const unsicher=(o,k)=>(o.deckUnsicher||[]).includes(k);
+// Ganz oben in „Baustelle“: Adresse und alle Ansprechpartner
+function adresseKontakte(o){
+  const addr=adresseOf(o), tel=t=>t?`<a href="tel:${esc(String(t).replace(/[^\d+]/g,""))}">📞 ${esc(t)}</a>`:"";
+  const gleich=(a,b)=>!!a&&!!b&&String(a).toLowerCase().replace(/\W/g,"").includes(String(b).toLowerCase().replace(/^(herrn?|frau)\s+/,"").replace(/\W/g,""));
+  let ko=(o.dokInfo?.kontakte||[]).filter(k=>k.name||k.tel||k.mail||k.firma).map(k=>({...k}));
+  if(o.bauleiterName||o.bauleiterTel||o.bauleiterMail){
+    const i=ko.findIndex(k=>/bauleit/i.test(k.rolle||"")&&(gleich(k.name,o.bauleiterName)||gleich(o.bauleiterName,k.name)||!o.bauleiterName));
+    const bl={rolle:"Bauleiter",firma:i>=0?ko[i].firma:"",name:o.bauleiterName||(i>=0?ko[i].name:""),tel:o.bauleiterTel||(i>=0?ko[i].tel:""),mail:o.bauleiterMail||(i>=0?ko[i].mail:""),eigen:true};
+    if(i>=0) ko.splice(i,1); ko.unshift(bl);
+  }
+  return `<div class="bau-top">
+   <div class="dok-k"><span class="r">Adresse</span>${addr?`<b>${esc(addr)}</b>${unsicher(o,"adresse")?" "+DOK_HINWEIS:""}<a href="${esc(navUrl(addr))}" target="_blank" rel="noopener">🧭 Navi</a>`:(o.deckblattGelesenAm?DOK_HINWEIS:`<span class="mute">noch keine Adresse</span>`)}</div>
+   ${ko.length?ko.map(k=>`<div class="dok-k"><span class="r">${esc(k.rolle||"Kontakt")}${k.firma?" · "+esc(k.firma):""}</span>${k.name?`<b>${esc(k.name)}</b>`:""}${k.eigen&&unsicher(o,"bauleiterName")?" "+DOK_HINWEIS:""}${tel(k.tel)}${k.eigen&&k.tel&&unsicher(o,"bauleiterTel")?" "+DOK_HINWEIS:""}${k.mail?`<a href="mailto:${esc(k.mail)}">✉︎ ${esc(k.mail)}</a>`:""}</div>`).join("")
+     :`<div class="dok-k"><span class="r">Ansprechpartner</span>${o.deckblattGelesenAm?DOK_HINWEIS:`<span class="mute">noch keiner bekannt</span>`}</div>`}
+  </div>`;
+}
 // Was Claude aus allen Unterlagen gelesen hat – für die Monteure übersichtlich, ohne die PDFs durchsuchen zu müssen
 function dokInfoTeil(o){
   const d=o.dokInfo; if(!d) return "";
@@ -849,9 +866,8 @@ function dokInfoTeil(o){
   const ko=(d.kontakte||[]).filter(k=>k.name||k.tel||k.mail||k.firma);
   const an=(d.anlagen||[]).filter(a=>a.raum||a.kabinen||a.modell);
   const hi=(d.hinweise||[]).filter(h=>h.text);
-  if(!ko.length && !an.length && !hi.length) return "";
+  if(!an.length && !hi.length) return "";
   return `<div class="dok-i"><div class="small mute">📄 Aus ${d.dateien||""} Unterlage${d.dateien===1?"":"n"} gelesen · ${fmtDT(d.am)}</div>
-   ${ko.length?`<h4>Ansprechpartner</h4>${ko.map(k=>`<div class="dok-k"><span class="r">${esc(k.rolle||"Kontakt")}${k.firma?" · "+esc(k.firma):""}</span>${k.name?`<b>${esc(k.name)}</b>`:""}${tel(k.tel)}${k.mail?`<a href="mailto:${esc(k.mail)}">✉︎ ${esc(k.mail)}</a>`:""}</div>`).join("")}`:""}
    ${an.length?`<h4>Anlagen (${an.reduce((s,a)=>s+(parseInt(a.kabinen,10)||0),0)||an.length} ${an.some(a=>parseInt(a.kabinen,10))?"Kabinen":"Bereiche"})</h4>${an.map(a=>`<div class="dok-a"><b>${esc([a.raum,a.geschoss].filter(Boolean).join(" · ")||"Anlage")}${a.kabinen?` – ${esc(a.kabinen)} Kab.`:""}</b>
       ${[["Modell",a.modell],["Höhe",a.hoehe],["Farbe",a.farbe],["Besonderes",a.besonderes]].filter(([,v])=>v).map(([k,v])=>`<span class="mute">${k}</span><span>${esc(v)}</span>`).join("")}</div>`).join("")}`:""}
    ${hi.length?`<h4>Hinweise aus den Unterlagen</h4>${hi.map(h=>`<div class="dok-h">${h.titel?`<b>${esc(h.titel)}</b>`:""}${esc(h.text)}</div>`).join("")}`:""}</div>`;
@@ -1553,12 +1569,9 @@ function viewDetail(id){
   // Baustelle
   const kv=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
   const bauInhalt=`${can.planen()?`<div style="text-align:right;margin-bottom:6px"><button class="btn sm ghost" id="editBau">Bearbeiten</button></div>`:""}
+   ${adresseKontakte(o)}
    <dl class="kv">
-   ${kv("Adresse",addr?esc(addr)+(unsicher(o,"adresse")?" "+DOK_HINWEIS:""):(o.deckblattGelesenAm?DOK_HINWEIS:""))}
    ${kv("Land",`${LAENDER[landOf(o)].join(" ")}${o.land?"":` <span class="mute small">(erkannt)</span>`}`)}
-   ${kv("Bauleiter",o.bauleiterName?esc(o.bauleiterName)+(unsicher(o,"bauleiterName")?" "+DOK_HINWEIS:""):(unsicher(o,"bauleiterName")?DOK_HINWEIS:""))}
-   ${kv("Telefon",o.bauleiterTel?`<a href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">${esc(o.bauleiterTel)}</a>`+(unsicher(o,"bauleiterTel")?" "+DOK_HINWEIS:""):(o.deckblattGelesenAm?DOK_HINWEIS:""))}
-   ${kv("E-Mail",o.bauleiterMail?`${esc(o.bauleiterMail)}`:"")}
    ${kv("Geschosse",esc(o.geschosse||""))}
    ${kv("Öffnungszeiten",esc(o.oeffnungszeiten||""))}
    ${kv("Aufzug",esc(o.aufzug||""))}
