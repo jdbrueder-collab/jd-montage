@@ -221,6 +221,8 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+.bericht-l{background:var(--warnbg);border-radius:12px;padding:8px 12px;margin-bottom:8px;font-size:14px;font-weight:600}
+.bericht-l a{color:var(--ink)}
 .umsatz{display:block;margin:8px 0 2px;text-decoration:none;color:inherit}
 .umsatz-t{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mute);margin:0 2px 3px}
 .umsatz-t b{color:var(--ink)}
@@ -500,7 +502,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="3975e4f6a7af";</script>
+<script>window.JD_BUILD="cfe71c08613d";</script>
 </head>
 <body>
 <header class="top">
@@ -870,9 +872,11 @@ const abgerechnet=o=>!!(o.abgerechnet || S.fin[o.id]);
 // Montagebericht ist verschickt (Leerfahrt-Berichte zählen nicht – da muss neu geplant werden)
 const berichtVerschickt=o=>!!o.abschluss && o.berichtStatus==="gesendet";
 // Vom Chef bestätigt oder schon an meta gesendet → für niemanden mehr änderbar
-const berichtGesperrt=o=>!!o.bestaetigtAm || o.berichtStatus==="gesendet";
+// Änderung am fertigen Bericht: freigegeben für den Anfragenden (oder vom Chef selbst geöffnet)
+const aenderungFrei=o=>o?.aenderung?.status==="frei" && (o.aenderung.von===myId()||can.planen());
+const berichtGesperrt=o=>!aenderungFrei(o) && (!!o.bestaetigtAm || o.berichtStatus==="gesendet");
 // Mitarbeiter/Subunternehmer hat „Montage fertig“ gedrückt → für ihn abgegeben, nur noch ansehen
-const berichtAbgegeben=o=>!can.planen() && (o.gemeinsam&&can.sub()?!!o.subAnteil?.[myId()]?.abgegebenAm:!!o.abschluss);
+const berichtAbgegeben=o=>!can.planen() && !aenderungFrei(o) && (o.gemeinsam&&can.sub()?!!o.subAnteil?.[myId()]?.abgegebenAm:!!o.abschluss);
 const anteilOffen=o=>!!o.gemeinsam && Object.values(o.subAnteil||{}).some(a=>a?.abgegebenAm&&!a.bestaetigtAm);
 const berichtVonWem=o=>o.berichtVonSub||o.berichtVon||o.abschluss?.by;
 // Erledigt, aber die Abrechnung von meta fehlt noch
@@ -970,7 +974,7 @@ const langDatum=t=>new Date(t).toLocaleDateString("de-DE",{weekday:"long",day:"2
 
 /* ---------- „Zu tun“: was jetzt ansteht, je Rolle ---------- */
 const SPEZIAL={
-  pruefung:{t:"Berichte und Anteile prüfen",cls:"warn",p:()=>`Prüfen`,f:o=>o.berichtStatus==="pruefung"||anteilOffen(o)},
+  pruefung:{t:"Berichte, Anteile und Änderungswünsche prüfen",cls:"warn",p:()=>`Prüfen`,f:o=>o.berichtStatus==="pruefung"||anteilOffen(o)||(can.planen()&&o.aenderung?.status==="angefragt")},
   msg:{t:"Neue Nachrichten",cls:"msg",p:()=>`Nachrichten`,f:o=>binBeteiligt(o)&&ungelesen(o.id)>0},
   ueber:{t:"Überfällige Termine – Montage nicht abgeschlossen",cls:"bad",p:()=>`Überfällig`,f:o=>ueberfaellig(o)},
   ohneTeam:{t:"Termin, aber niemand eingeteilt",cls:"warn",p:()=>`Ohne Team`,f:o=>phase(o)==="arbeit"&&!istFertig(o)&&!(o.monteure||[]).length},
@@ -978,7 +982,7 @@ const SPEZIAL={
     f:o=>can.planen()?(o.monteure||[]).some(m=>terminOffenFuer(o,m)):terminOffenFuerMich(o)},
   abnahme:{t:"Sichtabnahme seit über einer Woche offen",cls:"bad",p:()=>`Sichtabnahme`,f:o=>meinAuftrag(o)&&abnahmeFaellig(o)},
   heute:{t:"Heute",cls:"ok",p:()=>`Heute`,f:o=>terminTag(o)===tagHeute()&&(o.monteure||[]).includes(myId())&&!istFertig(o)},
-  berichtOffen:{t:"Montage vorbei – Bericht noch offen",cls:"warn",p:()=>`Bericht offen`,f:o=>(o.monteure||[]).includes(myId())&&ueberfaellig(o)}
+  berichtOffen:{t:"Montage vorbei – Bericht noch offen",cls:"warn",p:()=>`Bericht offen`,f:o=>(o.monteure||[]).includes(myId())&&!istFertig(o)&&(ueberfaellig(o)||["bericht","rekla","abnahme"].includes(schritt(o)))}
 };
 function zuTun(){
   const alle=Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert);
@@ -1500,6 +1504,7 @@ function anteilKarte(o){
   let h=`<div class="card"><div class="row between" style="flex-wrap:nowrap;gap:8px"><h3 style="margin:0">🤝 Mein Anteil</h3>${P?.name?`<span class="chip">${esc(P.name)}</span>`:""}</div>
     <div class="small mute" style="margin:4px 0 10px">Deine Preisliste – trag bei jeder Position die Menge ein. JD Brüder bekommt daraus deine fertige Montageabrechnung.</div>
     ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:a.abgegebenAm?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
+    ${zu?(o.aenderung?.status==="angefragt"&&o.aenderung.von===me?`<div class="small mute" style="margin-bottom:8px">✏️ Änderung angefragt – wartet auf Freigabe</div>`:`<button class="btn sm ghost" id="anteilAend" style="margin-bottom:8px">✏️ Änderung anfragen</button>`):""}
     ${!P?`<div class="banner info small">Preise in Bearbeitung – trag einfach die Mengen ein. JD Brüder rechnet ab.</div>`:""}
     ${zu?abrechnungTabelle({...d,uid:me},P):`<div id="preisliste">`}`;
   if(zu) return h+`</div>`;
@@ -1525,7 +1530,8 @@ function anteilChefKarte(o){
   return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Anteile der Mitmonteure</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)];
     return `<div class="anteil"><div class="row between" style="flex-wrap:nowrap;gap:8px;margin-bottom:6px"><b>${esc(nameOf(u))}</b>${a.bestaetigtAm?`<span class="chip ok">✓ bestätigt</span>`:a.abgegebenAm?`<span class="chip warn">📥 zu prüfen</span>`:`<span class="chip">noch nicht abgegeben</span>`}</div>
       ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,o.serie):null):`<div class="small mute">${esc(nameOf(u))} trägt die Positionen gerade ein.</div>`}
-      ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Abrechnung bestätigen</button>`:""}</div>`; }).join("")}
+      ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Abrechnung bestätigen</button>`:""}
+      ${o.aenderung?.status==="angefragt"&&o.aenderung.von===u?`<div class="banner warn small" style="margin:8px 0 0">✏️ Änderungswunsch: „${esc(o.aenderung.grund||"")}“<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div></div>`:""}</div>`; }).join("")}
     <div class="small mute" style="margin-top:6px">Nur für die interne Abrechnung – geht nicht an meta.</div></div>`;
 }
 function bindAnteil(id){
@@ -1533,6 +1539,7 @@ function bindAnteil(id){
   $("#rkAz") && ($("#rkAz").onchange=()=>{ const m=parseMin($("#rkAz").value); if($("#rkAz").value.trim() && m==null) return toast("Bitte z. B. 3:30 oder 3,5 eintragen"); upd(P,{bericht:{arbeitszeitMin:m}}); });
   $("#terminAnfrage") && ($("#terminAnfrage").onclick=()=>terminAnfrageDialog(id));
   $("#taNeu") && ($("#taNeu").onclick=()=>terminAnfrageDialog(id));
+  $("#anteilAend") && ($("#anteilAend").onclick=()=>aenderungAnfragen(id,"anteil"));
   $("#taKwTag") && ($("#taKwTag").onclick=()=>terminDialog(id));
   $("#taUebernehmen") && ($("#taUebernehmen").onclick=async()=>{ const a=o.terminAnfrage, t=a?.antwort?.termin; if(!t) return;
     if(!await confirmBox("Wunschtermin übernehmen?",`${esc(terminText(t))} wird als fester Termin eingetragen. Die Eingeteilten bekommen Bescheid, und der Termin geht in den Google Kalender.`,"Übernehmen","ok")) return;
@@ -1587,7 +1594,7 @@ function viewDetail(id){
   // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
   const fold=(key,titel,info,inhalt,offen=false)=>`<details class="card fold" data-fold="${id}:${key}" ${(S.fold[id+":"+key]??offen)?"open":""}><summary><b>${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
   let h=`<button class="back" data-back>‹ Alle Aufträge</button>${kompakt||schritt(o)==="ankunft"&&S.fahrten[o.einsatz?.fahrtId]?.offen?"":fahrtLeiste()}`;
-  if(S.bearbeiten[id]) h+=`<div class="banner warn" style="display:flex;align-items:center;gap:10px"><span style="flex:1">✏️ Bericht bearbeiten</span><button class="btn sm ok" id="bearbFertig">✓ Fertig</button></div>`;
+  if(S.bearbeiten[id]) h+=`<div class="banner warn" style="display:flex;align-items:center;gap:10px"><span style="flex:1">✏️ Bericht bearbeiten${o.aenderung?.status==="frei"&&o.aenderung.grund?`<br><span class="small">Änderung: ${esc(o.aenderung.grund)}</span>`:""}</span><button class="btn sm ok" id="bearbFertig">✓ ${o.aenderung?.status==="frei"&&!can.planen()?"Änderung abgeben":"Fertig"}</button></div>`;
   if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
   // Kopf
@@ -1669,7 +1676,7 @@ function viewDetail(id){
   if(kompakt){ if(!can.planen() && o.nachgetragen?.[myId()]) h+=anteilKarte(o); }
   else if(o.gemeinsam && can.sub()){
     if(!frueh) h+=anteilKarte(o);
-  } else if(erl || berichtGesperrt(o) || berichtAbgegeben(o)){
+  } else if((erl || berichtGesperrt(o) || berichtAbgegeben(o)) && !(S.bearbeiten[id]&&aenderungFrei(o))){
     const stand=o.bestaetigtAm?`bestätigt am ${fmtDT(o.bestaetigtAm)} – nicht mehr änderbar`:o.berichtStatus==="gesendet"?"an meta gesendet – nicht mehr änderbar":o.berichtStatus==="pruefung"?"abgegeben – wartet auf Bestätigung durch JD Brüder":"fertig – nicht mehr änderbar";
     if(o.abschluss||o.bericht) h+=`<button class="card fold foldbtn" id="berichtAnsehen" style="width:100%;text-align:left;border:0;cursor:pointer"><b>📄 Montagebericht</b><span class="small mute">ansehen · ${stand}</span></button>`;
   } else if(can.einsatz() && !frueh){
@@ -1774,9 +1781,23 @@ function abschlussStand(o,f,reklas){
       :ab==="verzicht"?zeile("ok","Sichtabnahme nicht angefordert"):zeile(abnahmeFaellig(o)?"bad":"warn","Sichtabnahme fehlt"); }
   const off=reklas.filter(r=>r.offen).length; if(reklas.length) z+=zeile(off?"warn":"ok",off?`${off} Reklamation${off>1?"en":""} offen`:"Reklamationen erledigt");
   z+=abgerechnet(o)?zeile("ok","Vergütung von meta erhalten",[o.abgerechnetMit?"Abrechnung "+esc(o.abgerechnetMit):"",can.finanzen()&&f?fmtEUR(f.summe):""].filter(Boolean).join(" · ")):zeile("warn","Vergütung von meta steht noch aus");
+  const ae=o.aenderung;
+  if(ae?.status==="angefragt") z+=`<div class="ab-z warn"><span class="ab-i">✏️</span><div style="flex:1"><b>${chef?`${esc(nameOf(ae.von))} möchte ${ae.art==="anteil"?"den Anteil":"den Bericht"} ändern`:"Änderung angefragt – wartet auf Freigabe"}</b><div class="small mute">„${esc(ae.grund||"")}“ · ${fmtDT(ae.am)}</div>
+    ${chef?`<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div>`:""}</div></div>`;
+  else if(ae?.status==="frei" && ae.von===myId()) z+=`<div class="ab-z ok"><span class="ab-i">✏️</span><div style="flex:1"><b>Änderung freigegeben</b><div class="small mute">Du kannst jetzt bearbeiten.</div><button class="btn sm ok" id="aendLos" style="margin-top:6px">✏️ Jetzt bearbeiten</button></div></div>`;
   return `<div class="card ab-k"><div class="ab-liste">${z}</div>${chef?`<button class="btn sm ghost block" id="mitDazu" style="margin-top:8px">👷 Mitmonteur / Subunternehmer dazunehmen</button>`:""}</div>`;
 }
 // Bericht kurz zusammengefasst – mit allen Bildern (antippen = groß)
+// Sub/Monteur: Änderung am abgegebenen/bestätigten Bericht oder Anteil anfragen – der Chef gibt frei
+function aenderungAnfragen(id,art){
+  modal(`<h2>✏️ Änderung anfragen</h2><div class="small mute">JD Brüder bekommt eine Nachricht und gibt ${art==="anteil"?"deinen Anteil":"den Bericht"} zum Ändern frei.</div>
+   <label class="f">Was soll geändert werden? *</label><textarea class="i" id="ag" placeholder="z. B. 2 Türen vergessen, Kilometer falsch …"></textarea>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Anfrage senden</button></div>`,(m,close)=>{
+    m.querySelector("#ok").onclick=async()=>{ const g=m.querySelector("#ag").value.trim(); if(!g) return toast("Bitte kurz schreiben, was geändert werden soll");
+      await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art,grund:g.slice(0,500),status:"angefragt"}});
+      nachrichtSenden(id,`✏️ Änderungsanfrage zum ${art==="anteil"?"Anteil":"Bericht"}: ${g}`); close(); toast("Anfrage gesendet ✓ – du bekommst Bescheid",3500); };
+  });
+}
 function berichtAnsicht(id){
   const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o), rek=istReklaAuftrag(o);
   const titel=o.berichtTyp==="leerfahrt"?"Leerfahrt":rek?"Reklamationsbericht":"Montagebericht";
@@ -1800,12 +1821,19 @@ function berichtAnsicht(id){
    ${gruppe("Vorher",fk("vorher"))}${gruppe("Nachher",fk("nachher"))}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"_blob/"+a)))}
    <div style="display:grid;gap:8px;margin-top:14px">
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
-    ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`:""}
+    ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
+      :can.planen()&&can.einsatz()?`<button class="btn ghost block" id="oeffnen">🔓 Bericht wieder öffnen</button>`
+      :o.aenderung?.status==="angefragt"?`<div class="small mute" style="text-align:center">✏️ Änderung angefragt – wartet auf Freigabe</div>`
+      :(o.abschluss?.by===myId()||o.berichtVonSub===myId()||o.berichtVon===myId())?`<button class="btn ghost block" id="anfrage">✏️ Änderung anfragen</button>`:""}
     <button class="btn block" data-close>Schließen</button></div>`,(m,close)=>{
     m.querySelectorAll("[data-z]").forEach(t=>t.onclick=()=>lightbox(t.dataset.z));
     m.querySelector("#pdfAns").onclick=async()=>{ const bt=m.querySelector("#pdfAns"); bt.disabled=true; bt.innerHTML=`<span class="spin"></span> wird erstellt …`;
       try{ const cs=await renderVordruck(o); vorschauZeigen(o.unterschrift?cs:cs.slice(0,1),`${titel} ${o.nr}`); }catch(e){ toast("Vorschau nicht möglich"); } bt.disabled=false; bt.textContent="📄 Bericht-PDF ansehen"; };
     m.querySelector("#bearb") && (m.querySelector("#bearb").onclick=()=>{ S.bearbeiten[id]=true; close(); render(); scrollTo(0,0); });
+    m.querySelector("#oeffnen") && (m.querySelector("#oeffnen").onclick=async()=>{ close();
+      if(!await confirmBox("Bericht wieder öffnen?",`Der Bericht ist ${o.berichtStatus==="gesendet"?"schon an meta gesendet":"bestätigt"}. Du kannst ihn ändern${o.berichtStatus==="gesendet"?" und danach erneut an meta senden":""}.`,"Öffnen","warn")) return;
+      await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art:"bericht",grund:"vom Chef geöffnet",status:"frei"}}); S.bearbeiten[id]=true; render(); scrollTo(0,0); });
+    m.querySelector("#anfrage") && (m.querySelector("#anfrage").onclick=()=>{ close(); aenderungAnfragen(id,"bericht"); });
   });
 }
 function thumbs(list, kat, canAdd){
@@ -2000,6 +2028,7 @@ function einsatzCard(o,fk){
      <div class="row" style="flex-wrap:nowrap"><input class="i" id="fzText" placeholder="z. B. 2 Autos, 2 Anhänger" value="${esc(e.fahrzeug==="sonst"?e.fahrzeugText||"":"")}"><button class="btn pri" id="fzTextOk" style="white-space:nowrap">Übernehmen</button></div>`;
     }
   } else if(st==="ankunft"){
+    const vorO=S.orders[e.vonAuftrag]; if(vorO && !istFertig(vorO)) h+=`<div class="bericht-l" style="margin:0 0 10px">📝 Bericht für <a href="#a-${esc(vorO.id)}">${esc(vorO.nr)}</a> ist noch offen – jetzt während der Fahrt weiterschreiben</div>`;
     h+=`<div class="q">Auf der Baustelle angekommen?</div>
      <div class="small mute" style="margin-bottom:10px">Abfahrt ${fmtDT(e.abfahrtAm)} · ${esc(adresseOf(o))}</div>
      ${S.fahrten[e.fahrtId]?.offen?`<div class="fb-box"><label class="f" style="margin-top:0">🚗 Kilometerstand jetzt (${esc(S.fahrzeuge[S.fahrten[e.fahrtId].fahrzeugId]?.kennzeichen||"")}, losgefahren bei ${kmFmt(S.fahrten[e.fahrtId].startKm)} km)</label>
@@ -2075,6 +2104,67 @@ function einsatzCard(o,fk){
   }
   return h+`</div>`;
 }
+// Montage fertig: Zeit stoppen, Übernachtungen aus „ab ins Hotel“ übernehmen (keine Nachfrage), dann: weiter zur nächsten Baustelle / Bericht / Heimfahrt
+function naechsteAuftraege(o){
+  return Object.values(S.orders).filter(x=>x.id!==o.id&&sichtbar(x)&&!x.storniert&&!istFertig(x)&&phase(x)==="arbeit"&&(x.monteure||[]).includes(myId())&&!x.einsatz?.fahrzeug)
+    .sort((a,b)=>(a.termin||9e15)-(b.termin||9e15)).filter(x=>!x.termin||terminTag(x)>=tagKey(new Date(Date.now()-3*864e5)));
+}
+async function montageBeenden(id){
+  const o=S.orders[id], now=Date.now(), z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
+  const min=Math.round(z.reduce((s,x)=>s+(x.e-x.s),0)/60000);
+  // Nächte = nur die Abende mit „ab ins Hotel“ (dort wurden Personen schon angegeben)
+  const b=o.bericht||{}, m=new Map((b.naechte||[]).map(n=>[n.datum,n]));
+  z.filter(x=>x.hotel).forEach(x=>{ const t=isoTag(x.s); if(!m.has(t)) m.set(t,{datum:t,personen:String(nn(x.p)||nn(o.einsatz?.personenVorOrt)||nn(b.personen)||""),auto:true}); });
+  const n=[...m.values()].sort((a,c)=>String(a.datum).localeCompare(String(c.datum)));
+  const bp={arbeitszeitMin:min}; if(!b.uebernachtet||n.length) Object.assign(bp,{uebernachtet:n.length?"ja":"nein",naechte:n,uebernachtungen:String(n.length)});
+  await upd(orderPath(id),{zeiten:z,einsatz:{fertigAm:now,naechteAutoAm:now,uebernachtungOk:now},bericht:bp});
+  S.orders[id]={...S.orders[id],zeiten:z,einsatz:{...(o.einsatz||{}),fertigAm:now,naechteAutoAm:now,uebernachtungOk:now},bericht:{...b,...bp}};
+}
+function montageFertigDialog(id){
+  const o=S.orders[id]; const nx=naechsteAuftraege(o), fzs=meineFahrzeuge(), fz=einsatzFz(o);
+  const zeile=x=>`<option value="${esc(x.id)}">${esc(x.nr)} · ${esc(x.bauvorhaben||"")}${x.plzOrt?" · "+esc(x.plzOrt):""}${x.termin?" · "+kurzDatum(x.termin):""}</option>`;
+  modal(`<h2>✓ Montage fertig – wie geht's weiter?</h2><div class="small mute">Der Timer wird gestoppt. Übernachtungen aus „ab ins Hotel“ sind schon eingetragen.</div>
+   <div class="los-k" style="margin-top:12px">
+    <button class="btn ok block" data-weg="weiter">🚗 Weiter zur nächsten Baustelle</button>
+    <button class="btn block" data-weg="bericht">📝 Erst den Bericht schreiben</button>
+    <button class="btn block" data-weg="heim">🏠 Heimfahrt / Feierabend</button></div>
+   <div id="wW" style="display:none;margin-top:12px">
+    <label class="f">Zu welcher Baustelle?</label>
+    ${nx.length?`<div class="ziel-w" id="nxL">${nx.slice(0,6).map((x,i)=>`<button class="fp ${i===0?"on":""}" data-nx="${esc(x.id)}">${esc(x.nr)}${x.termin?` · ${kurzDatum(x.termin)}`:""}</button>`).join("")}</div>`:`<div class="small mute">Keine weiteren Termine für dich – bitte unten wählen.</div>`}
+    <select class="i" id="nxS" style="margin-top:8px"><option value="">${nx.length?"– andere Baustelle –":"– Baustelle wählen –"}</option>${Object.values(S.orders).filter(x=>x.id!==id&&sichtbar(x)&&!x.storniert&&!istFertig(x)&&phase(x)!=="offen").sort((a,b)=>(a.termin||9e15)-(b.termin||9e15)).map(zeile).join("")}</select>
+    <div class="small" id="nxInfo" style="margin-top:6px;font-weight:600"></div>
+    ${fz?`<label class="f">🚗 Kilometerstand jetzt (${esc(S.fahrzeuge[fz].kennzeichen)})</label><input class="i km-gross" id="nxKm" inputmode="numeric" value="${kmStand(fz)}">`:""}
+    <button class="btn ok block" id="nxLos" style="margin-top:12px;min-height:56px;font-size:16px">▶ Losfahren – Navigation starten</button>
+    <div class="small mute" style="margin-top:6px">Den Bericht für ${esc(o.nr)} kannst du während der Fahrt weiterschreiben – oben in der Fahrt-Leiste.</div></div>
+   <button class="btn ghost block" data-close style="margin-top:10px">Abbrechen</button>`,(m,close)=>{
+    let ziel=nx[0]?.id||"";
+    const info=()=>{ const x=S.orders[ziel]; m.querySelector("#nxInfo").textContent=x?`→ ${x.nr} ${x.bauvorhaben||""}${adresseOf(x)?" · "+adresseOf(x):""}`:""; };
+    m.querySelectorAll("[data-nx]").forEach(b=>b.onclick=()=>{ ziel=b.dataset.nx; m.querySelectorAll("[data-nx]").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#nxS").value=""; info(); });
+    m.querySelector("#nxS").onchange=()=>{ const v=m.querySelector("#nxS").value; if(v){ ziel=v; m.querySelectorAll("[data-nx]").forEach(x=>x.classList.remove("on")); } info(); };
+    m.querySelectorAll("[data-weg]").forEach(b=>b.onclick=async()=>{
+      const w=b.dataset.weg;
+      if(w==="weiter"){ m.querySelector("#wW").style.display=""; m.querySelectorAll("[data-weg]").forEach(x=>x.style.display="none"); info(); return; }
+      b.disabled=true; await montageBeenden(id); close(); render();
+      if(w==="bericht") setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),300);
+      if(w==="heim"){ toast("Feierabend 🏠 – den Bericht kannst du jederzeit fertig schreiben",3500); if(fzs.length) losfahrenDialog({fzId:fz||undefined,ziel:"zuhause",vonZiel:"baustelle",vonAuftragId:id,navi:false}); }
+    });
+    m.querySelector("#nxLos").onclick=async()=>{
+      const x=S.orders[ziel]; if(!x) return toast("Bitte die nächste Baustelle wählen");
+      const kmV=(m.querySelector("#nxKm")?.value||"").trim(); if(fz && (kmV===""||isNaN(nn(kmV)))) return toast("Bitte den Kilometerstand eintragen");
+      const bt=m.querySelector("#nxLos"); bt.disabled=true;
+      await montageBeenden(id);
+      let extra={};
+      if(fz){ const fid=await fahrtStarten({fzId:fz,startKm:kmV,auftragId:x.id,zweck:`Montage Auftrag ${x.nr}`,von:adresseOf(o),nach:adresseOf(x),ziel:"baustelle",vonZiel:"baustelle",vonAuftragId:id});
+        if(!fid){ bt.disabled=false; return; } extra={fahrtId:fid,fahrtFz:fz}; startGeoMerken(fid); }
+      await upd(orderPath(x.id),{einsatz:{fahrzeug:o.einsatz?.fahrzeug||"auto",fahrzeugText:o.einsatz?.fahrzeugText||null,abfahrtAm:Date.now(),von:myId(),vonAuftrag:id,...extra}});
+      close(); render();
+      if(adresseOf(x)) navOeffnen(adresseOf(x)); else toast(`Gute Fahrt 🚗 – nach ${x.nr}`,3000);
+      setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),400);
+    };
+  });
+}
+// Berichte, die noch offen sind (Montage fertig, Bericht nicht abgegeben) – z. B. während der Fahrt weiterschreiben
+const offeneBerichte=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&(o.monteure||[]).includes(myId())&&["bericht","rekla","abnahme"].includes(schritt(o)));
 // Zeit-Leiste ab Montagestart: Zeit anzeigen und jederzeit stoppen / weiterlaufen lassen
 function zeitLeiste(o){
   if(!(o.zeiten||[]).length) return "";
@@ -2112,6 +2202,7 @@ function reklaBerichtCard(o,fk){
   const b=o.bericht||{}, e=o.einsatz||{}, az=arbeitszeitMin(o), gest=totalMs(o)?Math.round(totalMs(o)/60000):null;
   const vl=vorleistungZeilen(o);
   return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}</div>`:""}
+   ${uebernachtungFold(o)}
    <div class="card" id="berichtCard"><h3>🛠 Reklamationsbericht</h3>
    <div class="small mute" style="margin-bottom:6px">Bei Reklamationen zählen nur Arbeitszeit, Personen, Fahrt und Übernachtung – dazu, was gemacht wurde.</div>
    <div class="grid3">
@@ -2143,7 +2234,13 @@ function berichtCard(o,fk){
   const vl=vorleistungZeilen(o);
   return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
    ${S.lohnPos.length?lohnCard(o,{montagebericht:true}):""}
+   ${uebernachtungFold(o)}
    <div class="card"><h3>Geschosse &amp; Fotos</h3>${geschTeil(o)}<label class="f">Fotos nach der Montage</label>${thumbs(fk("nachher"),"nachher",true)}</div>`;
+}
+function uebernachtungFold(o){
+  const b=o.bericht||{}, u=uebernachtet(b), n=b.naechte||[];
+  const info=u==="ja"?`${n.length||naechteAnzahl(b)} ${(n.length||naechteAnzahl(b))===1?"Nacht":"Nächte"}${personenNaechte(b)?` · ${personenNaechte(b)} Pers.-Übern.`:""}`:u==="nein"?"keine":"nicht angegeben";
+  return `<details class="card fold" data-fold="${esc(o.id)}:ueb"><summary><b>🛏 Übernachtung</b><span class="small mute">${info} · ändern</span></summary><div class="foldin">${uebernachtungTeil(o,false)}</div></details>`;
 }
 function uebernachtungTeil(o,schritt){
   const b=o.bericht||{}, u=uebernachtet(b), n=b.naechte||[], alt=u==="ja"&&!n.length?naechteAnzahl(b):0;
@@ -2253,13 +2350,7 @@ function bindEinsatz(o){
     const bp={personen:String(pv)}; if(leer(o.bericht?.istKm)) bp.istKm=km;
     await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv,anfahrtKm:km},bericht:bp}); toast("Montage läuft ⏱ – jetzt Vorher-Fotos machen 📷",3500);
   });
-  $("#montageFertig") && ($("#montageFertig").onclick=async()=>{
-    if(!await confirmBox("Montage abgeschlossen?","Der Timer wird gestoppt. Die Arbeitszeit je Tag wird nur intern für die Statistik gespeichert – sie steht nicht im Montagebericht.","Ja, abgeschlossen","ok")) return;
-    const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=now;
-    const min=Math.round(z.reduce((s,x)=>s+(x.e-x.s),0)/60000);
-    await upd(P,{zeiten:z,einsatz:{fertigAm:now},bericht:{arbeitszeitMin:min}});
-    setTimeout(()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}),300);
-  });
+  $("#montageFertig") && ($("#montageFertig").onclick=()=>montageFertigDialog(id));
   $("#toBericht") && ($("#toBericht").onclick=()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}));
   // Bericht fertig → Reklamation? → Sichtabnahme? → Unterschreiben / Versenden
   const nachOben=()=>setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),120);
@@ -3232,7 +3323,8 @@ async function ankunftPruefen(){
 function fahrtLeiste(){
   const f=offeneFahrt(); if(!f) return "";
   const o=S.orders[f.auftragId];
-  return `<div class="fahrt-l"><div style="min-width:0;flex:1"><b>🚗 Fahrt läuft</b><div class="small mute" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.fahrzeuge[f.fahrzeugId]?.kennzeichen||"")} · seit ${new Date(f.startAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} · ab ${kmFmt(f.startKm)} km${o?` · ${esc(o.nr)}`:f.nach?` · ${esc(f.nach)}`:""}</div></div><button class="btn ok" data-ankunft="${esc(f.id)}">🏁 Angekommen</button></div>`;
+  const ob=offeneBerichte().filter(x=>x.id!==f.auftragId);
+  return `${ob.length?`<div class="bericht-l">📝 Bericht offen: ${ob.slice(0,3).map(x=>`<a href="#a-${esc(x.id)}">${esc(x.nr)} weiterschreiben</a>`).join(" · ")}</div>`:""}<div class="fahrt-l"><div style="min-width:0;flex:1"><b>🚗 Fahrt läuft</b><div class="small mute" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.fahrzeuge[f.fahrzeugId]?.kennzeichen||"")} · seit ${new Date(f.startAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} · ab ${kmFmt(f.startKm)} km${o?` · ${esc(o.nr)}`:f.nach?` · ${esc(f.nach)}`:""}</div></div><button class="btn ok" data-ankunft="${esc(f.id)}">🏁 Angekommen</button></div>`;
 }
 function defaultFahrzeug(){ const l=meineFahrzeuge(); return (l.find(f=>f.zugeordnet===myId())||l[0]||{}).id; }
 function viewFahrten(){
@@ -3676,7 +3768,26 @@ function bindDetail(id){
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
-  $("#bearbFertig") && ($("#bearbFertig").onclick=()=>{ delete S.bearbeiten[id]; render(); scrollTo(0,0); });
+  $("#bearbFertig") && ($("#bearbFertig").onclick=async()=>{
+    const c=S.orders[id];
+    if(c?.aenderung?.status==="frei"){
+      if(!can.planen()){ // Sub/Monteur: Änderung zurück zur Prüfung
+        const art=c.aenderung.art;
+        const p=art==="anteil"?{subAnteil:{[myId()]:{...(c.subAnteil?.[myId()]||{}),abgegebenAm:Date.now(),bestaetigtAm:null}}}:{berichtStatus:"pruefung",bestaetigtAm:null,subGeprueftAm:null};
+        await upd(P,{...p,aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now()}});
+        nachrichtSenden(id,`✏️ Meine Änderung ist fertig – bitte den ${art==="anteil"?"Anteil":"Bericht"} nochmal prüfen.`);
+        toast("Änderung abgegeben ✓ – JD Brüder prüft sie",3500);
+      } else await upd(P,{aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now()}});
+    }
+    delete S.bearbeiten[id]; render(); scrollTo(0,0); });
+  $("#aendFrei") && ($("#aendFrei").onclick=async()=>{ const c=S.orders[id], a=c.aenderung;
+    if(!await confirmBox("Änderung freigeben?",`<b>${esc(nameOf(a.von))}</b> möchte ${a.art==="anteil"?"den Anteil":"den Bericht"} ändern:<br>„${esc(a.grund||"")}“<br><br>Danach kann ${esc(nameOf(a.von))} wieder bearbeiten und gibt die Änderung erneut zur Prüfung ab.`,"Freigeben","ok")) return;
+    const p={aenderung:{...a,status:"frei",freiAm:Date.now(),freiVon:myId()}};
+    if(a.art==="anteil") p.subAnteil={[a.von]:{...(c.subAnteil?.[a.von]||{}),abgegebenAm:null,bestaetigtAm:null}};
+    await upd(P,p); nachrichtSenden(id,`✅ Deine Änderung ist freigegeben – du kannst ${a.art==="anteil"?"deinen Anteil":"den Bericht"} jetzt bearbeiten.`); toast("Freigegeben ✓"); });
+  $("#aendNein") && ($("#aendNein").onclick=async()=>{ const c=S.orders[id], a=c.aenderung; if(!await confirmBox("Änderung ablehnen?","Der Bericht bleibt, wie er ist.","Ablehnen","bad")) return;
+    await upd(P,{aenderung:{...a,status:"abgelehnt",am2:Date.now()}}); nachrichtSenden(id,"❌ Deine Änderungsanfrage wurde abgelehnt – der Bericht bleibt so."); });
+  $("#aendLos") && ($("#aendLos").onclick=()=>{ S.bearbeiten[id]=true; render(); scrollTo(0,0); });
   $("#terminieren") && ($("#terminieren").onclick=()=>terminDialog(id));
   $("#terminSeg")?.querySelectorAll("button").forEach(b=>b.onclick=()=>upd(P,{terminStatus:b.dataset.t}));
   const td=$("#terminDatum"); if(td) td.onchange=async()=>{ await upd(P,{termin:td.value?new Date(td.value+"T08:00:00").getTime():null, terminStatus:td.value?"fest":o.terminStatus||"zu_terminieren"}); if(td.value) S.sync?.run({termin:id}).catch(()=>{}); };
@@ -3703,11 +3814,13 @@ function bindDetail(id){
       <input class="i km-gross" id="hkm" inputmode="numeric" value="${kmStand(hFz)}"><div class="small mute" style="margin-top:4px">Im Hotel tippst du „Angekommen“ und trägst den neuen Stand ein.</div>`
       :`<label class="f">Wie viele km von der Baustelle zum Hotel?</label>
       <input class="i" id="hk" inputmode="decimal" value="${esc(kmAlt)}" placeholder="z. B. 12" style="font-size:18px;text-align:center">`}
-      <label class="f">Wie viele Personen übernachten?</label>
-      <div class="row" style="flex-wrap:nowrap"><button class="btn" data-hp="-1" style="width:56px">−</button><input class="i" id="hp" inputmode="numeric" value="${esc(pAlt)}" style="text-align:center;font-weight:700"><button class="btn" data-hp="1" style="width:56px">＋</button></div>
+      ${pAlt?`<div class="small" style="margin-top:12px;font-weight:600" id="hpInfo">🛏 ${esc(pAlt)} Personen übernachten · <a href="#" id="hpAend">ändern</a></div>`:""}
+      <div id="hpW" ${pAlt?'style="display:none"':""}><label class="f">Wie viele Personen übernachten?</label>
+      <div class="row" style="flex-wrap:nowrap"><button class="btn" data-hp="-1" style="width:56px">−</button><input class="i" id="hp" inputmode="numeric" value="${esc(pAlt)}" style="text-align:center;font-weight:700"><button class="btn" data-hp="1" style="width:56px">＋</button></div></div>
       <div class="small mute" style="margin-top:6px">Die Übernachtung wird für heute automatisch im Bericht eingetragen.</div>
       <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ok" id="ok">🏨 Feierabend</button></div>`,(m,close)=>{
       m.querySelectorAll("[data-hp]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#hp"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.hp)); });
+      m.querySelector("#hpAend") && (m.querySelector("#hpAend").onclick=e=>{ e.preventDefault(); m.querySelector("#hpW").style.display=""; m.querySelector("#hpInfo").remove(); });
       m.querySelector("#ok").onclick=async()=>{
         const km=(m.querySelector("#hk")?.value||"").trim().replace(",","."), pp=parseInt(m.querySelector("#hp").value,10), hkm=(m.querySelector("#hkm")?.value||"").trim();
         if(hFz){ if(hkm===""||isNaN(nn(hkm))) return toast("Bitte den Kilometerstand eintragen"); }
