@@ -221,6 +221,11 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+.umsatz{display:block;margin:8px 0 2px;text-decoration:none;color:inherit}
+.umsatz-t{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mute);margin:0 2px 3px}
+.umsatz-t b{color:var(--ink)}
+.umsatz-b{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+.umsatz-b>div{height:100%;border-radius:999px;background-image:linear-gradient(90deg,#d92d20 0%,#f59e0b 50%,#16a34a 100%);background-repeat:no-repeat;transition:width .6s}
 .ber-fakten{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
 .ber-fakten span{background:var(--greybg);border-radius:999px;padding:4px 10px;font-size:13px;font-weight:600}
 .ab-z{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);font-size:14.5px}
@@ -495,7 +500,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="2d0a3028136d";</script>
+<script>window.JD_BUILD="1e9247267ad5";</script>
 </head>
 <body>
 <header class="top">
@@ -1300,7 +1305,7 @@ function viewListe(){
   const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
   list=list.filter(imBereich);
   const tun=zuTun();
-  let h=`${fahrtLeiste()}<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>
+  let h=`${fahrtLeiste()}<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>${umsatzStreifen()}
   ${tun.length?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}${badge(n)}</button>`).join("")}</div>`:""}
   <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
@@ -3387,6 +3392,17 @@ function viewRekla(){
   return h;
 }
 
+/* ---------- Umsatz-Streifen: 0 € links bis Monatsziel rechts, rot → gelb → grün ---------- */
+function umsatzMonat(d=new Date()){ return Object.values(S.fin).filter(f=>{ const x=new Date(f.datum||0); return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear(); }).reduce((s,f)=>s+(Number(f.summe)||0),0); }
+function umsatzStreifen(){
+  if(!can.finanzen()) return "";
+  const ziel=Number(S.settings.umsatzZiel)||30000, u=umsatzMonat(), p=Math.max(0,Math.min(1,u/ziel));
+  const monat=new Date().toLocaleDateString("de-DE",{month:"long"});
+  const eur=n=>Math.round(n).toLocaleString("de-DE")+" €";
+  return `<a class="umsatz" href="#geld" title="Umsatz ${esc(monat)}: ${eur(u)} von ${eur(ziel)}">
+    <div class="umsatz-t"><span>💶 ${esc(monat)}: <b>${eur(u)}</b></span><span>${u>=ziel?"🎉 Ziel erreicht":`${Math.round(p*100)} % von ${eur(ziel)}`}</span></div>
+    <div class="umsatz-b"><div style="width:${(p*100).toFixed(1)}%;background-size:${p>0?(100/p).toFixed(1):100}% 100%"></div></div></a>`;
+}
 /* ---------- Abrechnung ---------- */
 function viewGeld(){
   const rows=Object.values(S.fin).map(f=>({f,o:S.orders[f.auftragId||f.id]||{nr:f.nr||f.id,id:f.auftragId||f.id}})).sort((a,b)=>(b.f.datum||0)-(a.f.datum||0));
