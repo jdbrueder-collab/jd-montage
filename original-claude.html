@@ -836,7 +836,7 @@ function offeneReklas(id){ return Object.values(S.reklas).filter(r=>r.auftragId=
 function istFertig(o){ return !!o.abschluss; }
 // Bereiche der Startansicht: nicht verplant → verplant & in Arbeit → erledigt; stornierte extra
 // Weg eines Auftrags: nicht verplant → abholbereit → terminiert → erledigt (Storniert steht abseits)
-const PHASEN=[["offen","Nicht verplant"],["abholbereit","Abholbereit"],["arbeit","Terminiert"],["fertig","Fertig­gestellt"],["erledigt","Erledigt"],["storniert","Storniert"]];
+const PHASEN=[["offen","Aufträge"],["abholbereit","Abholbereit"],["arbeit","Terminiert"],["fertig","Fertig­gestellt"],["erledigt","Erledigt"],["storniert","Storniert"]];
 const HAUPT_PHASEN=PHASEN.filter(([k])=>k!=="storniert");
 // Land der Baustelle: von Hand festgelegt, sonst aus der Adresse erkannt (L-1234, 4-stellige PLZ, „Luxemburg“)
 const LAENDER={de:["🇩🇪","Deutschland"],lu:["🇱🇺","Luxemburg"]};
@@ -1128,7 +1128,7 @@ function orderChips(o){
     else c.push(`<span class="chip warn">Muss terminiert werden</span>`);
     const p=PROD[o.prodStatus||"offen"];
     if(abhBereit(o)) c.push(`<span class="chip abh">✓ Abholbereit${o.abholbereitBestaetigt?" · meta":""}</span>`);
-    else if(o.prodStatus==="abholbereit" && o.nichtVerplant) c.push(`<span class="chip">↩ von Hand nach „Nicht verplant“</span>`);
+    else if(o.prodStatus==="abholbereit" && o.nichtVerplant) c.push(`<span class="chip">↩ von Hand nach „Aufträge“</span>`);
     // Produktionsstand (offen / in Produktion / produziert) wird nicht mehr angezeigt – nur „Abholbereit“
     if(o.quelle==="mail-dispo"&&!o.zusage) c.push(`<span class="chip gold">📨 Anfrage von meta</span>`);
     if(o.versand) c.push(`<span class="chip ${/nicht/i.test(o.versand)?"":"ok"}">${esc(o.versand)}</span>`);
@@ -1218,7 +1218,7 @@ function gruppen(list){
   const absteigend=S.filter==="erledigt"||S.filter==="fertig"||S.filter==="storniert";
   const keys=Object.keys(groups).map(Number).sort((a,b)=>absteigend?b-a:a-b);
   const nowK=wkKey(NOW.jahr,NOW.kw);
-  const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Nicht verplant“</button>`:"";
+  const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Aufträge“</button>`:"";
   return keys.map(k=>{ const g=groups[k];
     g.items.sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
     let range=""; if(k){ const m=mondayOf(g.w.jahr,g.w.kw); const f=new Date(m); f.setDate(f.getDate()+4); range=`${m.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${f.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`; }
@@ -1564,6 +1564,7 @@ function viewDetail(id){
   const erl=phase(o)==="erledigt"||(phase(o)==="fertig"&&(berichtVerschickt(o)||berichtAbgegeben(o)));
   // Nicht verplant / Abholbereit: nur Kopf, Baustelle & Kunde, Unterlagen (+ Knopf „Terminieren“)
   const frueh=phase(o)==="offen"||phase(o)==="abholbereit";
+  const nurAnsehen=phase(o)==="offen"; // Bereich „Aufträge“: nur ansehen – Nummer, Baustelle, Unterlagen
   // Fertiggestellt / Erledigt: nur Nummer, Stand (zu prüfen / erledigt), Bericht und Unterlagen
   const kompakt=(phase(o)==="fertig"||phase(o)==="erledigt") && !S.bearbeiten[id] && !(o.gemeinsam&&can.sub()) && !o.storniert;
   // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
@@ -1576,23 +1577,23 @@ function viewDetail(id){
   h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
-     ${kompakt?"":`<div class="kopf-akt">
+     ${kompakt||nurAnsehen?"":`<div class="kopf-akt">
      ${frueh&&can.planen()?`<button class="btn pri" id="terminieren">📅 Terminieren</button>`:""}
      ${addr?`<button class="btn ${frueh?"":"pri"}" data-zur-baustelle="${esc(id)}">🧭 Zur Baustelle</button>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument</button>`}
      ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument</button>`:""}
      ${can.planen()&&!erl&&!o.storniert&&o.terminStatus!=="fest"?`<button class="btn" id="terminAnfrage">📧 Termin anfragen</button>`:""}
-     ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost" data-nv="${esc(id)}">↩ Nicht verplant</button>`:""}
+     ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost" data-nv="${esc(id)}">↩ nach „Aufträge“</button>`:""}
      ${frueh&&can.planen()&&o.nichtVerplant&&o.prodStatus==="abholbereit"?`<button class="btn ghost" data-nv-zurueck="${esc(id)}">✓ Wieder abholbereit</button>`:""}
      </div>`}
-     ${!kompakt&&((addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel")))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
+     ${!kompakt&&!nurAnsehen&&((addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel")))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
   if(kompakt) h+=abschlussStand(o,f,reklas);
-  if(!kompakt) h+=terminAnfrageKarte(o);
+  if(!kompakt&&!nurAnsehen) h+=terminAnfrageKarte(o);
   // Eingeteilte: Termin bestätigen
   if(!erl && terminOffenFuerMich(o)) h+=`<div class="card tbest"><div style="font-weight:750;font-size:16px">📅 ${esc(langDatum(o.termin))} – passt der Termin?</div>
      <div class="small mute" style="margin-top:2px">JD Brüder sieht deine Antwort sofort.</div>
      <div class="grid2" style="margin-top:10px"><button class="btn ok" id="tOk">👍 Passt</button><button class="btn" id="tNein">✋ Passt nicht</button></div></div>`;
-  if(!kompakt||ungelesen(o.id)) h+=nachrichtenKarte(o);
+  if(!nurAnsehen && (!kompakt||ungelesen(o.id))) h+=nachrichtenKarte(o);
 
   // Planung: Datum eintragen (= terminiert), Auftrag zuteilen, ggf. stornieren
   const knoepfe=[]; // kleine Knöpfe nebeneinander, gehen beim Antippen auf
@@ -3628,7 +3629,7 @@ function bind(r){
   app.querySelectorAll("[data-ankunft]").forEach(b=>b.onclick=()=>ankunftDialog(b.dataset.ankunft));
   app.querySelectorAll("[data-kal-tag]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalTag)).getTime()}; render(); });
   app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
-    const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Nicht verplant“`,3000); });
+    const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Aufträge“`,3000); });
   app.querySelectorAll("[data-nv-zurueck]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); const o=S.orders[b.dataset.nvZurueck]; if(!o) return;
     await upd(orderPath(o.id),{nichtVerplant:null}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:null}; render(); toast(`${o.nr} steht wieder unter „Abholbereit“`,3000); });
   app.querySelectorAll("[data-rk-toggle]").forEach(b=>b.onclick=async()=>{ const rk=S.reklas[b.dataset.rkToggle]; await upd("reklamationen/"+rk.id,{offen:!rk.offen, erledigtAm:rk.offen?Date.now():null, erledigtVon:rk.offen?myId():null}); toast(rk.offen?"Reklamation erledigt ✓":"Wieder geöffnet"); });
