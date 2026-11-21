@@ -3380,11 +3380,15 @@ function viewRekla(){
 /* ---------- Umsatz-Streifen: 0 € links bis Monatsziel rechts, rot → gelb → grün ---------- */
 function umsatzMonat(d=new Date()){ return Object.values(S.fin).filter(f=>{ const x=new Date(f.datum||0); return x.getMonth()===d.getMonth()&&x.getFullYear()===d.getFullYear(); }).reduce((s,f)=>s+(Number(f.summe)||0),0); }
 function umsatzStreifen(){
-  if(!can.finanzen()) return "";
-  const ziel=Number(S.settings.umsatzZiel)||30000, u=umsatzMonat(), p=Math.max(0,Math.min(1,u/ziel));
+  // Chef: Abrechnungen von meta (Ziel 30.000 €) · Subunternehmer: eigene Positionen nach seiner Preisliste (Ziel 5.000 €)
+  let ziel, u, link;
+  if(can.finanzen()){ ziel=Number(S.settings.umsatzZiel)||30000; u=umsatzMonat(); link="#geld"; }
+  else if(can.sub() && subPreiseAn() && S.preise){ const k=monatKey(Date.now()); ziel=Number(S.settings.subUmsatzZiel)||5000; u=subPosten().filter(x=>monatKey(x.am)===k).reduce((s,x)=>s+x.c.total,0); link="#meine"; }
+  else return "";
+  const p=Math.max(0,Math.min(1,u/ziel));
   const monat=new Date().toLocaleDateString("de-DE",{month:"long"});
   const eur=n=>Math.round(n).toLocaleString("de-DE")+" €";
-  return `<a class="umsatz" href="#geld" title="Umsatz ${esc(monat)}: ${eur(u)} von ${eur(ziel)}">
+  return `<a class="umsatz" href="${link}" title="Umsatz ${esc(monat)}: ${eur(u)} von ${eur(ziel)}">
     <div class="umsatz-t"><span>💶 ${esc(monat)}: <b>${eur(u)}</b></span><span>${u>=ziel?"🎉 Ziel erreicht":`${Math.round(p*100)} % von ${eur(ziel)}`}</span></div>
     <div class="umsatz-b"><div style="width:${(p*100).toFixed(1)}%;background-size:${p>0?(100/p).toFixed(1):100}% 100%"></div></div></a>`;
 }
