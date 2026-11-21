@@ -861,7 +861,13 @@ function zuTun(){
 
 /* ============ Boot ============ */
 async function boot(){
-  window.addEventListener("hashchange", ()=>render(true));
+  // App wieder öffnen (auch nach Hintergrund/Neustart): letzte Seite + Bereich + Scrollstand wiederherstellen
+  try{ const l=JSON.parse(localStorage.getItem("jdLetzte")||"null");
+    if(l){ if(!location.hash && l.h && l.h!=="#") history.replaceState(null,"",location.pathname+location.search+l.h); if(l.f) S.filter=l.f; if(l.k) S.kal=l.k; S._scrollZiel=l.h===location.hash?l.y:0; } }catch(e){}
+  const merken=()=>{ try{ localStorage.setItem("jdLetzte",JSON.stringify({h:location.hash,f:S.filter,k:S.kal||null,y:Math.round(window.scrollY)})); }catch(e){} };
+  window.addEventListener("pagehide",merken); document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") merken(); });
+  { let t=null; window.addEventListener("scroll",()=>{ clearTimeout(t); t=setTimeout(merken,400); },{passive:true}); }
+  window.addEventListener("hashchange", ()=>{ S._scrollZiel=0; render(true); merken(); });
   document.addEventListener("focusout", ()=>{ setTimeout(()=>{ if(S.pendingRender && !editing()) { S.pendingRender=false; render(); } },50); });
   setInterval(tick, 1000);
   const claude = window.claude;
@@ -966,6 +972,7 @@ function render(scrollTop){
   else if(r.v==="setup") html+=`<h2 style="margin:0 0 10px;font-size:20px">Setup</h2><div class="setup-grid">${kontoKarte()}${can.setup()?viewSetup():""}</div>`;
   else html+=viewListe();
   app.innerHTML=iconize(html);
+  if(S._scrollZiel && S.loaded){ const y=S._scrollZiel; S._scrollZiel=0; requestAnimationFrame(()=>window.scrollTo(0,y)); setTimeout(()=>window.scrollTo(0,y),120); }
   if(r.v==="setup") setupKnoepfe(app);
   bind(r);
   if(scrollTop) window.scrollTo(0,0);
@@ -1089,7 +1096,7 @@ function liKarte(o, imKal){
   return `<a class="kal-o ${imKal?"":"li"} ${cls}" href="#a-${esc(o.id)}">
     <div class="row between" style="flex-wrap:nowrap;gap:4px"><b class="li-nr">${esc(o.nr)}</b><span class="small">${landOf(o)==="lu"?"🇱🇺":""}${o.kabinen&&o.kabinen!=="0"?` <span class="mute">${esc(o.kabinen)} Kab.</span>`:""}</span></div>
     <div class="kal-bv">${esc(o.bauvorhaben||"Bauvorhaben unbekannt")}</div>
-    ${o.plzOrt?`<div class="small mute kal-ort">${esc(o.plzOrt)}${serieVon(o)?` · ${esc(serieVon(o).name)}`:""}</div>`:""}
+    ${o.plzOrt?`<div class="small mute kal-ort">${istReklaAuftrag(o)?"🛠 Reklamation · ":""}${esc(o.plzOrt)}${serieVon(o)?` · ${esc(serieVon(o).name)}`:""}</div>`:""}
     ${p.length||av?`<div class="li-fuss">${av}${p.map(([c,t])=>c==="msg"?`<span class="msg-b" title="${t} neue Nachricht${t>1?"en":""}">💬${badge(t)}</span>`:`<span class="kal-st ${c}">${t}</span>`).join("")}</div>`:""}</a>`;
 }
 // Liste in Wochen-Kästen (wie die Tage im Kalender)
@@ -1306,6 +1313,7 @@ function anteilChefKarte(o){
 }
 function bindAnteil(id){
   const o=S.orders[id]; if(!o) return; const P=orderPath(id);
+  $("#rkAz") && ($("#rkAz").onchange=()=>{ const m=parseMin($("#rkAz").value); if($("#rkAz").value.trim() && m==null) return toast("Bitte z. B. 3:30 oder 3,5 eintragen"); upd(P,{bericht:{arbeitszeitMin:m}}); });
   document.querySelectorAll("[data-serie]").forEach(b=>b.onclick=async()=>{ const v=b.dataset.serie; if(o.serie===v) return;
     await upd(P,{serie:v}); S.orders[id]={...S.orders[id],serie:v}; render(); toast(`${serieName(S.orders[id])} gewählt`,2200); });
   $("#gemeinsam") && ($("#gemeinsam").onchange=async()=>{ const v=$("#gemeinsam").checked; await upd(P,{gemeinsam:v}); S.orders[id]={...S.orders[id],gemeinsam:v}; render(); toast(v?"🤝 Gemeinsamer Auftrag – der Sub trägt nur seinen Anteil ein":"Normaler Auftrag",3000); });
@@ -1785,7 +1793,39 @@ function sonderVorschlaege(){
   Object.values(S.orders).forEach(x=>(x.bericht?.sonder||[]).forEach(s=>{ const t=(s.arbeit||"").trim(); if(t) cnt[t]=(cnt[t]||0)+1; }));
   return Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b,"de"));
 }
+const istReklaAuftrag=o=>/^R[\s-]?\d/i.test(String(o?.nr||"").trim());
+// Reklamationsbericht: Zeit (gestoppt ab Montagestart), Personen, km, was gemacht wurde, Zusatzarbeiten – keine Positionen
+function reklaBerichtCard(o,fk){
+  const b=o.bericht||{}, e=o.einsatz||{}, az=arbeitszeitMin(o), gest=totalMs(o)?Math.round(totalMs(o)/60000):null;
+  const vl=vorleistungZeilen(o);
+  return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}</div>`:""}
+   <div class="card" id="berichtCard"><h3>🛠 Reklamationsbericht</h3>
+   <div class="small mute" style="margin-bottom:6px">Bei Reklamationen zählen nur Arbeitszeit, Personen, Fahrt und Übernachtung – dazu, was gemacht wurde.</div>
+   <div class="grid3">
+     <div><label class="f">Arbeitszeit</label><input class="i" id="rkAz" value="${az!=null?fmtHMin(az):""}" placeholder="z. B. 3:30">${gest!=null?`<div class="small mute">gestoppt: ${fmtHMin(gest)} Std.</div>`:""}</div>
+     <div><label class="f">Personen</label><input class="i" data-b="personen" inputmode="numeric" value="${esc(b.personen??e.personenVorOrt??"")}"></div>
+     <div><label class="f">Gefahrene km</label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}"></div>
+   </div>
+   <label class="f">Was wurde gemacht?</label>
+   <textarea class="i" data-b="taetigkeit" id="fTaet" placeholder="z. B. Tür Kabine 3 neu eingestellt, Scharnier getauscht, Abdeckkappen ersetzt">${esc(b.taetigkeit??"")}</textarea>
+   <div style="margin-top:14px">${klapp(o.id,"sonder","➕ Zusatzarbeiten",sonderFertig(b).length?`${sonderFertig(b).length} eingetragen`:"keine – antippen zum Ergänzen",`
+   <div class="small mute">Was wurde zusätzlich gemacht? Pro Punkt: Arbeit, Personen, Dauer, Bemerkung und ein Foto.</div>
+   ${sonderListe(b).map((x,i)=>`<div style="margin-top:8px;background:var(--card,#fff);border:1px solid var(--line);border-radius:10px;padding:10px">
+     <div class="row between" style="margin-bottom:6px"><b>Zusatzarbeit ${i+1}</b><button class="btn sm ghost" data-sdel="${i}" title="Entfernen">✕</button></div>
+     <input class="i" data-sf="arbeit" data-si="${i}" value="${esc(x.arbeit||"")}" placeholder="Was wurde gemacht? z. B. Füße geklebt und gebohrt">
+     <div class="grid2" style="margin-top:6px"><input class="i" data-sf="personen" data-si="${i}" inputmode="numeric" value="${esc(x.personen??"")}" placeholder="Personen"><input class="i" data-sf="dauer" data-si="${i}" value="${x.min?fmtHMin(x.min):""}" placeholder="Dauer, z. B. 1:30"></div>
+     <textarea class="i" data-sf="bemerkung" data-si="${i}" placeholder="Bemerkung (optional)" style="margin-top:6px;min-height:54px">${esc(x.bemerkung||"")}</textarea>
+     <div class="small mute" style="margin-top:6px">Foto</div>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,true)}
+   </div>`).join("")}
+   <button class="btn block" id="sAdd" style="margin-top:8px">＋ ${(b.sonder||[]).length?"Weitere Zusatzarbeit":"Zusatzarbeit hinzufügen"}</button>
+`,{card:false})}</div>
+   <label class="f">Weitere Bemerkungen</label>
+   <textarea class="i" data-b="bemerkung" placeholder="optional">${esc(b.bemerkung??"")}</textarea>
+   <label class="f">Fotos</label>${thumbs(fk("nachher"),"nachher",true)}
+  </div>`;
+}
 function berichtCard(o,fk){
+  if(istReklaAuftrag(o)) return reklaBerichtCard(o,fk);
   // Montagebericht = nur noch die Preisliste; daraus entsteht der Bericht an meta (km, Personen, Übernachtung kommen aus dem Einsatz)
   const vl=vorleistungZeilen(o);
   return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
@@ -1824,12 +1864,17 @@ function fehlendeAngaben(o,fk){
   const b=o.bericht||{}, r=[];
   if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen",soft:true});
   if(leer(b.istKm)) r.push({t:"Kilometer fehlen",soft:true});
-  if(leer(b.geschosse)) r.push({t:"Geschosse fehlen"});
+  if(leer(b.geschosse) && !istReklaAuftrag(o)) r.push({t:"Geschosse fehlen"});
   if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Sonderarbeit: Personen und Dauer angeben"});
   if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true});
   else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben"});
-  if(SERIEN().length && !o.serie) r.push({t:"Serie fehlt (im Montagebericht wählen)"});
-  if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Keine Positionen im Montagebericht eingetragen"});
+  if(istReklaAuftrag(o)){
+    if(leer(b.taetigkeit)) r.push({t:"Reklamationsbericht: Was wurde gemacht?"});
+    if(!(arbeitszeitMin(o)>0)) r.push({t:"Arbeitszeit fehlt"});
+  } else {
+    if(SERIEN().length && !o.serie) r.push({t:"Serie fehlt (im Montagebericht wählen)"});
+    if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Keine Positionen im Montagebericht eingetragen"});
+  }
   if(fk && !fk("vorher").length) r.push({t:"Vorher-Fotos fehlen",soft:true});
   if(fk && !fk("nachher").length) r.push({t:"Fotos nach der Montage fehlen"});
   if(!abnahmeOk(o)) r.push({t:"Sichtabnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true});
@@ -2428,7 +2473,7 @@ const fmtZahl=v=>String(v).replace(".",",");
 function vdDefaults(o){
   const b=o.bericht||{};
   const rk=Object.values(S.reklas).filter(r=>r.auftragId===o.id).sort((a,c)=>c.am-a.am)[0];
-  const d={datum:tageText(o),art:"fertigmontage",ok:(o.abschluss&&o.abschluss.typ!=="ok")?"nein":"ja"};
+  const d={datum:tageText(o),art:istReklaAuftrag(o)?"rekla":"fertigmontage",ok:(o.abschluss&&o.abschluss.typ!=="ok")?"nein":"ja"};
   d.m1=S.settings.monteurName||"JD Brüder GbR"; d.n1=S.settings.monteurNr||"286"; d.p1="100";
   // Bemerkungen: alle übrigen Berichtseinträge – Positionen mit Mengen, Tätigkeiten, Sonderleistungen, weitere Bemerkungen
   const tot=summeMengen(o); const lbl=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k;
@@ -2438,7 +2483,7 @@ function vdDefaults(o){
   d.positionen=S.lohnPos.filter(p=>p.k!=="stunden"&&tot[p.k]).map(p=>({m:fmtZahl(tot[p.k]),l:p.label,e:p.einheit||""}));
   Object.keys(tot).filter(k=>k!=="stunden"&&!S.lohnPos.some(p=>p.k===k)).forEach(k=>d.positionen.push({m:fmtZahl(tot[k]),l:lbl(k),e:""}));
   if(b.taetigkeit) bem.push(b.taetigkeit);
-  sonder.forEach(s=>bem.push(`Sonderarbeit: ${sonderZeile(s)}`));
+  sonder.forEach(s=>bem.push(`${istReklaAuftrag(o)?"Zusatzarbeit":"Sonderarbeit"}: ${sonderZeile(s)}`));
   if(!leer(b.personen)||!leer(b.personenMit)) bem.push(`Personen: ${[leer(b.personen)?"":`${b.personen} vor Ort`,leer(b.personenMit)?"":`${b.personenMit} mitgefahren`].filter(Boolean).join(", ")}`);
   if(b.bemerkung) bem.push(b.bemerkung);
   vorleistungZeilen(o).forEach(z=>bem.push(z));
@@ -2456,8 +2501,11 @@ function vdDefaults(o){
   if((b.naechte||[]).length && uebernachtet(b)==="ja") ab.push(`Übernachtung: ${b.naechte.map(x=>`${x.datum?new Date(x.datum+"T12:00:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"}):"?"} ${x.personen||"?"} Pers.`).join(", ")}`);
   d.abrechnung=ab.join(", ");
   // Stunden-Bereich: Sonderleistungen mit Personen und Dauer
-  sonder.slice(0,4).forEach((s,i)=>{ d[`s${i+1}n`]=String(s.personen||1); d[`s${i+1}h`]=fmtStd(s.min); d[`s${i+1}f`]=s.arbeit; });
-  if(!sonder.length && tot.stunden){ d.s1n=b.personen||"1"; d.s1h=fmtZahl(tot.stunden); d.s1f="Zusatzarbeiten"; }
+  // Reklamation: erste Zeile = Arbeitszeit (Personen × Stunden), danach die Zusatzarbeiten
+  const rkZeit=istReklaAuftrag(o)&&arbeitszeitMin(o)>0;
+  if(rkZeit){ d.s1n=String(b.personen||o.einsatz?.personenVorOrt||1); d.s1h=fmtStd(arbeitszeitMin(o)); d.s1f="Reklamation – Arbeitszeit vor Ort"; }
+  sonder.slice(0,rkZeit?3:4).forEach((s,i)=>{ const z=i+(rkZeit?2:1); d[`s${z}n`]=String(s.personen||1); d[`s${z}h`]=fmtStd(s.min); d[`s${z}f`]=s.arbeit; });
+  if(!sonder.length && !rkZeit && tot.stunden){ d.s1n=b.personen||"1"; d.s1h=fmtZahl(tot.stunden); d.s1f="Zusatzarbeiten"; }
   d.uebern=naechteAnzahl(b)?String(naechteAnzahl(b)):"";
   d.leistung="wc"; d.leistungSonst="";
   d.fertigAm=o.abschluss?new Date(o.abschluss.am).toLocaleDateString("de-DE"):tageText(o).split("–").pop();
@@ -3066,7 +3114,7 @@ function bind(r){
     const f=b.dataset.f, normal=HAUPT_PHASEN.some(([k])=>k===f);
     if(f==="zurueck" || (S.filter===f && !normal)) S.filter=S.letzterBereich||meinePhasen()[0][0];
     else { if(!SPEZIAL[S.filter] && S.filter!=="storniert") S.letzterBereich=S.filter; S.filter=f; if(normal) S.letzterBereich=f; }
-    render(true); });
+    render(true); try{ const l=JSON.parse(localStorage.getItem("jdLetzte")||"{}"); localStorage.setItem("jdLetzte",JSON.stringify({...l,f:S.filter})); }catch(e){} });
   $("#nurMeine") && ($("#nurMeine").onclick=()=>{ S.nurMeine=!S.nurMeine; render(); });
   app.querySelectorAll(".fzeile [data-land]").forEach(b=>b.onclick=()=>{ S.land=b.dataset.land; render(); });
   app.querySelectorAll("#wSeg [data-w]").forEach(b=>b.onclick=()=>{ S.wochenNurMeine=b.dataset.w==="1"; render(); });
@@ -3694,11 +3742,12 @@ function berichtText(o){
   if(typ==="leerfahrt"&&lf){ L.push(`- Status: ${lf.status||"Leerfahrt"}`,`- Datum: ${new Date(lf.am).toLocaleDateString("de-DE")}`,lf.fahrzeug?`- Fahrzeug: ${fahrzeugText(lf)}${mitAnhaenger(lf)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Selbst gefahrene km: ${lf.km||"-"}`,`- Personen vor Ort: ${lf.personen||"-"}`,lf.personenMit?`- Mitgefahren: ${lf.personenMit}`:null,`- Zeit: ${Math.floor(lf.minuten/60)} Std ${lf.minuten%60} Min`,`- Grund: ${lf.grund}`,lf.schreibenAm?`- Schreiben an den Kunden gesendet am ${new Date(lf.schreibenAm).toLocaleDateString("de-DE")}${lf.schreibenAn?" an "+lf.schreibenAn:""}`:null); }
   else {
     const uebern=naechteText(b)||"-";
-    L.push(`- Montagetag(e): ${tage||"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,hotelKm(o)?`- Hotelfahrten (Baustelle ↔ Hotel): ${hotelText(o)}`:null,o.einsatz?.fahrzeug?`- Fahrzeug: ${fahrzeugText(o.einsatz)}${mitAnhaenger(o.einsatz)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Geschosse (Material getragen): ${b.geschosse||"-"}`,`- Übernachtungen: ${uebern}`);
+    if(istReklaAuftrag(o) && arbeitszeitMin(o)>0) L.push(`- Reklamation – Arbeitszeit: ${fmtHMin(arbeitszeitMin(o))} Std.${b.personen?` × ${b.personen} Personen`:""}`);
+    L.push(`- Montagetag(e): ${tage||"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,hotelKm(o)?`- Hotelfahrten (Baustelle ↔ Hotel): ${hotelText(o)}`:null,o.einsatz?.fahrzeug?`- Fahrzeug: ${fahrzeugText(o.einsatz)}${mitAnhaenger(o.einsatz)?" – Bitte beachten: Anhängerfahrt":""}`:null,(istReklaAuftrag(o)&&!b.geschosse?null:`- Geschosse (Material getragen): ${b.geschosse||"-"}`),`- Übernachtungen: ${uebern}`);
     const tot=summeMengen(o); const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${(S.lohnPos.find(p=>p.k===k)||{}).label||k}`);
     if(pos.length) L.push(`- Positionen:`,...pos.map(x=>`   • ${x.replace("× "," × ")}`));
     if(b.taetigkeit) L.push(`- Ausgeführt: ${b.taetigkeit}`);
-    sonderFertig(b).forEach(s=>L.push(`- Sonderarbeit: ${sonderZeile(s)}`));
+    sonderFertig(b).forEach(s=>L.push(`- ${istReklaAuftrag(o)?"Zusatzarbeit":"Sonderarbeit"}: ${sonderZeile(s)}`));
     if(b.bemerkung) L.push(`- Bemerkungen: ${b.bemerkung}`);
     vorleistungZeilen(o).forEach(z=>L.push(`- ${z}`));
     if(o.unterschrift) L.push(`- Sichtabnahme unterschrieben von: ${o.unterschrift.name||vd(o).abnahmeName||"-"}${vd(o).firma?` (${vd(o).firma})`:""} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
