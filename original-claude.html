@@ -221,10 +221,18 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+body.nav-aus #nav, body.nav-aus .weiter-k{display:none!important}
+body.nav-aus main{padding-bottom:calc(24px + env(safe-area-inset-bottom))!important}
+details.mini-f{margin-top:4px}
+details.mini-f>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:650;color:var(--brand2,#2563eb);padding:2px 0}
+details.mini-f>summary::-webkit-details-marker{display:none}
+details.mini-f .thumbs .t,details.mini-f .thumbs .add{width:64px;height:64px}
+.mf-z{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.mf-z:first-child{border-top:0}
 .nw-k{background:var(--greybg);border-radius:12px;padding:10px 12px;margin-top:12px}
 .card .nw-k{margin-top:0;background:transparent;padding:0}
 .nw-l{margin-top:10px;display:grid;gap:6px}
-.nw-z{display:flex;gap:8px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px}
+.nw-z{display:flex;gap:8px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:14px}
 .nw-z .thumbs{margin-top:6px}
 .weiter-k{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:var(--ok,#15803d);color:#fff;text-decoration:none;box-shadow:0 0 0 0 rgba(21,128,61,.6),0 8px 24px rgba(0,0,0,.25);animation:weiterGlow 1.8s ease-in-out infinite;max-width:560px;margin:0 auto}
 .weiter-k>span{font-size:22px}.weiter-k>div{flex:1;min-width:0}.weiter-k b{display:block;font-size:15px}.weiter-k small{display:block;font-size:12px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1073,6 +1081,9 @@ function renderNav(){
   if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
   items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length+Object.values(S.zugang||{}).filter(z=>!z.code).length:0]); // Setup: Konto, Benachrichtigungen, Abmelden (Chef: alle Einstellungen)
   setTimeout(weiterKnopf,0);
+  { const oE=r==="detail"?S.orders[route().id]:null;
+    const imEinsatz=!!oE && !istFertig(oE) && phase(oE)==="arbeit" && !!(oE.einsatz?.abfahrtAm||(oE.zeiten||[]).length) && can.einsatz();
+    document.body.classList.toggle("nav-aus",imEinsatz); }
   $("#nav").innerHTML=`<div class="nav-in">${iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}" aria-label="${esc(l)}${n?`, ${n} offen`:""}"><span class="nav-ic">${ic}${n?badge(n):""}</span><span class="nav-l">${l}</span></a>`).join(""))}</div>`;
 }
 
@@ -2202,8 +2213,8 @@ function nachweiseTeil(o,fk,imBericht=false){
    <div style="font-weight:700;margin-bottom:6px">📋 Nachweise – mit Foto</div>
    <div class="ziel-w">${NACHWEISE.map(([k,l])=>`<button class="fp" data-nw="${k}">${l}</button>`).join("")}<button class="fp" data-nw="andere">＋ andere Position</button></div>
    <button class="btn block" id="mehrAufw" style="margin-top:8px;min-height:46px">⏱ Mehraufwand / Sonderbemerkung</button>
-   ${nw.length||so.length?`<div class="nw-l">${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false)}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}
-     ${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>⏱ ${esc(x.arbeit)}</b> · ${fmtStd(x.min)} Std. · ${esc(x.personen||1)} Pers.${x.bemerkung?`<div class="small mute">${esc(x.bemerkung)}</div>`:""}${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false)}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}</div>`
+   ${nw.length||so.length?`<div class="nw-l">${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${fz("nachweis:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("nachweis:"+x.id)} Foto${fz("nachweis:"+x.id)>1?"s":""}</summary>${thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false)}</details>`:""}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}
+     ${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>⏱ ${esc(x.arbeit)}</b> · ${fmtStd(x.min)} Std. · ${esc(x.personen||1)} Pers.${x.bemerkung?`<div class="small mute">${esc(x.bemerkung)}</div>`:""}${fz("sonder:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("sonder:"+x.id)} Foto${fz("sonder:"+x.id)>1?"s":""}</summary>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false)}</details>`:""}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}</div>`
      :`<div class="small mute" style="margin-top:6px">${imBericht?"Keine Nachweise erfasst.":"Antippen, Anzahl eintragen, Foto machen – die Menge steht danach automatisch im Montagebericht."}</div>`}
   </div>`;
 }
@@ -2270,7 +2281,7 @@ function montageFotosTeil(o,fk){
   const l=fk("montage"), gr={};
   l.forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push(f); });
   return `<div style="margin-top:12px"><button class="btn block" id="mFotoBtn" style="min-height:50px">📷 Fotos hinzufügen – mit Position</button>
-   ${l.length?`<div style="margin-top:8px">${Object.entries(gr).map(([k,a])=>`<div class="small" style="font-weight:650;margin:8px 0 4px">📍 ${esc(k)} <span class="mute">(${a.length})</span></div>${thumbs(a,"montage",false)}`).join("")}</div>`:""}</div>`;
+   ${l.length?`<details class="mini-f" style="margin-top:8px"><summary>🗂 Fotos während der Montage · ${l.length}</summary><div style="margin-top:4px">${Object.entries(gr).map(([k,a])=>`<details class="mini-f mf-z" style="display:block"><summary>📍 ${esc(k)} · 📷 ${a.length}</summary>${thumbs(a,"montage",false)}</details>`).join("")}</div></details>`:""}</div>`;
 }
 function positionVorschlaege(o){
   const an=(o.dokInfo?.anlagen||[]).map(a=>[a.raum,a.geschoss].filter(Boolean).join(" · ")).filter(Boolean);
