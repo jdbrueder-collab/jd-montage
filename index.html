@@ -221,6 +221,9 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+.card.ek{padding:12px 14px}
+.ek-t{font-size:17px;line-height:1.3}.ek-t b{font-size:19px;margin-right:4px}.ek-t span{font-weight:600;color:var(--grey)}
+.card.ek .kopf-akt{margin-top:8px}
 body.nav-aus #nav, body.nav-aus .weiter-k{display:none!important}
 body.nav-aus main{padding-bottom:calc(24px + env(safe-area-inset-bottom))!important}
 details.mini-f{margin-top:4px}
@@ -519,7 +522,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="93fb33f1a2dd";</script>
+<script>window.JD_BUILD="f012cf2cd799";</script>
 </head>
 <body>
 <header class="top">
@@ -1629,6 +1632,9 @@ function viewDetail(id){
   // Nicht verplant / Abholbereit: nur Kopf, Baustelle & Kunde, Unterlagen (+ Knopf „Terminieren“)
   const frueh=phase(o)==="offen"||phase(o)==="abholbereit";
   const nurAnsehen=phase(o)==="offen"; // Bereich „Aufträge“: nur ansehen – Nummer, Baustelle, Unterlagen
+  // Laufender Einsatz: nur das Nötigste – Nummer, Bauvorhaben, Navi/Anrufen; ab Montagestart ohne Planung/Baustelle
+  const imEinsatz=!istFertig(o) && phase(o)==="arbeit" && !!(o.einsatz?.abfahrtAm||(o.zeiten||[]).length) && can.einsatz() && !S.bearbeiten[id];
+  const montageLaeuft=imEinsatz && !!(o.einsatz?.startAm||(o.zeiten||[]).length);
   // Fertiggestellt / Erledigt: nur Nummer, Stand (zu prüfen / erledigt), Bericht und Unterlagen
   const kompakt=(phase(o)==="fertig"||phase(o)==="erledigt") && !S.bearbeiten[id] && !(o.gemeinsam&&can.sub()) && !o.storniert;
   // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
@@ -1638,7 +1644,9 @@ function viewDetail(id){
   if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
   // Kopf
-  h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
+  if(imEinsatz) h+=`<div class="card ek"><div class="ek-t"><b>${esc(o.nr)}</b>${o.bauvorhaben?` <span>${esc(o.bauvorhaben)}</span>`:""}</div>
+     <div class="kopf-akt">${addr?`<a class="btn" href="${esc(navUrl(addr))}" target="_blank" rel="noopener">🧭 Navi</a>`:""}${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:""}</div></div>`;
+  else h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
      ${kompakt||nurAnsehen?"":`<div class="kopf-akt">
@@ -1652,18 +1660,18 @@ function viewDetail(id){
      ${!kompakt&&!nurAnsehen&&((addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel")))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
   if(kompakt) h+=abschlussStand(o,f,reklas);
-  if(!kompakt&&!nurAnsehen) h+=terminAnfrageKarte(o);
+  if(!kompakt&&!nurAnsehen&&!imEinsatz) h+=terminAnfrageKarte(o);
   // Eingeteilte: Termin bestätigen
-  if(!erl && terminOffenFuerMich(o)) h+=`<div class="card tbest"><div style="font-weight:750;font-size:16px">📅 ${esc(langDatum(o.termin))} – passt der Termin?</div>
+  if(!erl && !imEinsatz && terminOffenFuerMich(o)) h+=`<div class="card tbest"><div style="font-weight:750;font-size:16px">📅 ${esc(langDatum(o.termin))} – passt der Termin?</div>
      <div class="small mute" style="margin-top:2px">JD Brüder sieht deine Antwort sofort.</div>
      <div class="grid2" style="margin-top:10px"><button class="btn ok" id="tOk">👍 Passt</button><button class="btn" id="tNein">✋ Passt nicht</button></div></div>`;
-  if(!nurAnsehen && (!kompakt||ungelesen(o.id))) h+=nachrichtenKarte(o);
+  if(!nurAnsehen && ((!kompakt&&!imEinsatz)||ungelesen(o.id))) h+=nachrichtenKarte(o);
 
   // Planung: Datum eintragen (= terminiert), Auftrag zuteilen, ggf. stornieren
   const knoepfe=[]; // kleine Knöpfe nebeneinander, gehen beim Antippen auf
   const sk=(key,icon,titel,info,inhalt,extra="")=>`<details class="card fold sk" data-fold="${id}:${key}" ${S.fold[id+":"+key]?"open":""} ${extra}><summary><b>${icon} ${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
   if(kompakt && (o.abschluss||o.bericht||o.berichtStatus)) knoepfe.push(`<button class="card fold sk ber-k" id="berichtAnsehen"><b>${o.berichtTyp==="leerfahrt"?"↩ Leerfahrt":istReklaAuftrag(o)?"🛠 Reklamationsbericht":"📄 Montagebericht"}</b><span class="small mute">ansehen · Bilder</span></button>`);
-  if(!erl && !frueh && !kompakt) knoepfe.push(sk("planung","📅","Planung",[o.termin?kurzDatum(o.termin):"kein Termin",(o.monteure||[]).length?`${(o.monteure||[]).length} 👷`:""].filter(Boolean).join(" · "),`
+  if(!erl && !frueh && !kompakt && !montageLaeuft) knoepfe.push(sk("planung","📅","Planung",[o.termin?kurzDatum(o.termin):"kein Termin",(o.monteure||[]).length?`${(o.monteure||[]).length} 👷`:""].filter(Boolean).join(" · "),`
     <label class="f" style="margin-top:0">Termin</label>
     ${can.planen()?`<input type="date" class="i" id="terminDatum" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">`:`<div style="font-weight:600">${o.termin?new Date(o.termin).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}):`<span class="mute">noch nicht terminiert</span>`}</div>`}
     ${o.prodStatus==="abholbereit"&&o.abholbereitBestaetigt?`<div class="small" style="margin-top:6px;color:var(--ok)">✓ Von meta als abholbereit bestätigt: <b>${esc(o.abholbereitBestaetigt.name)}</b>, ${fmtDT(o.abholbereitBestaetigt.am)}</div>`:""}
@@ -1700,7 +1708,7 @@ function viewDetail(id){
    </details>
    ${!o.bauleiterName&&!o.adresse?`<div class="banner info" style="margin:10px 0 0">Die genauen Baustellendaten stehen auf dem Aufmaß-Deckblatt. ${can.planen()?"Lade das Deckblatt unten bei „Unterlagen“ hoch oder hol es aus der Mail – die App liest es dann aus.":""}</div>`:""}
   `;
-  if(!kompakt) knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
+  if(!kompakt && !montageLaeuft) knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
 
   // Unterlagen
   const unterInhalt=`${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
@@ -1769,7 +1777,7 @@ function viewDetail(id){
     if(off.length) h+=fold("rekla","⚠ Offene Reklamationen",`${off.length} offen`,reklas.map(reklaItem).join(""));
   } else if(erl){
     if(reklas.length) h+=fold("rekla","Reklamationen",`${reklas.filter(r=>r.offen).length} offen`,`${can.einsatz()||can.reklaErledigen()?`<div style="text-align:right"><button class="btn sm ghost" id="newRekla">＋ Reklamation</button></div>`:""}${reklas.map(reklaItem).join("")}`,reklas.some(r=>r.offen));
-  } else if(!frueh && (reklas.length||can.einsatz())){
+  } else if(!frueh && !imEinsatz && (reklas.length||can.einsatz())){
     h+=`<div class="card"><div class="row between"><h3 style="margin:0">Reklamationen</h3>${can.einsatz()||can.reklaErledigen()?`<button class="btn sm ghost" id="newRekla">＋ Reklamation</button>`:""}</div>
       ${reklas.length?reklas.map(reklaItem).join(""):`<div class="small mute" style="margin-top:8px">Keine.</div>`}</div>`;
   }
