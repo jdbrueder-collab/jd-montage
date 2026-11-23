@@ -1820,7 +1820,7 @@ function berichtAnsicht(id){
     ${z("Reklamationen",rk.map(r=>`${r.offen?"● ":"✓ "}${esc(URSACHEN[r.ursache]||r.ursache||"")}: ${esc(r.text||"")}`).join("<br>"))}
     ${z("Sichtabnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
    </dl>
-   ${gruppe("Vorher",fk("vorher"))}${gruppe("Nachher",fk("nachher"))}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["/_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"/_blob/"+a)))}
+   ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("/_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Montage · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["/_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"/_blob/"+a)))}
    <div style="display:grid;gap:8px;margin-top:14px">
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
     ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
@@ -2078,6 +2078,7 @@ function einsatzCard(o,fk){
         :`<button class="btn ok block" id="weiterBtn" style="margin-top:12px;min-height:56px;font-size:16px">▶ ${neuerTag?"Neuer Arbeitstag – weiterarbeiten":"Weiterarbeiten"}</button>`}
      ${tageListe(o)}
      ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}
+     ${montageFotosTeil(o,fk)}
      <button class="btn ok block" id="montageFertig" style="margin-top:14px;min-height:56px;font-size:16px">■ Timer stoppen – Montage abgeschlossen</button>`;
   } else if(st==="rekla"){
     const rl=Object.values(S.reklas).filter(r=>r.auftragId===id&&!r.leerfahrt).sort((a,c)=>a.am-c.am), rf=b.reklaFrage;
@@ -2178,6 +2179,34 @@ function montageFertigDialog(id){
 }
 // Berichte, die noch offen sind (Montage fertig, Bericht nicht abgegeben) – z. B. während der Fahrt weiterschreiben
 const offeneBerichte=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&(o.monteure||[]).includes(myId())&&["bericht","rekla","abnahme"].includes(schritt(o)));
+// Fotos während der Montage – jedes mit Position (z. B. „WC Damen EG · Kabine 2“)
+function montageFotosTeil(o,fk){
+  const l=fk("montage"), gr={};
+  l.forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push(f); });
+  return `<div style="margin-top:12px"><button class="btn block" id="mFotoBtn" style="min-height:50px">📷 Fotos hinzufügen – mit Position</button>
+   ${l.length?`<div style="margin-top:8px">${Object.entries(gr).map(([k,a])=>`<div class="small" style="font-weight:650;margin:8px 0 4px">📍 ${esc(k)} <span class="mute">(${a.length})</span></div>${thumbs(a,"montage",false)}`).join("")}</div>`:""}</div>`;
+}
+function positionVorschlaege(o){
+  const an=(o.dokInfo?.anlagen||[]).map(a=>[a.raum,a.geschoss].filter(Boolean).join(" · ")).filter(Boolean);
+  const pos=nachNutzung(posListe(o),o).slice(0,8).map(x=>x.label);
+  const schon=[...new Set(Object.values(S.fotos).filter(f=>f.auftragId===o.id&&f.position).map(f=>f.position))];
+  return [...new Set([...schon,...an,...pos])].slice(0,14);
+}
+function montageFotoDialog(id){
+  const o=S.orders[id]; const vs=positionVorschlaege(o); let letzte=""; try{ letzte=localStorage.getItem("jdPos:"+id)||""; }catch(e){}
+  modal(`<h2>📷 Fotos hinzufügen</h2><div class="small mute">Wähle oder schreib, welche Position vom Auftrag das ist – die Fotos landen sortiert im Bericht.</div>
+   <label class="f">Position *</label><input class="i" id="mpos" value="${esc(letzte)}" placeholder="z. B. WC Damen EG · Kabine 2 · Urinaltrennwand" list="mposL"><datalist id="mposL">${vs.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+   ${vs.length?`<div class="ziel-w" style="margin-top:8px">${vs.map(v=>`<button class="fp" data-mp="${esc(v)}">${esc(v)}</button>`).join("")}</div>`:""}
+   <div class="grid2" style="margin-top:14px"><label class="btn ok" style="min-height:52px">📷 Kamera<input type="file" accept="image/*" capture="environment" multiple hidden id="mcam"></label><label class="btn" style="min-height:52px">🖼 Galerie<input type="file" accept="image/*" multiple hidden id="mgal"></label></div>
+   <button class="btn ghost block" data-close style="margin-top:8px">Schließen</button>`,(m,close)=>{
+    m.querySelectorAll("[data-mp]").forEach(b=>b.onclick=()=>{ m.querySelector("#mpos").value=b.dataset.mp; m.querySelectorAll("[data-mp]").forEach(x=>x.classList.toggle("on",x===b)); });
+    const los=async e=>{ const files=[...e.target.files]; e.target.value=""; if(!files.length) return;
+      const pos=m.querySelector("#mpos").value.trim(); if(!pos){ m.querySelector("#mpos").focus(); return toast("Bitte erst die Position eintragen"); }
+      try{ localStorage.setItem("jdPos:"+id,pos); }catch(er){}
+      close(); await uploadFotos(id,"montage",files,{position:pos.slice(0,120)}); };
+    m.querySelector("#mcam").onchange=los; m.querySelector("#mgal").onchange=los;
+  });
+}
 // Zeit-Leiste ab Montagestart: Zeit anzeigen und jederzeit stoppen / weiterlaufen lassen
 function zeitLeiste(o){
   if(!(o.zeiten||[]).length) return "";
@@ -2364,6 +2393,7 @@ function bindEinsatz(o){
     await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv,anfahrtKm:km},bericht:bp}); toast("Montage läuft ⏱ – jetzt Vorher-Fotos machen 📷",3500);
   });
   $("#montageFertig") && ($("#montageFertig").onclick=()=>montageFertigDialog(id));
+  $("#mFotoBtn") && ($("#mFotoBtn").onclick=()=>montageFotoDialog(id));
   $("#toBericht") && ($("#toBericht").onclick=()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}));
   // Bericht fertig → Reklamation? → Sichtabnahme? → Unterschreiben / Versenden
   const nachOben=()=>setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),120);
@@ -4215,7 +4245,7 @@ async function shrink(file,max=1600,q=.82){
     return await new Promise(r=>c.toBlob(r,"image/jpeg",q));
   }catch(e){ return file; }
 }
-async function uploadFotos(id,kat,files){
+async function uploadFotos(id,kat,files,extra={}){
   if(!S.assets) return toast("Foto-Upload nicht freigeschaltet");
   toast(`${files.length} Datei(en) werden hochgeladen …`);
   let n=0;
@@ -4223,7 +4253,7 @@ async function uploadFotos(id,kat,files){
     try{
       const blob=await shrink(file);
       const a=await S.assets.upload(blob);
-      await S.db.collection("fotos").doc().set({auftragId:id,kat,assetId:a.id,name:file.name||"",typ:blob.type,am:Date.now(),von:myId()});
+      await S.db.collection("fotos").doc().set({auftragId:id,kat,assetId:a.id,name:file.name||"",typ:blob.type,am:Date.now(),von:myId(),...extra});
       n++;
     }catch(e){ console.error(e); toast("Upload fehlgeschlagen: "+(e.message||e.code||"")); }
   }
