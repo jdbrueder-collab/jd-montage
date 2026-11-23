@@ -81,6 +81,8 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .thumbs .t.pdf{display:flex;flex-direction:column;align-items:center;justify-content:center;text-decoration:none;color:var(--ink);cursor:pointer;padding:4px;text-align:center}
 .thumbs .t.pdf span{font-size:30px}.thumbs .t.pdf small{font-size:10.5px;word-break:break-all;line-height:1.2;max-height:2.4em;overflow:hidden}
 .thumbs .t .x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:7px;width:24px;height:24px;cursor:pointer;font-size:13px}
+.thumbs .t .x.u{right:auto;left:3px}
+.um-z{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}.um-z .fp{justify-content:center;text-align:center}
 .thumbs .add{display:flex;align-items:center;justify-content:center;flex-direction:column;border:2px dashed var(--line);border-radius:9px;aspect-ratio:1;color:var(--mute);font-size:12px;cursor:pointer;text-align:center;padding:4px}
 .thumbs .add span{font-size:22px}
 .back{display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--brand2);font-weight:650;margin-bottom:10px;cursor:pointer;background:none;border:0;padding:6px 0}
@@ -550,7 +552,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="236cbc293593";</script>
+<script>window.JD_BUILD="4aab95bee896";</script>
 </head>
 <body>
 <header class="top">
@@ -1926,7 +1928,7 @@ function berichtAnsicht(id){
   });
 }
 function thumbs(list, kat, canAdd){
-  return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" data-pdf="_blob/${esc(f.assetId)}" target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
+  return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" data-pdf="_blob/${esc(f.assetId)}" target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>${/^(montage$|nachweis:|sonder:)/.test(f.kat||"")?`<button class="x u" data-umfoto="${esc(f.id)}" title="Umstellen">↔</button>`:""}`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
   ${canAdd&&S.assets?`<label class="add"><span>＋</span>Foto<input type="file" accept="image/*,application/pdf" multiple hidden data-upload="${kat}"></label>`:""}</div>
   ${canAdd&&!S.assets?`<div class="small mute">Fotos hochladen ist für dich gerade nicht freigeschaltet (Zugriff als „Bearbeiter“ nötig).</div>`:""}`;
 }
@@ -2386,8 +2388,8 @@ function erfassenTeil(o,fk,imBericht=false){
    ${teile.length?`<details class="erf-sum" data-fold="${esc(id)}:erf" ${S.fold[id+":erf"]?"open":""}><summary><span>📂 Erfasst</span><span class="erf-zahl">${teile.join(" · ")}</span></summary>
     ${nw.length?`<div class="erf-h">✂️ Nachweise</div>${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?` <span class="mute small">· ${esc(x.bem)}</span>`:""}${fotoKlappe(anz("nachweis:"+x.id),thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false))}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}`:""}
     ${rk.length?`<div class="erf-h">⚠️ Reklamationen</div>${rk.map(r=>`<div class="nw-z rk"><div style="flex:1;min-width:0"><b>${esc(r.text||"")}</b> <span class="chip ${r.offen?"bad":"ok"}" style="font-size:11px">${r.offen?"offen":"erledigt"}</span>${fotoKlappe((r.fotos||[]).length,rkThumbs(r))}</div>${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}" title="Bearbeiten">✏️</button>`:""}</div>`).join("")}`:""}
-    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b> · ${x.min?fmtStd(x.min)+" Std. · ":""}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
-    ${mf.length?`<div class="erf-h">📷 Fertigstellung</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div></div>`).join("")}`:""}
+    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b> · ${x.min?fmtStd(x.min)+" Std. · ":`<a href="#" class="chip warn" style="font-size:11px;text-decoration:none" data-soedit="${esc(x.id)}" data-umo="${esc(id)}">⏱ Stunden fehlen</a> · `}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-soedit="${esc(x.id)}" data-umo="${esc(id)}" title="Bearbeiten">✏️</button><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
+    ${mf.length?`<div class="erf-h">📷 Fertigstellung</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div>${a.some(f=>f.von===myId()||can.planen())?`<button class="btn sm ghost" data-umgr="${esc(a.filter(f=>f.von===myId()||can.planen()).map(f=>f.id).join(","))}" data-umo="${esc(id)}" title="Falsch einsortiert? Umstellen">↔</button>`:""}</div>`).join("")}`:""}
    </details>`:`<div class="small mute" style="margin-top:8px">${imBericht?"Nichts erfasst.":"Noch nichts erfasst. Nachweise zählen automatisch im Montagebericht mit."}</div>`}
   </div>`;
 }
@@ -2427,6 +2429,85 @@ function positionVorschlaege(o){
   const pos=nachNutzung(posListe(o),o).slice(0,8).map(x=>x.label);
   const schon=[...new Set(Object.values(S.fotos).filter(f=>f.auftragId===o.id&&f.position).map(f=>f.position))];
   return [...new Set([...schon,...an,...pos])].slice(0,14);
+}
+// Falsch einsortierte Fotos nachträglich richtig zuordnen: Nachweis ↔ Mehraufwand ↔ Fertigstellung
+function fotoUmstellen(id,fids){
+  const o=S.orders[id]; fids=(fids||[]).filter(f=>S.fotos[f]); if(!o||!fids.length) return;
+  const nw=o.nachweise||[], so=sonderFertig(o.bericht||{}), vs=positionVorschlaege(o), erst=S.fotos[fids[0]], akt=String(erst.kat||"");
+  const altPos=akt==="montage"?(erst.position||""):"", n=fids.length;
+  let ziel=akt.startsWith("nachweis:")?"so":akt.startsWith("sonder:")?"mf":"nw", k="", an="";
+  modal(`<h2>↔ ${n>1?n+" Fotos":"Foto"} umstellen</h2>
+   <div class="small mute">Falsch einsortiert? Wähle, wohin ${n>1?"die Fotos gehören":"das Foto gehört"}.</div>
+   <div class="um-z"><button class="fp" data-uz="nw">✂️ Nachweis</button><button class="fp" data-uz="so">⏱ Mehraufwand</button><button class="fp" data-uz="mf">📷 Fertigstellung</button></div>
+   <div data-ut="nw">
+    ${nw.length?`<label class="f">An einen vorhandenen Nachweis</label><div class="erf-wahl">${nw.map(x=>`<button class="fp" data-ua="n:${esc(x.id)}">${esc(x.label||nwLabel(x.k))} · ${esc(String(x.menge).replace(".",","))}</button>`).join("")}</div><label class="f">… oder neu</label>`:`<label class="f">Was ist es?</label>`}
+    <div class="erf-wahl">${NACHWEISE.map(([k2,l])=>`<button class="fp" data-uk="${k2}">${l}</button>`).join("")}</div>
+    <div class="grid2"><div><label class="f">Anzahl</label><input class="i" id="umM" inputmode="decimal" value="1"></div><div><label class="f">Notiz</label><input class="i" id="umB" value="${esc(altPos)}" placeholder="z. B. Kabine 3"></div></div>
+   </div>
+   <div data-ut="so">
+    ${so.length?`<label class="f">An einen vorhandenen Mehraufwand</label><div class="erf-wahl">${so.map(x=>`<button class="fp" data-ua="s:${esc(x.id)}">${esc(String(x.arbeit).slice(0,50))}</button>`).join("")}</div><label class="f">… oder neu</label>`:`<label class="f">Was ist passiert?</label>`}
+    <div class="ziel-w">${MEHR_GRUENDE.map(g=>`<button class="fp" data-mg="${esc(g)}">${esc(g)}</button>`).join("")}</div>
+    <textarea class="i" id="umT" style="margin-top:8px" placeholder="z. B. Räume nur teilweise montierbar">${esc(altPos?"Mehraufwand – "+altPos:"")}</textarea>
+    <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="umS" inputmode="decimal" placeholder="z. B. 2:30"></div><div><label class="f">Personen</label><input class="i" id="umP" inputmode="numeric" value="${esc(o.einsatz?.personenVorOrt||1)}"></div></div>
+   </div>
+   <div data-ut="mf">
+    <label class="f">Welche Position ist fertig?</label><input class="i" id="umPos" value="${esc(erst.position&&akt==="montage"?erst.position:"")}" placeholder="z. B. WC Damen EG" list="umPosL"><datalist id="umPosL">${vs.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+    ${vs.length?`<div class="ziel-w" style="margin-top:8px">${vs.map(v=>`<button class="fp" data-up="${esc(v)}">${esc(v)}</button>`).join("")}</div>`:""}
+   </div>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Umstellen</button></div>`,(m,close)=>{
+    const zeig=()=>{ m.querySelectorAll("[data-uz]").forEach(b=>b.classList.toggle("on",b.dataset.uz===ziel)); m.querySelectorAll("[data-ut]").forEach(d=>d.hidden=d.dataset.ut!==ziel); };
+    zeig(); m.querySelectorAll("[data-uz]").forEach(b=>b.onclick=()=>{ ziel=b.dataset.uz; an=""; m.querySelectorAll("[data-ua]").forEach(x=>x.classList.remove("on")); zeig(); });
+    m.querySelectorAll("[data-ua]").forEach(b=>b.onclick=()=>{ an=an===b.dataset.ua?"":b.dataset.ua; k=""; m.querySelectorAll("[data-ua],[data-uk]").forEach(x=>x.classList.toggle("on",x.dataset.ua===an&&!!an)); });
+    m.querySelectorAll("[data-uk]").forEach(b=>b.onclick=()=>{ k=b.dataset.uk; an=""; m.querySelectorAll("[data-ua],[data-uk]").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelectorAll("[data-mg]").forEach(b=>b.onclick=()=>{ an=""; m.querySelectorAll("[data-ua]").forEach(x=>x.classList.remove("on")); m.querySelector("#umT").value=b.dataset.mg; });
+    m.querySelectorAll("[data-up]").forEach(b=>b.onclick=()=>{ m.querySelector("#umPos").value=b.dataset.up; m.querySelectorAll("[data-up]").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelector("#ok").onclick=async()=>{
+      const c=S.orders[id]||o, P=orderPath(id), uid=erst.von||myId(); let kat="", position="";
+      if(ziel==="nw"){
+        if(an.startsWith("n:")){ const x=(c.nachweise||[]).find(e=>e.id===an.slice(2)); kat="nachweis:"+x.id; position=x.label||nwLabel(x.k); }
+        else {
+          if(!k) return toast("Bitte wählen, was es ist (z. B. Passschnitt)");
+          const menge=parseFloat(String(m.querySelector("#umM").value).replace(",",".")); if(!(menge>0)) return toast("Bitte die Anzahl eintragen");
+          const e={id:"n"+Date.now().toString(36),k,label:nwLabel(k),einheit:nwEinheit(k),menge,bem:m.querySelector("#umB").value.trim(),von:uid,am:erst.am||Date.now()};
+          await upd(P,{nachweise:[...(c.nachweise||[]),e]});
+          if(S.lohnPos.some(p=>p.k===k)){ const l=S.lohn[lohnDocId(id,uid)]; await saveLohn(c,uid,{mengen:{[k]:Math.round((nn(l?.mengen?.[k])+menge)*100)/100}}).catch(()=>{}); }
+          kat="nachweis:"+e.id; position=e.label;
+        }
+      } else if(ziel==="so"){
+        if(an.startsWith("s:")) kat="sonder:"+an.slice(2);
+        else {
+          const t=m.querySelector("#umT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
+          const sv=m.querySelector("#umS").value.trim(), min=sv?parseMin(sv):null; if(sv&&min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
+          const sid="s"+Date.now().toString(36);
+          await upd(P,{bericht:{sonder:[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:String(parseInt(m.querySelector("#umP").value,10)||1),min:min||null,bemerkung:"",von:uid,am:erst.am||Date.now()}]}});
+          kat="sonder:"+sid;
+        }
+        position="Mehraufwand";
+      } else {
+        position=m.querySelector("#umPos").value.trim().slice(0,120); if(!position) return toast("Bitte die Position eintragen"); kat="montage";
+      }
+      const bt=m.querySelector("#ok"); bt.disabled=true;
+      for(const f of fids) await upd("fotos/"+f,{kat,position}).catch(()=>{});
+      close(); toast(`✓ ${n>1?n+" Fotos":"Foto"} umgestellt – ${ziel==="nw"?"Nachweis":ziel==="so"?"Mehraufwand":"Fertigstellung"}`,2600);
+    };
+  });
+}
+// Mehraufwand nachträglich ergänzen (Stunden, Personen, Text)
+function sonderBearbeiten(id,sid){
+  const o=S.orders[id]; const x=sonderListe(o?.bericht||{}).find(e=>e.id===sid); if(!x) return;
+  modal(`<h2>⏱ Mehraufwand</h2>
+   <label class="f">Was ist passiert?</label><textarea class="i" id="seT">${esc(x.arbeit||"")}</textarea>
+   <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="seS" inputmode="decimal" value="${x.min?fmtHMin(x.min):""}" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen</label><input class="i" id="seP" inputmode="numeric" value="${esc(x.personen||1)}"></div></div>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    setTimeout(()=>m.querySelector(x.min?"#seT":"#seS")?.focus(),60);
+    m.querySelector("#ok").onclick=async()=>{
+      const t=m.querySelector("#seT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
+      const sv=m.querySelector("#seS").value.trim(), min=sv?parseMin(sv):null; if(sv&&min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
+      const c=S.orders[id]||o;
+      await upd(orderPath(id),{bericht:{sonder:sonderListe(c.bericht||{}).map(e=>e.id===sid?{...e,arbeit:t.slice(0,300),min:min||null,personen:String(parseInt(m.querySelector("#seP").value,10)||1)}:e)}});
+      close(); toast("Mehraufwand gespeichert ✓",2200);
+    };
+  });
 }
 function montageFotoDialog(id){
   const o=S.orders[id]; const vs=positionVorschlaege(o); let letzte=""; try{ letzte=localStorage.getItem("jdPos:"+id)||""; }catch(e){}
@@ -4358,7 +4439,7 @@ function bindNachrichten(id){
 function bind(r){
   const app=$("#app");
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go("auftraege"));
-  app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto]")) return; lightbox(t.dataset.zoom); });
+  app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; lightbox(t.dataset.zoom); });
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); },250); }; }
   app.querySelectorAll("#flt [data-f], .fzeile [data-f], .tun [data-f], .spez-kopf [data-f]").forEach(b=>b.onclick=()=>{
     const f=b.dataset.f, normal=HAUPT_PHASEN.some(([k])=>k===f);
@@ -4525,6 +4606,9 @@ function bindDetail(id){
     inp.onchange=save; if(inp.tagName==="TEXTAREA") inp.onblur=save;
   });
   document.querySelectorAll("[data-upload]").forEach(inp=>inp.onchange=()=>uploadFotos(id, inp.dataset.upload, [...inp.files]));
+  document.querySelectorAll("[data-umfoto]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); e.preventDefault(); const f=S.fotos[b.dataset.umfoto]; if(f) fotoUmstellen(f.auftragId,[f.id]); });
+  document.querySelectorAll("[data-umgr]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); e.preventDefault(); fotoUmstellen(b.dataset.umo,b.dataset.umgr.split(",")); });
+  document.querySelectorAll("[data-soedit]").forEach(b=>b.onclick=e=>{ e.preventDefault(); sonderBearbeiten(b.dataset.umo,b.dataset.soedit); });
   document.querySelectorAll("[data-delfoto]").forEach(b=>b.onclick=async e=>{ e.stopPropagation(); e.preventDefault(); if(!await confirmBox("Foto löschen?","Das Foto wird aus dem Auftrag entfernt.","Löschen","bad")) return; const f=S.fotos[b.dataset.delfoto]; await S.db.doc("fotos/"+f.id).delete(); if(S.assets && can.planen()){ try{ await S.assets.delete(f.assetId); }catch(e){} } });
   const sg=$("#sign"); if(sg) sg.onclick=()=>signDialog(id);
   $("#speak") && ($("#speak").onclick=()=>sprachDialog(id));
