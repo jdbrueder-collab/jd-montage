@@ -221,6 +221,14 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+.az-st.arbeit{border-left:5px solid var(--ok)}.az-st.pause{border-left:5px solid var(--warn)}
+.az-uhr{font-size:34px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.az-sum{text-align:center;margin-top:10px;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:6px}.az-sum span{display:block;font-size:12px;color:var(--mute)}.az-sum b{font-size:17px}.az-sum b.neg{color:var(--bad)}.az-sum b.pos{color:var(--ok)}
+.az-liste{margin-top:10px;display:grid;gap:2px}
+.az-z{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:8px 4px;border-bottom:1px solid var(--line);font:inherit;font-size:14px;color:var(--ink);cursor:pointer;text-align:left}
+.az-z .d{width:76px;flex:none;font-weight:650}.az-z.leer{cursor:default;opacity:.7}.az-z.heute{background:var(--greybg);border-radius:8px}.az-z.warn b{color:var(--warn)}
+.az-team{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:7px 2px;border-bottom:1px solid var(--line);font:inherit;color:var(--ink);cursor:pointer}
+.az-team.on{background:var(--greybg);border-radius:8px}
 .card.ek{padding:12px 14px}
 .ek-t{font-size:17px;line-height:1.3}.ek-t b{font-size:19px;margin-right:4px}.ek-t span{font-weight:600;color:var(--grey)}
 .card.ek .kopf-akt{margin-top:8px}
@@ -631,7 +639,7 @@ const S = {
   filter:"offen",q:"",wochenNurMeine:null,
   fotos:{},fotoUnsub:null,fotoFor:null,
   profiles:{},pendingRender:false,anfragen:{},zugang:{},meineAnfrage:null,rolesLoaded:false,fahrzeuge:{},fahrten:{},fzSel:null,lohnOpen:{},
-  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},fzWahl:{},bearbeiten:{},nachrichten:{},
+  lohnPos:[],preise:null,lohn:{},lohnFor:{},bereitWahl:{},fold:{},fzWahl:{},bearbeiten:{},az:{},nachrichten:{},
   echt:{isOwner:false,me:null,role:"pending"},ansicht:new URLSearchParams(location.search).get("ansicht")||"chef"
 };
 
@@ -817,7 +825,8 @@ const can = {
   reklaErledigen:()=>S.isOwner||S.role==="chef"||S.role==="hersteller",
   mails:()=>S.isOwner && !!S.mcp,
   senden:()=>!!S.mcp && (S.isOwner||S.role==="chef"||S.role==="monteur"),
-  setup:()=>S.isOwner||S.role==="chef"
+  setup:()=>S.isOwner||S.role==="chef",
+  zeit:()=>S.isOwner||S.role==="chef"||S.role==="monteur"
 };
 // Testaufträge: alle Mails gehen an die Test-Adresse statt an meta / den Kunden
 const istTest=o=>!!o?.test||/^TEST/i.test(String(o?.nr||""));
@@ -1027,6 +1036,7 @@ async function boot(){
     scheduleRender();
   }, err);
   db.collection("nachrichten").onSnapshot(snap=>{ const a={}; snap.docs.forEach(d=>a[d.id]={id:d.id,...d.data()}); S.nachrichten=a; loadProfiles(Object.values(a).map(x=>x.von)); scheduleRender(); },()=>{});
+  db.collection("arbeitszeit").onSnapshot(snap=>{ const a={}; snap.docs.forEach(d=>a[d.id]={id:d.id,...d.data()}); S.az=a; scheduleRender(); },()=>{}); // nur eigene Zeiten (Chef: alle) – geregelt in der Datenbank
   db.collection("reklamationen").onSnapshot(snap=>{ const r={}; snap.docs.forEach(d=>r[d.id]={id:d.id,...d.data()}); S.reklas=r; loadProfiles(Object.values(r).map(x=>x.von)); scheduleRender(); }, ()=>{});
   db.doc("einstellungen/allgemein").onSnapshot(d=>{ S.settings=d.exists?d.data():{}; maybeStoreOwner(); scheduleRender(); }, ()=>{});
   db.doc("einstellungen/rollen").onSnapshot(d=>{
@@ -1079,6 +1089,7 @@ function renderNav(){
   try{ if(S.loaded && navigator.setAppBadge){ (tunZahl?navigator.setAppBadge(tunZahl):navigator.clearAppBadge()).catch(()=>{}); } }catch(e){}
   const items=[["auftraege","📋","Aufträge",tunZahl]];
   if(can.fahrten()) items.push(["fahrten","🚗","Fahrten"]);
+  if(can.zeit()) items.push(["zeit","⏱️","Zeit",azOffenAlt().length]);
   items.push(["rekla","⚠️","Reklam.",meineR]);
   if(can.sub()) items.push(["meine","💶","Abrechnung"]);
   if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
@@ -1121,6 +1132,7 @@ function render(scrollTop){
   else if(r.v==="woche") html+=viewWoche();
   else if(r.v==="rekla") html+=viewRekla();
   else if(r.v==="geld" && can.finanzen()) html+=viewGeld();
+  else if(r.v==="zeit" && can.zeit()) html+=viewZeit();
   else if(r.v==="meine" && can.sub()) html+=viewSubAbrechnung();
   else if(r.v==="setup") html+=`<h2 style="margin:0 0 10px;font-size:20px">Setup</h2><div class="setup-grid">${kontoKarte()}${can.setup()?viewSetup():""}</div>`;
   else html+=viewListe();
@@ -3675,6 +3687,227 @@ function umsatzStreifen(){
     <div class="umsatz-t"><span>💶 ${esc(monat)}: <b>${eur(u)}</b></span><span>${u>=ziel?"🎉 Ziel erreicht":`${Math.round(p*100)} % von ${eur(ziel)}`}</span></div>
     <div class="umsatz-b"><div style="width:${(p*100).toFixed(1)}%;background-size:${p>0?(100/p).toFixed(1):100}% 100%"></div></div></a>`;
 }
+/* ============ Zeiterfassung ============
+   Eigene Umsetzung nach Arbeitszeitgesetz (ArbZG §§ 3, 4, 5, 9, 16), EuGH C-55/18 und BAG 1 ABR 22/21:
+   Beginn, Ende, Pausen und Dauer je Tag, Abwesenheiten, Soll/Ist/Saldo, Prüfung der gesetzlichen Grenzen,
+   jede nachträgliche Änderung mit Grund protokolliert, Monatsbestätigung durch Mitarbeiter und Freigabe durch den Chef,
+   Export als PDF/CSV. Jeder sieht nur seine eigenen Zeiten (Chef: alle) – in der Datenbank abgesichert. */
+const AZ_ABW={urlaub:["🏖","Urlaub",true],krank:["🤒","Krank",true],feiertag:["🎉","Feiertag",true],schule:["🎓","Berufsschule",true],abbau:["⏳","Überstundenabbau",false],unbezahlt:["⛔","Unbezahlt frei",null]};
+const azId=(uid,tag)=>`${uid}_${tag}`, azMid=(uid,monat)=>`${uid}_M_${monat}`;
+const azTag=(uid,tag)=>S.az[azId(uid,tag)]||null;
+const fmtMin=m=>`${m<0?"−":""}${Math.floor(Math.abs(Math.round(m))/60)}:${String(Math.abs(Math.round(m))%60).padStart(2,"0")}`;
+const fmtUhr=ms=>ms?new Date(ms).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}):"–";
+const tagPlus=(tag,n)=>{ const d=new Date(tag+"T12:00"); d.setDate(d.getDate()+n); return tagKey(d); };
+const azTagText=tag=>new Date(tag+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"});
+// Feiertage Rheinland-Pfalz (Firmensitz)
+const _ftCache={};
+function feiertage(j){
+  if(_ftCache[j]) return _ftCache[j];
+  const a=j%19,b=Math.floor(j/100),c=j%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const om=Math.floor((h+l-7*m+114)/31), od=((h+l-7*m+114)%31)+1, ostern=new Date(j,om-1,od,12);
+  const o=n=>{ const x=new Date(ostern); x.setDate(x.getDate()+n); return tagKey(x); };
+  const map={[`${j}-01-01`]:"Neujahr",[o(-2)]:"Karfreitag",[o(1)]:"Ostermontag",[`${j}-05-01`]:"Tag der Arbeit",[o(39)]:"Christi Himmelfahrt",[o(50)]:"Pfingstmontag",[o(60)]:"Fronleichnam",[`${j}-10-03`]:"Tag der Deutschen Einheit",[`${j}-11-01`]:"Allerheiligen",[`${j}-12-25`]:"1. Weihnachtstag",[`${j}-12-26`]:"2. Weihnachtstag"};
+  return (_ftCache[j]=map);
+}
+const feiertagName=tag=>feiertage(+tag.slice(0,4))[tag]||"";
+function azSoll(uid,tag){
+  const cfg=(S.settings.zeitSoll||{})[uid]||{}, tage=cfg.tage||[1,2,3,4,5], wd=new Date(tag+"T12:00").getDay()||7;
+  if(!tage.includes(wd) || feiertagName(tag)) return 0;
+  return Math.round(nn(cfg.wochenStd??40)*60/tage.length);
+}
+function azRechnen(t){
+  const bl=[...(t?.bloecke||[])].sort((a,b)=>a.von-b.von), now=Date.now();
+  let arbeit=0, pause=0; bl.forEach((b,i)=>{ arbeit+=(b.bis||now)-b.von; if(i){ const g=b.von-(bl[i-1].bis||b.von); if(g>0) pause+=g; } });
+  const auto=nn(t?.autoPause);
+  return {bl,beginn:bl[0]?.von||null,ende:bl.length&&bl[bl.length-1].bis?bl[bl.length-1].bis:null,pauseMin:Math.round(pause/60000)+auto,netto:Math.max(0,Math.round(arbeit/60000)-auto),laeuft:bl.some(b=>!b.bis)};
+}
+function azPruefen(uid,tag){
+  const r=azRechnen(azTag(uid,tag)), w=[];
+  if(r.netto>360 && r.pauseMin<30) w.push("§ 4 ArbZG: ab 6 Std. Arbeit mind. 30 Min. Pause");
+  if(r.netto>540 && r.pauseMin<45) w.push("§ 4 ArbZG: ab 9 Std. Arbeit mind. 45 Min. Pause");
+  if(r.netto>600) w.push("§ 3 ArbZG: mehr als 10 Std. Arbeitszeit");
+  const v=azRechnen(azTag(uid,tagPlus(tag,-1)));
+  if(v.ende && r.beginn && r.beginn-v.ende<11*3600000) w.push(`§ 5 ArbZG: nur ${fmtMin((r.beginn-v.ende)/60000)} Std. Ruhezeit (mind. 11)`);
+  if(r.netto && (new Date(tag+"T12:00").getDay()===0||feiertagName(tag))) w.push(`§ 9 ArbZG: Arbeit am ${feiertagName(tag)||"Sonntag"}`);
+  return w;
+}
+function azIst(uid,tag){
+  const t=azTag(uid,tag), soll=azSoll(uid,tag), a=AZ_ABW[t?.abw];
+  if(a) return a[2]===true?{ist:soll,soll}:a[2]===false?{ist:0,soll}:{ist:0,soll:0};
+  return {ist:azRechnen(t).netto,soll};
+}
+const azStart=uid=>{ const s0=(S.settings.zeitSoll||{})[uid]?.ab; if(s0) return s0; const t=Object.values(S.az).filter(x=>x.uid===uid&&x.tag).map(x=>x.tag).sort()[0]; return t||tagKey(new Date()); };
+function azSumme(uid,von,bis){ let soll=0,ist=0; for(let t=von;t<=bis;t=tagPlus(t,1)){ const x=azIst(uid,t); soll+=x.soll; ist+=x.ist; } return {soll,ist,saldo:ist-soll}; }
+function azMonat(uid,monat){
+  const [j,m]=monat.split("-").map(Number), n=new Date(j,m,0).getDate(), heute=tagKey(new Date());
+  const tage=Array.from({length:n},(_,i)=>`${monat}-${String(i+1).padStart(2,"0")}`);
+  const bis=tage[n-1]<heute?tage[n-1]:heute;
+  const von=[tage[0],azStart(uid)].sort()[1]; // erst ab Beginn der Erfassung zählen
+  return {tage,...(von<=bis?azSumme(uid,von,bis):{soll:0,ist:0,saldo:0})};
+}
+const azKonto=uid=>{ const h=tagKey(new Date()), a=azStart(uid); return a<=h?azSumme(uid,a,h).saldo:0; };
+// vergessen auszustempeln (offener Block an einem früheren Tag)
+const azOffenAlt=(uid=myId())=>Object.values(S.az).filter(t=>t.uid===uid&&t.tag&&t.tag<tagKey(new Date())&&(t.bloecke||[]).some(b=>!b.bis));
+const azGesperrt=(uid,tag)=>!can.planen() && !!S.az[azMid(uid,tag.slice(0,7))]?.chefAm;
+function azLeute(){ return [...new Set([myId(),S.settings.ownerId,...Object.keys(S.roles).filter(k=>["monteur","chef"].includes(S.roles[k]))].filter(Boolean))]; }
+async function azSpeichern(uid,tag,neu,grund){
+  const id=azId(uid,tag), alt=S.az[id]||null;
+  const hist=[...(alt?.historie||[])];
+  if(alt && grund!==null) hist.push({am:Date.now(),von:myId(),grund:grund||"",alt:{bloecke:alt.bloecke||[],abw:alt.abw||null,autoPause:alt.autoPause||0,notiz:alt.notiz||""}});
+  const doc={art:"tag",uid,tag,bloecke:[],abw:null,autoPause:0,notiz:"",...(alt?{bloecke:alt.bloecke,abw:alt.abw||null,autoPause:alt.autoPause||0,notiz:alt.notiz||""}:{}),...neu,historie:hist,am:Date.now(),von:myId()};
+  delete doc.id; S.az[id]={id,...doc}; await setDoc("arbeitszeit/"+id,doc);
+}
+// Stempeluhr
+async function azStempel(aktion){
+  const uid=myId(), tag=tagKey(new Date()), t=azTag(uid,tag)||{bloecke:[]}, now=Date.now();
+  const bl=(t.bloecke||[]).map(b=>({...b})), offen=bl.find(b=>!b.bis);
+  if(aktion==="kommen"){
+    if(azOffenAlt().length) return toast("Erst den offenen Tag abschließen (Ende nachtragen)",3500);
+    if(offen) return; const auf=Object.values(S.orders).find(o=>sichtbar(o)&&!istFertig(o)&&(o.monteure||[]).includes(uid)&&terminTag(o)===tag);
+    bl.push({von:now,bis:null,auftragId:auf?.id||null});
+    if(bl.length===1){ const v=azRechnen(azTag(uid,tagPlus(tag,-1))); if(v.ende && now-v.ende<11*3600000) toast(`Achtung: erst ${fmtMin((now-v.ende)/60000)} Std. Ruhezeit seit gestern (gesetzlich 11)`,4500); }
+    await azSpeichern(uid,tag,{bloecke:bl,feierabend:false},null); return toast("Eingestempelt ✓",2200);
+  }
+  if(aktion==="gehenNachPause"){ const r0=azRechnen(t); if(!r0.bl.length) return; const noetig=r0.netto>540?45:r0.netto>360?30:0, fehlt=Math.max(0,noetig-r0.pauseMin); let auto=nn(t.autoPause);
+    if(fehlt>0 && await confirmBox("Gesetzliche Pause fehlt",`Heute ${fmtMin(r0.netto)} Std. gearbeitet, nur ${r0.pauseMin} Min. Pause (nötig: ${noetig} Min.). Fehlende <b>${fehlt} Min.</b> abziehen?`,"Ja, abziehen","warn")) auto+=fehlt;
+    await azSpeichern(uid,tag,{autoPause:auto,feierabend:true},null); return toast(`Feierabend ✓ – heute ${fmtMin(azRechnen(azTag(uid,tag)).netto)} Std.`,3000); }
+  if(!offen) return;
+  offen.bis=now;
+  if(aktion==="pause"){ await azSpeichern(uid,tag,{bloecke:bl},null); return toast("Pause ⏸",2000); }
+  // Gehen: gesetzliche Pause prüfen
+  const r=azRechnen({...t,bloecke:bl}), noetig=r.netto>540?45:r.netto>360?30:0, fehlt=Math.max(0,noetig-r.pauseMin);
+  let auto=nn(t.autoPause);
+  if(fehlt>0){
+    const ok=await confirmBox("Gesetzliche Pause fehlt",`Heute ${fmtMin(r.netto)} Std. gearbeitet, aber nur ${r.pauseMin} Min. Pause (nötig: ${noetig} Min. nach § 4 ArbZG).<br><br>Fehlende <b>${fehlt} Min.</b> als Pause abziehen?`,"Ja, abziehen","warn");
+    if(ok) auto+=fehlt;
+  }
+  await azSpeichern(uid,tag,{bloecke:bl,autoPause:auto,feierabend:true},null); toast(`Ausgestempelt ✓ – heute ${fmtMin(azRechnen(azTag(uid,tag)).netto)} Std.`,3000);
+}
+function azStempelKarte(){
+  const uid=myId(), tag=tagKey(new Date()), t=azTag(uid,tag), r=azRechnen(t), alt=azOffenAlt();
+  const st=r.laeuft?"arbeit":r.bl.length&&!t?.feierabend?"pause":r.bl.length?"fertig":"aus";
+  return `<div class="card az-st ${st}">
+   ${alt.length?`<div class="banner bad small" style="margin:0 0 10px">⚠️ ${alt.map(x=>azTagText(x.tag)).join(", ")}: nicht ausgestempelt – <a href="#" data-aztag="${esc(alt[0].tag)}" data-azuid="${esc(uid)}">Ende nachtragen</a></div>`:""}
+   <div class="row between"><div><div class="small mute">${st==="arbeit"?`Arbeit seit ${fmtUhr(r.bl.find(b=>!b.bis)?.von)}`:st==="pause"?`Pause seit ${fmtUhr(r.bl[r.bl.length-1]?.bis)}`:st==="fertig"?`Feierabend seit ${fmtUhr(r.ende)}`:"Nicht eingestempelt"}</div>
+     <div class="az-uhr" id="azLive">${fmtMin(r.netto)}</div><div class="small mute">heute · Pause ${r.pauseMin} Min.</div></div>
+     <span class="chip ${st==="arbeit"?"ok":st==="pause"?"warn":st==="fertig"?"ok":""}">${st==="arbeit"?"● arbeitet":st==="pause"?"⏸ Pause":st==="fertig"?"✓ Feierabend":"○ aus"}</span></div>
+   <div class="grid2" style="margin-top:12px">${st==="fertig"?`<button class="btn ghost" data-az="kommen" style="grid-column:1/-1">▶ Nochmal einstempeln</button>`:st==="aus"?`<button class="btn ok" data-az="kommen" style="grid-column:1/-1;min-height:56px;font-size:17px">▶ Kommen</button>`
+     :st==="arbeit"?`<button class="btn" data-az="pause" style="min-height:56px">⏸ Pause</button><button class="btn bad" data-az="gehen" style="min-height:56px">■ Gehen</button>`
+     :`<button class="btn ok" data-az="kommen" style="min-height:56px">▶ Weiter</button><button class="btn" data-az="fertig" style="min-height:56px">✓ Feierabend</button>`}</div>
+   ${azPruefen(uid,tag).map(w=>`<div class="small" style="color:var(--warn);margin-top:6px">⚠️ ${esc(w)}</div>`).join("")}
+  </div>`;
+}
+function viewZeit(){
+  const chef=can.planen(), leute=azLeute(); if(!S.azUid||!leute.includes(S.azUid)) S.azUid=myId();
+  const uid=S.azUid, heute=tagKey(new Date()), monat=S.azMonat||heute.slice(0,7), mo=azMonat(uid,monat), md=S.az[azMid(uid,monat)];
+  let h=`<h2 style="margin:0 0 10px;font-size:20px">⏱ Zeiterfassung</h2>`;
+  if(chef && leute.length>1){
+    h+=`<div class="card"><h3>Heute im Team</h3>${leute.map(u=>{ const r=azRechnen(azTag(u,heute)), a=AZ_ABW[azTag(u,heute)?.abw];
+      return `<button class="az-team ${u===uid?"on":""}" data-azwer="${esc(u)}"><span class="av">${esc(initials(u))}</span><b style="flex:1;text-align:left">${esc(nameOf(u))}</b><span class="small ${r.laeuft?"":"mute"}">${a?a[0]+" "+a[1]:r.laeuft?`● seit ${fmtUhr(r.bl.find(b=>!b.bis)?.von)}`:r.bl.length?`${fmtMin(r.netto)} Std.`:"–"}</span></button>`; }).join("")}</div>`;
+  }
+  if(uid===myId()) h+=azStempelKarte();
+  const kon=azKonto(uid);
+  h+=`<div class="card">
+   <div class="row between"><button class="btn sm ghost" data-azm="-1">‹</button><b>${new Date(monat+"-01T12:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"})}${uid!==myId()?` · ${esc(nameOf(uid))}`:""}</b><button class="btn sm ghost" data-azm="1">›</button></div>
+   <div class="grid3 az-sum"><div><span>Soll</span><b>${fmtMin(mo.soll)}</b></div><div><span>Ist</span><b>${fmtMin(mo.ist)}</b></div><div><span>Saldo</span><b class="${mo.saldo<0?"neg":"pos"}">${mo.saldo>0?"+":""}${fmtMin(mo.saldo)}</b></div></div>
+   <div class="small mute" style="text-align:center;margin-top:4px">Stundenkonto gesamt: <b>${kon>0?"+":""}${fmtMin(kon)} Std.</b></div>
+   <div class="az-liste">${mo.tage.map(tag=>{ const t=azTag(uid,tag), r=azRechnen(t), a=AZ_ABW[t?.abw], w=azPruefen(uid,tag), ft=feiertagName(tag), we=[0,6].includes(new Date(tag+"T12:00").getDay());
+     if((tag>heute||tag<azStart(uid)) && !t) return "";
+     if(!t && (we||ft) ) return `<div class="az-z leer"><span class="d">${azTagText(tag)}</span><span class="mute small" style="flex:1">${ft?"🎉 "+esc(ft):"Wochenende"}</span></div>`;
+     return `<button class="az-z ${w.length?"warn":""} ${tag===heute?"heute":""}" data-aztag="${tag}" data-azuid="${esc(uid)}"><span class="d">${azTagText(tag)}</span>
+       <span style="flex:1;text-align:left">${a?`${a[0]} ${a[1]}`:r.bl.length?`${fmtUhr(r.beginn)}–${r.laeuft?"läuft":fmtUhr(r.ende)} <span class="mute small">· ${r.pauseMin} P</span>`:`<span class="mute">${azSoll(uid,tag)?"keine Zeit erfasst":""}</span>`}${(t?.historie||[]).length?` <span class="small mute">✎</span>`:""}</span>
+       <b>${a?"":r.bl.length?fmtMin(r.netto):""}</b>${w.length?`<span title="${esc(w.join(" · "))}">⚠️</span>`:""}</button>`; }).join("")}</div>
+   <button class="btn sm ghost block" data-aztag="${monat===heute.slice(0,7)?heute:monat+"-01"}" data-azuid="${esc(uid)}" data-azneu="1" style="margin-top:8px">＋ Tag nachtragen / Abwesenheit</button>
+  </div>
+  <div class="card"><h3>Monatsabschluss</h3>
+   <div class="small">${md?.maAm?`✓ Von ${esc(nameOf(uid))} bestätigt am ${fmtDT(md.maAm)}`:"Noch nicht vom Mitarbeiter bestätigt"}<br>${md?.chefAm?`🔒 Vom Chef freigegeben am ${fmtDT(md.chefAm)} – gesperrt`:"Noch nicht vom Chef freigegeben"}</div>
+   <div class="grid2" style="margin-top:10px">
+    ${uid===myId()&&!md?.maAm?`<button class="btn" id="azBest">✓ Monat bestätigen</button>`:""}
+    ${chef&&!md?.chefAm?`<button class="btn ok" id="azFrei">🔒 Freigeben</button>`:chef&&md?.chefAm?`<button class="btn ghost" id="azEntsperr">🔓 Entsperren</button>`:""}
+    <button class="btn" id="azPdf">⬇︎ PDF</button><button class="btn" id="azCsv">⬇︎ CSV</button></div>
+   ${chef?`<details style="margin-top:10px"><summary class="small" style="cursor:pointer;font-weight:650">⚙️ Soll-Arbeitszeit für ${esc(nameOf(uid))}</summary>
+     <div class="grid2" style="margin-top:8px"><div><label class="f">Std. pro Woche</label><input class="i" id="azWs" inputmode="decimal" value="${esc((S.settings.zeitSoll||{})[uid]?.wochenStd??40)}"></div><div><label class="f">Erfassung ab</label><input class="i" type="date" id="azAb" value="${esc(azStart(uid))}"></div></div>
+     <label class="f">Arbeitstage</label><div class="ziel-w">${["Mo","Di","Mi","Do","Fr","Sa","So"].map((d,i)=>`<button class="fp ${((S.settings.zeitSoll||{})[uid]?.tage||[1,2,3,4,5]).includes(i+1)?"on":""}" data-azwt="${i+1}">${d}</button>`).join("")}</div>
+     <button class="btn sm ok" id="azSollOk" style="margin-top:8px">Speichern</button></details>`:""}
+   <div class="small mute" style="margin-top:10px">Erfassung nach § 16 ArbZG · Beginn, Ende und Pausen je Tag · jede Änderung wird mit Grund protokolliert · Aufbewahrung mind. 2 Jahre · Feiertage Rheinland-Pfalz.</div></div>`;
+  return h;
+}
+function azTagDialog(uid,tag,neu){
+  if(azGesperrt(uid,tag)) return toast("Dieser Monat ist vom Chef freigegeben und gesperrt",3500);
+  const t=azTag(uid,tag)||{bloecke:[]}, heute=tagKey(new Date()), ft=feiertagName(tag);
+  let bl=(t.bloecke||[]).map(b=>({...b}));
+  const hm=ms=>ms?new Date(ms).toTimeString().slice(0,5):"";
+  const zeilen=()=>bl.map((b,i)=>`<div class="row" style="flex-wrap:nowrap;gap:6px;margin-bottom:6px"><input class="i" type="time" data-bv="${i}" value="${hm(b.von)}"><span>–</span><input class="i" type="time" data-bb="${i}" value="${hm(b.bis)}"><button class="btn sm ghost" data-bx="${i}">✕</button></div>`).join("")||`<div class="small mute">Keine Arbeitszeit eingetragen.</div>`;
+  modal(`<h2>${neu?"Tag nachtragen":azTagText(tag)}</h2>
+   ${neu?`<label class="f">Datum</label><input class="i" type="date" id="azD" value="${tag}">`:`<div class="small mute">${ft?"🎉 "+esc(ft)+" · ":""}${uid!==myId()?esc(nameOf(uid)):""}</div>`}
+   <label class="f">Arbeitszeit (von – bis, Lücken zählen als Pause)</label><div id="azBl">${zeilen()}</div>
+   <button class="btn sm ghost" id="azAdd">＋ Zeitblock</button>
+   <label class="f">Abwesenheit</label><select class="i" id="azAbw"><option value="">– keine –</option>${Object.entries(AZ_ABW).map(([k,[ic,l]])=>`<option value="${k}" ${t.abw===k?"selected":""}>${ic} ${l}</option>`).join("")}</select>
+   <label class="f">Notiz</label><input class="i" id="azN" value="${esc(t.notiz||"")}" placeholder="optional">
+   ${(t.bloecke||[]).length||t.abw||tag<heute?`<label class="f">Grund der Änderung *</label><input class="i" id="azG" placeholder="z. B. vergessen auszustempeln">`:""}
+   ${(t.historie||[]).length?`<details style="margin-top:10px"><summary class="small" style="cursor:pointer">✎ ${t.historie.length} Änderung${t.historie.length>1?"en":""}</summary>${t.historie.slice().reverse().map(x=>`<div class="small mute" style="margin-top:4px">${fmtDT(x.am)} · ${esc(nameOf(x.von))}: ${esc(x.grund||"")} <span>(vorher: ${(x.alt?.bloecke||[]).map(b=>`${fmtUhr(b.von)}–${fmtUhr(b.bis)}`).join(", ")||"–"}${x.alt?.abw?" · "+(AZ_ABW[x.alt.abw]?.[1]||""):""})</span></div>`).join("")}</details>`:""}
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    const lesen=()=>{ const d=neu?m.querySelector("#azD").value:tag; m.querySelectorAll("[data-bv]").forEach(inp=>{ const i=+inp.dataset.bv, v=inp.value, b2=m.querySelector(`[data-bb="${i}"]`).value;
+      bl[i].von=v?new Date(`${d}T${v}`).getTime():null; bl[i].bis=b2?new Date(`${d}T${b2}`).getTime():null; if(bl[i].von&&bl[i].bis&&bl[i].bis<bl[i].von) bl[i].bis+=86400000; }); };
+    const neuZeichnen=()=>{ m.querySelector("#azBl").innerHTML=zeilen(); m.querySelectorAll("[data-bx]").forEach(b=>b.onclick=e=>{ e.preventDefault(); lesen(); bl.splice(+b.dataset.bx,1); neuZeichnen(); }); };
+    neuZeichnen();
+    m.querySelector("#azAdd").onclick=e=>{ e.preventDefault(); lesen(); const d=neu?m.querySelector("#azD").value:tag; const ende=bl.length?bl[bl.length-1].bis:null; bl.push({von:ende?ende+30*60000:new Date(`${d}T07:00`).getTime(),bis:null}); neuZeichnen(); };
+    m.querySelector("#ok").onclick=async()=>{
+      lesen(); const d=neu?m.querySelector("#azD").value:tag; if(!d) return toast("Bitte ein Datum wählen");
+      if(azGesperrt(uid,d)) return toast("Dieser Monat ist gesperrt");
+      const b2=bl.filter(b=>b.von).sort((a,c)=>a.von-c.von);
+      if(b2.some(b=>!b.bis) && d<heute) return toast("Bitte bei jedem Block das Ende eintragen");
+      for(let i=1;i<b2.length;i++) if(b2[i].von<(b2[i-1].bis||0)) return toast("Zeitblöcke überschneiden sich");
+      const g=m.querySelector("#azG")?.value.trim();
+      if(m.querySelector("#azG") && !g) return toast("Bitte den Grund der Änderung angeben");
+      await azSpeichern(uid,d,{bloecke:b2,abw:m.querySelector("#azAbw").value||null,notiz:m.querySelector("#azN").value.trim()},g??null);
+      close(); toast("Gespeichert ✓");
+    };
+  });
+}
+async function azPdf(uid,monat){
+  const jsPDF=await loadJsPDF(); const pdf=new jsPDF({unit:"mm",format:"a4"}); const mo=azMonat(uid,monat), md=S.az[azMid(uid,monat)];
+  const name=uid===myId()?(S.me?.name||nameOf(uid)):nameOf(uid), mName=new Date(monat+"-01T12:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"});
+  pdf.setFontSize(15); pdf.text(`Arbeitszeitnachweis – ${mName}`,14,16); pdf.setFontSize(10); pdf.text(`${S.settings.monteurName||"JD Brüder GbR"} · Mitarbeiter: ${name}`,14,23);
+  const cols=[["Datum",24],["Beginn",18],["Ende",18],["Pause",16],["Netto",18],["Soll",16],["Bemerkung",72]]; let y=32;
+  const kopf=()=>{ pdf.setFont(undefined,"bold"); let x=14; cols.forEach(([t,w])=>{ pdf.text(t,x,y); x+=w; }); pdf.setFont(undefined,"normal"); pdf.line(14,y+1.5,196,y+1.5); y+=6; }; kopf();
+  mo.tage.forEach(tag=>{ const t=azTag(uid,tag), r=azRechnen(t), a=AZ_ABW[t?.abw], w=azPruefen(uid,tag); if(!t && (tag<azStart(uid)||tag>tagKey(new Date())||(!azSoll(uid,tag) && !feiertagName(tag)))) return;
+    const bem=[a?a[1]:"",feiertagName(tag),t?.notiz||"",(t?.historie||[]).length?`geändert (${t.historie.length}×)`:"",t?.autoPause?`${t.autoPause} Min. Pause autom.`:"",...w].filter(Boolean).join(" · ");
+    const row=[new Date(tag+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"}),r.beginn?fmtUhr(r.beginn):"",r.ende?fmtUhr(r.ende):(r.laeuft?"läuft":""),r.bl.length?String(r.pauseMin):"",r.bl.length?fmtMin(r.netto):"",azSoll(uid,tag)?fmtMin(azSoll(uid,tag)):"",bem];
+    const wr=row.map((x,i)=>pdf.splitTextToSize(String(x),cols[i][1]-2)), hh=Math.max(...wr.map(z=>z.length))*4.2; if(y+hh>270){ pdf.addPage(); y=16; kopf(); }
+    let x=14; wr.forEach((z,i)=>{ pdf.text(z,x,y); x+=cols[i][1]; }); y+=hh+1; });
+  y+=4; pdf.setFont(undefined,"bold"); pdf.text(`Soll ${fmtMin(mo.soll)} · Ist ${fmtMin(mo.ist)} · Saldo ${mo.saldo>0?"+":""}${fmtMin(mo.saldo)} · Stundenkonto ${fmtMin(azKonto(uid))}`,14,y); pdf.setFont(undefined,"normal");
+  y+=16; if(y>265){ pdf.addPage(); y=30; } pdf.line(14,y,90,y); pdf.line(120,y,196,y); pdf.setFontSize(9);
+  pdf.text(`Mitarbeiter${md?.maAm?" – bestätigt "+fmtDT(md.maAm):""}`,14,y+4); pdf.text(`Arbeitgeber${md?.chefAm?" – freigegeben "+fmtDT(md.chefAm):""}`,120,y+4);
+  pdf.text(`Erstellt ${fmtDT(Date.now())} · Erfassung nach § 16 ArbZG · Änderungen werden protokolliert`,14,288);
+  return {blob:pdf.output("blob"),name:`Arbeitszeit_${name.replace(/\W+/g,"_")}_${monat}.pdf`};
+}
+function azCsv(uid,monat){
+  const mo=azMonat(uid,monat), L=["Datum;Beginn;Ende;Pause (Min);Netto (Std);Soll (Std);Abwesenheit;Notiz;Änderungen;Hinweise"];
+  mo.tage.forEach(tag=>{ const t=azTag(uid,tag), r=azRechnen(t); if(!t && (!azSoll(uid,tag)||tag<azStart(uid)||tag>tagKey(new Date()))) return;
+    L.push([tag,r.beginn?fmtUhr(r.beginn):"",r.ende?fmtUhr(r.ende):"",r.bl.length?r.pauseMin:"",r.bl.length?fmtMin(r.netto):"",fmtMin(azSoll(uid,tag)),AZ_ABW[t?.abw]?.[1]||"",(t?.notiz||"").replace(/;/g,","),(t?.historie||[]).length,azPruefen(uid,tag).join(" | ")].join(";")); });
+  L.push(`Summe;;;;${fmtMin(mo.ist)};${fmtMin(mo.soll)};;;;Saldo ${fmtMin(mo.saldo)}`);
+  return new Blob(["\ufeff"+L.join("\r\n")],{type:"text/csv"});
+}
+let azTimer=null;
+function bindZeit(){
+  const uid=S.azUid||myId(), monat=S.azMonat||tagKey(new Date()).slice(0,7);
+  clearInterval(azTimer); azTimer=setInterval(()=>{ const el=$("#azLive"); if(!el) return clearInterval(azTimer); el.textContent=fmtMin(azRechnen(azTag(myId(),tagKey(new Date()))).netto); },30000);
+  document.querySelectorAll("[data-az]").forEach(b=>b.onclick=async()=>{ b.disabled=true; await azStempel(b.dataset.az==="fertig"?"gehenNachPause":b.dataset.az).catch(e=>toast("Fehler: "+(e.message||e))); render(); });
+  document.querySelectorAll("[data-aztag]").forEach(b=>b.onclick=e=>{ e.preventDefault(); azTagDialog(b.dataset.azuid||myId(),b.dataset.aztag,!!b.dataset.azneu); });
+  document.querySelectorAll("[data-azwer]").forEach(b=>b.onclick=()=>{ S.azUid=b.dataset.azwer; render(); });
+  document.querySelectorAll("[data-azm]").forEach(b=>b.onclick=()=>{ const [j,m]=monat.split("-").map(Number), d=new Date(j,m-1+Number(b.dataset.azm),1); S.azMonat=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; render(); });
+  $("#azBest") && ($("#azBest").onclick=async()=>{ if(!await confirmBox("Monat bestätigen?","Du bestätigst, dass deine Arbeitszeiten in diesem Monat richtig sind.","Bestätigen","ok")) return; const id=azMid(uid,monat); const x={...(S.az[id]||{})}; delete x.id; await setDoc("arbeitszeit/"+id,{...x,art:"monat",uid,monat,maAm:Date.now()}); toast("Bestätigt ✓"); });
+  $("#azFrei") && ($("#azFrei").onclick=async()=>{ if(!await confirmBox("Monat freigeben?",`Danach kann ${esc(nameOf(uid))} diesen Monat nicht mehr ändern.`,"Freigeben","ok")) return; const id=azMid(uid,monat), x={...(S.az[id]||{})}; delete x.id; await setDoc("arbeitszeit/"+id,{...x,art:"monat",uid,monat,chefAm:Date.now(),chefVon:myId()}); toast("Freigegeben 🔒"); });
+  $("#azEntsperr") && ($("#azEntsperr").onclick=async()=>{ const id=azMid(uid,monat), x={...(S.az[id]||{})}; delete x.id; await setDoc("arbeitszeit/"+id,{...x,chefAm:null}); toast("Entsperrt 🔓"); });
+  const laden=async(blob,name)=>{ const dl=await window.claude.use("downloads").catch(()=>null); if(dl) await dl.save({filename:name,data:blob}); else { const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); } };
+  $("#azPdf") && ($("#azPdf").onclick=async()=>{ try{ const {blob,name}=await azPdf(uid,monat); await laden(blob,name); }catch(e){ if(e?.code!=="cancelled") toast("PDF fehlgeschlagen: "+(e.message||e)); } });
+  $("#azCsv") && ($("#azCsv").onclick=()=>laden(azCsv(uid,monat),`Arbeitszeit_${nameOf(uid).replace(/\W+/g,"_")}_${monat}.csv`).catch(()=>{}));
+  let wt=[...((S.settings.zeitSoll||{})[uid]?.tage||[1,2,3,4,5])];
+  document.querySelectorAll("[data-azwt]").forEach(b=>b.onclick=()=>{ const n=+b.dataset.azwt; wt=wt.includes(n)?wt.filter(x=>x!==n):[...wt,n].sort(); b.classList.toggle("on"); });
+  $("#azSollOk") && ($("#azSollOk").onclick=async()=>{ const ws=parseFloat(String($("#azWs").value).replace(",",".")); if(!(ws>=0)) return toast("Bitte Stunden pro Woche eintragen");
+    await upd("einstellungen/allgemein",{zeitSoll:{...(S.settings.zeitSoll||{}),[uid]:{wochenStd:ws,tage:wt,ab:$("#azAb").value||null}}}); toast("Soll-Arbeitszeit gespeichert ✓"); });
+}
 /* ---------- Abrechnung ---------- */
 function viewGeld(){
   const rows=Object.values(S.fin).map(f=>({f,o:S.orders[f.auftragId||f.id]||{nr:f.nr||f.id,id:f.auftragId||f.id}})).sort((a,b)=>(b.f.datum||0)-(a.f.datum||0));
@@ -3921,6 +4154,7 @@ function bind(r){
   if(r.v==="detail") bindAnteil(r.id);
   if(r.v==="detail") bindDetail(r.id);
   if(r.v==="fahrten") bindFahrten();
+  if(r.v==="zeit") bindZeit();
   $("#geldMonat") && ($("#geldMonat").onchange=()=>{ S.geldMonat=+$("#geldMonat").value; render(); });
   if(r.v==="setup" && can.setup()) bindSetup();
   bindKonto();
