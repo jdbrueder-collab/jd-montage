@@ -221,6 +221,8 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+.az-ein{display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink);font-size:14px}
+.az-ein:last-child{border-bottom:0}
 .erf{margin-top:12px}.card>.erf{margin-top:0}
 .erf-t{font-weight:700;margin-bottom:8px}
 .erf-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -547,7 +549,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="00698ec71860";</script>
+<script>window.JD_BUILD="97fbab6a6da9";</script>
 </head>
 <body>
 <header class="top">
@@ -860,7 +862,8 @@ const can = {
   mails:()=>S.isOwner && !!S.mcp,
   senden:()=>!!S.mcp && (S.isOwner||S.role==="chef"||S.role==="monteur"),
   setup:()=>S.isOwner||S.role==="chef",
-  zeit:()=>S.isOwner||S.role==="chef"||S.role==="monteur"
+  zeit:()=>S.isOwner||S.role==="chef"||S.role==="monteur",
+  mitarbeiter:()=>!S.isOwner&&S.role==="monteur"
 };
 // Testaufträge: alle Mails gehen an die Test-Adresse statt an meta / den Kunden
 const istTest=o=>!!o?.test||/^TEST/i.test(String(o?.nr||""));
@@ -1110,7 +1113,9 @@ function tick(){
 }
 
 /* ============ Rendering ============ */
-function route(){ const h=location.hash.replace(/^#/,""); if(h.startsWith("a-")) return {v:"detail",id:h.slice(2)}; return {v:h||"auftraege"}; }
+function route(){ const h=location.hash.replace(/^#/,""); if(h.startsWith("a-")) return {v:"detail",id:h.slice(2)};
+  let v=h||"auftraege"; if(can.mitarbeiter() && ["auftraege","rekla","woche"].includes(v)) v="zeit"; // Mitarbeiter: Zeiterfassung ist die Startseite
+  return {v}; }
 function go(h){ if(location.hash==="#"+h) render(true); else location.hash=h; }
 
 function renderNav(){
@@ -1123,11 +1128,12 @@ function renderNav(){
   try{ if(S.loaded && navigator.setAppBadge){ (tunZahl?navigator.setAppBadge(tunZahl):navigator.clearAppBadge()).catch(()=>{}); } }catch(e){}
   const items=[["auftraege","📋","Aufträge",tunZahl]];
   if(can.fahrten()) items.push(["fahrten","🚗","Fahrten"]);
-  if(can.zeit()) items.push(["zeit","⏱️","Zeit",azOffenAlt().length]);
+  if(can.zeit()) items.push(["zeit","⏱️","Zeit",azOffenAlt().length+(can.planen()?urlaubOffen().length:0)]);
   items.push(["rekla","⚠️","Reklam.",meineR]);
   if(can.sub()) items.push(["meine","💶","Abrechnung"]);
   if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
   items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length+Object.values(S.zugang||{}).filter(z=>!z.code).length:0]); // Setup: Konto, Benachrichtigungen, Abmelden (Chef: alle Einstellungen)
+  if(can.mitarbeiter()){ const z=items.findIndex(x=>x[0]==="zeit"); if(z>=0){ const zz=items.splice(z,1)[0]; const rest=items.filter(x=>!["auftraege","rekla"].includes(x[0])); items.splice(0,items.length,zz,...rest); } } // Mitarbeiter: Zeit zuerst, ohne Aufträge/Reklamationen
   setTimeout(weiterKnopf,0);
   { const oE=r==="detail"?S.orders[route().id]:null;
     const imEinsatz=!!oE && !istFertig(oE) && phase(oE)==="arbeit" && !!(oE.einsatz?.abfahrtAm||(oE.zeiten||[]).length) && can.einsatz();
@@ -1675,6 +1681,8 @@ function viewDetail(id){
   // Kopf
   if(imEinsatz) h+=`<div class="card ek"><div class="ek-t"><b>${esc(o.nr)}</b>${o.bauvorhaben?` <span>${esc(o.bauvorhaben)}</span>`:""}</div>
      <div class="kopf-akt">${addr?`<a class="btn" href="${esc(navUrl(addr))}" target="_blank" rel="noopener">🧭 Navi</a>`:""}${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:""}${!can.sub()?`<button class="btn" id="subDazu">👷 Subunternehmer hinzufügen</button>`:""}</div>
+     ${can.planen()&&(o.monteure||[]).length?`<details class="mini-f" style="margin-top:6px"><summary>📝 Bericht schreibt: ${o.berichtSchreiber?esc(o.berichtSchreiber===myId()?"Ich":nameOf(o.berichtSchreiber)):"jeder"}</summary>${berichtSchreiberHtml(o)}</details>`
+       :o.berichtSchreiber?`<div class="small mute" style="margin-top:6px">📝 Bericht schreibt: <b>${esc(o.berichtSchreiber===myId()?"du":nameOf(o.berichtSchreiber))}</b></div>`:""}
      ${(o.monteure||[]).filter(u=>S.roles[u]==="sub").length?`<div class="small mute" style="margin-top:6px">🤝 Mit dabei: ${(o.monteure||[]).filter(u=>S.roles[u]==="sub").map(u=>esc(nameOf(u))).join(", ")}</div>`:""}</div>`;
   else h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
@@ -1706,6 +1714,7 @@ function viewDetail(id){
     ${can.planen()?`<input type="date" class="i" id="terminDatum" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">`:`<div style="font-weight:600">${o.termin?new Date(o.termin).toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}):`<span class="mute">noch nicht terminiert</span>`}</div>`}
     ${o.prodStatus==="abholbereit"&&o.abholbereitBestaetigt?`<div class="small" style="margin-top:6px;color:var(--ok)">✓ Von meta als abholbereit bestätigt: <b>${esc(o.abholbereitBestaetigt.name)}</b>, ${fmtDT(o.abholbereitBestaetigt.am)}</div>`:""}
     <label class="f">Auftrag zuteilen</label>
+    ${can.planen()&&(o.monteure||[]).length?`<label class="f">📝 Montagebericht schreibt</label>${berichtSchreiberHtml(o)}<div class="small mute" style="margin-top:4px">Nur diese Person (und du) kann den Bericht fertig schreiben – sie bekommt Bescheid.</div>`:""}
     <div class="row" id="monteure">${(o.monteure||[]).map(m=>`<span class="chip ${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?"ok":"warn"):"info"}" title="${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?"Termin bestätigt":"Termin noch nicht bestätigt"):""}">👷 ${esc(nameOf(m))}${o.termin&&o.terminStatus==="fest"?(terminBestaetigt(o,m)?" ✓":" · ⏳"):""}${can.planen()?` <button data-rm-m="${esc(m)}" style="border:0;background:none;cursor:pointer;color:inherit">✕</button>`:""}</span>`).join("")||`<span class="mute small">noch niemand zugeteilt</span>`}
     ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ zuteilen</button>`:""}</div>
     ${can.planen()&&o.terminStatus==="fest"&&o.termin?`<button class="btn sm ghost" id="kalBtn" style="margin-top:10px">📅 ${o.kalender?.termin===o.termin?"Im Google Kalender ✓ – erneut senden":"In Google Kalender eintragen"}</button>`:""}
@@ -1760,7 +1769,8 @@ function viewDetail(id){
   } else if(can.einsatz() && !frueh){
     h+=einsatzCard(o,fk);
     const st=schritt(o);
-    if(st==="bericht"){
+    if(!darfBericht(o) && ["bericht","rekla","abnahme"].includes(st)){ /* Bericht schreibt jemand anderes */ }
+    else if(st==="bericht"){
       h+=berichtCard(o,fk);
       h+=berichtFertigCard(o,fk);
       h+=vordruckCard(o);
@@ -2090,6 +2100,9 @@ function einsatzCard(o,fk){
   let h=`<div class="card" id="einsatzCard"><div class="row between"><h3 style="margin:0">Einsatz</h3>${e.fahrzeug?`<span class="chip">🚐 ${esc(fahrzeugText(e))}</span>`:""}</div>
    <div class="steps" style="margin-top:10px">${SCHRITTE.map((s,i)=>`<div class="${i<idx||st==="fertig"?"on":i===idx?"cur":""}"></div>`).join("")}</div>
    <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
+  if(!darfBericht(o) && ["bericht","rekla","abnahme"].includes(st)){
+    return h+`<div class="banner info" style="margin:0">📝 Den Montagebericht schreibt <b>${esc(nameOf(o.berichtSchreiber))}</b>. Deine Zeit, Nachweise und Fotos sind gespeichert und fließen mit ein.</div></div>`;
+  }
   if(st==="fahrzeug"){
     if((o.leerfahrten||[]).length) h+=`<div class="banner warn small">${vorleistungZeilen(o).map(esc).join("<br>")}</div>`;
     const fzE=meineFahrzeuge(), fzD=einsatzFz(o), wahl=S.fzWahl[id];
@@ -2255,7 +2268,13 @@ function montageFertigDialog(id){
   });
 }
 // Berichte, die noch offen sind (Montage fertig, Bericht nicht abgegeben) – z. B. während der Fahrt weiterschreiben
-const offeneBerichte=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&(o.monteure||[]).includes(myId())&&["bericht","rekla","abnahme"].includes(schritt(o)));
+const darfBericht=o=>!o?.berichtSchreiber||o.berichtSchreiber===myId()||can.planen();
+const offeneBerichte=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&(o.monteure||[]).includes(myId())&&darfBericht(o)&&["bericht","rekla","abnahme"].includes(schritt(o)));
+// Chef legt fest, wer den Montagebericht schreibt
+function berichtSchreiberHtml(o){
+  const leute=[...new Set([...(o.monteure||[])])];
+  return `<div class="ziel-w">${[["","👥 jeder"],...leute.map(u=>[u,(u===myId()?"Ich":nameOf(u))])].map(([u,l])=>`<button class="fp ${(o.berichtSchreiber||"")===u?"on":""}" data-bs="${esc(u)}">${u?"📝 ":""}${esc(l)}</button>`).join("")}</div>`;
+}
 // Nachweise während der Montage: Position + Anzahl + Foto (Menge geht direkt in den Montagebericht)
 const NACHWEISE=[["passschnitt","✂️ Passschnitt"],["aussparung","⭕ Aussparung"],["bohrung_fsz","🔩 Feinsteinzeug bohren"],["ausklinkung_fliese","📐 Ausklinkung Fliese"]];
 const nwLabel=k=>(NACHWEISE.find(x=>x[0]===k)?.[1]||"").replace(/^\S+\s/,"")||(S.lohnPos.find(p=>p.k===k)||{}).label||k;
@@ -3836,7 +3855,7 @@ function azIst(uid,tag){
   if(a) return a[2]===true?{ist:soll,soll}:a[2]===false?{ist:0,soll}:{ist:0,soll:0};
   return {ist:azRechnen(t).netto,soll};
 }
-const azStart=uid=>{ const s0=(S.settings.zeitSoll||{})[uid]?.ab; if(s0) return s0; const t=Object.values(S.az).filter(x=>x.uid===uid&&x.tag).map(x=>x.tag).sort()[0]; return t||tagKey(new Date()); };
+const azStart=uid=>{ const s0=(S.settings.zeitSoll||{})[uid]?.ab; if(s0) return s0; const t=Object.values(S.az).filter(x=>x.uid===uid&&x.tag&&x.art!=="urlaub").map(x=>x.tag).sort()[0]; return t||tagKey(new Date()); };
 function azSumme(uid,von,bis){ let soll=0,ist=0; for(let t=von;t<=bis;t=tagPlus(t,1)){ const x=azIst(uid,t); soll+=x.soll; ist+=x.ist; } return {soll,ist,saldo:ist-soll}; }
 function azMonat(uid,monat){
   const [j,m]=monat.split("-").map(Number), n=new Date(j,m,0).getDate(), heute=tagKey(new Date());
@@ -3905,7 +3924,9 @@ function viewZeit(){
     h+=`<div class="card"><h3>Heute im Team</h3>${leute.map(u=>{ const r=azRechnen(azTag(u,heute)), a=AZ_ABW[azTag(u,heute)?.abw];
       return `<button class="az-team ${u===uid?"on":""}" data-azwer="${esc(u)}"><span class="av">${esc(initials(u))}</span><b style="flex:1;text-align:left">${esc(nameOf(u))}</b><span class="small ${r.laeuft?"":"mute"}">${a?a[0]+" "+a[1]:r.laeuft?`● seit ${fmtUhr(r.bl.find(b=>!b.bis)?.von)}`:r.bl.length?`${fmtMin(r.netto)} Std.`:"–"}</span></button>`; }).join("")}</div>`;
   }
+  if(chef) h+=urlaubAntraegeChef();
   if(uid===myId()) h+=azStempelKarte();
+  if(uid===myId()) h+=meineEinsaetzeKarte();
   const kon=azKonto(uid);
   h+=`<div class="card">
    <div class="row between"><button class="btn sm ghost" data-azm="-1">‹</button><b>${new Date(monat+"-01T12:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"})}${uid!==myId()?` · ${esc(nameOf(uid))}`:""}</b><button class="btn sm ghost" data-azm="1">›</button></div>
@@ -3919,6 +3940,8 @@ function viewZeit(){
        <b>${a?"":r.bl.length?fmtMin(r.netto):""}</b>${w.length?`<span title="${esc(w.join(" · "))}">⚠️</span>`:""}</button>`; }).join("")}</div>
    <button class="btn sm ghost block" data-aztag="${monat===heute.slice(0,7)?heute:monat+"-01"}" data-azuid="${esc(uid)}" data-azneu="1" style="margin-top:8px">＋ Tag nachtragen / Abwesenheit</button>
   </div>
+  ${verdienstKarte(uid,mo)}
+  ${urlaubKarte(uid)}
   <div class="card"><h3>Monatsabschluss</h3>
    <div class="small">${md?.maAm?`✓ Von ${esc(nameOf(uid))} bestätigt am ${fmtDT(md.maAm)}`:"Noch nicht vom Mitarbeiter bestätigt"}<br>${md?.chefAm?`🔒 Vom Chef freigegeben am ${fmtDT(md.chefAm)} – gesperrt`:"Noch nicht vom Chef freigegeben"}</div>
    <div class="grid2" style="margin-top:10px">
@@ -3927,6 +3950,7 @@ function viewZeit(){
     <button class="btn" id="azPdf">⬇︎ PDF</button><button class="btn" id="azCsv">⬇︎ CSV</button></div>
    ${chef?`<details style="margin-top:10px"><summary class="small" style="cursor:pointer;font-weight:650">⚙️ Soll-Arbeitszeit für ${esc(nameOf(uid))}</summary>
      <div class="grid2" style="margin-top:8px"><div><label class="f">Std. pro Woche</label><input class="i" id="azWs" inputmode="decimal" value="${esc((S.settings.zeitSoll||{})[uid]?.wochenStd??40)}"></div><div><label class="f">Erfassung ab</label><input class="i" type="date" id="azAb" value="${esc(azStart(uid))}"></div></div>
+     <div class="grid2"><div><label class="f">Stundenlohn (€ brutto)</label><input class="i" id="azLohn" inputmode="decimal" value="${esc(personalVon(uid).stundenlohn??"")}" placeholder="z. B. 18,50"></div><div><label class="f">Urlaubstage / Jahr</label><input class="i" id="azUrl" inputmode="numeric" value="${esc(personalVon(uid).urlaubstage??30)}"></div></div>
      <label class="f">Arbeitstage</label><div class="ziel-w">${["Mo","Di","Mi","Do","Fr","Sa","So"].map((d,i)=>`<button class="fp ${((S.settings.zeitSoll||{})[uid]?.tage||[1,2,3,4,5]).includes(i+1)?"on":""}" data-azwt="${i+1}">${d}</button>`).join("")}</div>
      <button class="btn sm ok" id="azSollOk" style="margin-top:8px">Speichern</button></details>`:""}
    <div class="small mute" style="margin-top:10px">Erfassung nach § 16 ArbZG · Beginn, Ende und Pausen je Tag · jede Änderung wird mit Grund protokolliert · Aufbewahrung mind. 2 Jahre · Feiertage Rheinland-Pfalz.</div></div>`;
@@ -4006,7 +4030,119 @@ function bindZeit(){
   let wt=[...((S.settings.zeitSoll||{})[uid]?.tage||[1,2,3,4,5])];
   document.querySelectorAll("[data-azwt]").forEach(b=>b.onclick=()=>{ const n=+b.dataset.azwt; wt=wt.includes(n)?wt.filter(x=>x!==n):[...wt,n].sort(); b.classList.toggle("on"); });
   $("#azSollOk") && ($("#azSollOk").onclick=async()=>{ const ws=parseFloat(String($("#azWs").value).replace(",",".")); if(!(ws>=0)) return toast("Bitte Stunden pro Woche eintragen");
-    await upd("einstellungen/allgemein",{zeitSoll:{...(S.settings.zeitSoll||{}),[uid]:{wochenStd:ws,tage:wt,ab:$("#azAb").value||null}}}); toast("Soll-Arbeitszeit gespeichert ✓"); });
+    await upd("einstellungen/allgemein",{zeitSoll:{...(S.settings.zeitSoll||{}),[uid]:{wochenStd:ws,tage:wt,ab:$("#azAb").value||null}}});
+    const lohn=parseFloat(String($("#azLohn").value).replace(",","."))||null, url=parseInt($("#azUrl").value,10)||null;
+    if(S.isOwner){ await upd("lohn/preise",{personal:{...(S.preise?.personal||{}),[uid]:{stundenlohn:lohn,urlaubstage:url}}}).catch(()=>{}); // Quelle: nur Chef
+      await setDoc("arbeitszeit/"+uid+"_L",{art:"lohn",uid,stundenlohn:lohn,urlaubstage:url,am:Date.now(),von:myId()}); } // Kopie, die der Mitarbeiter lesen kann
+    toast("Gespeichert ✓"); });
+  $("#urlAntrag") && ($("#urlAntrag").onclick=()=>urlaubAntragDialog());
+  document.querySelectorAll("[data-url-ok],[data-url-nein]").forEach(b=>b.onclick=()=>urlaubEntscheiden(b.dataset.urlOk||b.dataset.urlNein,!!b.dataset.urlOk));
+  document.querySelectorAll("[data-url-weg]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Antrag zurückziehen?","Der Urlaubsantrag wird gelöscht.","Zurückziehen","bad")) return; await S.db.doc("arbeitszeit/"+b.dataset.urlWeg).delete(); delete S.az[b.dataset.urlWeg]; render(); });
+  $("#meineDaten") && ($("#meineDaten").onclick=()=>meineDatenDialog());
+}
+/* ---------- Mitarbeiter: Einsätze, Verdienst, Urlaub ---------- */
+function meineEinsaetzeKarte(){
+  const heute=tagKey(new Date());
+  const l=Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&phase(o)==="arbeit"&&(o.monteure||[]).includes(myId())).sort((a,b)=>(a.termin||9e15)-(b.termin||9e15)).slice(0,6);
+  if(!l.length) return `<div class="card"><h3>🔧 Meine Einsätze</h3><div class="small mute">Gerade keine Einsätze für dich.</div></div>`;
+  return `<div class="card"><h3>🔧 Meine Einsätze</h3>${l.map(o=>{ const st=schritt(o), lauf=running(o), ber=["bericht","rekla","abnahme"].includes(st)&&darfBericht(o);
+    return `<a class="az-ein" href="#a-${esc(o.id)}"><div style="flex:1;min-width:0"><b>${esc(o.nr)}</b> <span class="mute">${esc(o.bauvorhaben||"")}</span><div class="small mute">${o.termin?(terminTag(o)===heute?"heute":kurzDatum(o.termin)):"ohne Datum"}${o.plzOrt?" · "+esc(o.plzOrt):""}</div></div>
+      ${lauf?`<span class="chip ok">⏱ läuft</span>`:ber?`<span class="chip warn">📝 Bericht</span>`:o.berichtSchreiber===myId()?`<span class="chip info">📝 du</span>`:""}<span class="mute">›</span></a>`; }).join("")}</div>`;
+}
+// Lohn (nur Chef pflegt) und eigene Steuerdaten (Mitarbeiter pflegt)
+const personalVon=uid=>({...(S.az[uid+"_L"]||{}),...((S.preise?.personal||{})[uid]||{})});
+const steuerVon=uid=>S.az[uid+"_P"]||{};
+function estTarif(x){ x=Math.floor(Math.max(0,x)); if(x<=12348) return 0; if(x<=17799){ const y=(x-12348)/10000; return Math.floor((914.51*y+1400)*y); }
+  if(x<=69878){ const z=(x-17799)/10000; return Math.floor((173.10*z+2397)*z+1034.87); } if(x<=277825) return Math.floor(0.42*x-11135.63); return Math.floor(0.45*x-19470.38); }
+// Netto-Schätzung (vereinfacht, Stand 2026): Sozialversicherung mit Beitragsbemessungsgrenzen, Lohnsteuer nach § 32a EStG je Steuerklasse, Soli, Kirchensteuer RLP 9 %
+function nettoSchaetzung(bm,p){
+  const kl=+p.steuerklasse||1, kinder=nn(p.kinder), alter=p.geburtsjahr?new Date().getFullYear()-nn(p.geburtsjahr):30, zus=p.kvZusatz!=null&&p.kvZusatz!==""?nn(p.kvZusatz):2.9;
+  const kvb=Math.min(bm,5812.5), rvb=Math.min(bm,8450);
+  const kv=kvb*(7.3+zus/2)/100, pv=kvb*(1.8+(!kinder&&alter>=23?0.6:0)-(kinder>=2?Math.min(kinder-1,4)*0.25:0))/100, rv=rvb*0.093, av=rvb*0.013, sv=kv+pv+rv+av;
+  let zve=bm*12-1230-36-(rv+kv+pv)*12; if(kl===2) zve-=4260;
+  const est=kl===3?2*estTarif(zve/2):(kl===5||kl===6)?Math.max(2*(estTarif(zve*1.25)-estTarif(zve*0.75)),Math.floor(Math.max(0,zve)*0.14)):estTarif(zve);
+  const lst=est/12, soli=(est>20350?Math.min(est*0.055,(est-20350)*0.119):0)/12, kist=p.kirche?lst*0.09:0;
+  return {brutto:bm,lst,soli,kist,sv,kv,pv,rv,av,netto:Math.max(0,bm-lst-soli-kist-sv)};
+}
+function verdienstKarte(uid,mo){
+  const lohn=nn(personalVon(uid).stundenlohn); const eig=uid===myId();
+  if(!lohn) return can.planen()?`<div class="card"><h3>💶 Verdienst</h3><div class="small mute">Noch kein Stundenlohn hinterlegt – unten bei ⚙️ eintragen.</div></div>`:(eig?`<div class="card"><h3>💶 Verdienst</h3><div class="small mute">Dein Stundenlohn ist noch nicht hinterlegt – JD Brüder trägt ihn ein.</div></div>`:"");
+  const ab=azStart(uid), vollSoll=mo.tage.filter(t=>t>=ab).reduce((s2,t)=>s2+(t>tagKey(new Date())?azSoll(uid,t):0),0)+mo.ist; // Rest des Monats mit Soll-Stunden hochgerechnet
+  const st=steuerVon(uid), bisher=nettoSchaetzung(mo.ist/60*lohn,st), voll=nettoSchaetzung(vollSoll/60*lohn,st);
+  const zeile=(l,v,b)=>`<div class="row between small" style="padding:2px 0"><span class="mute">${l}</span><span>${b?"<b>":""}${fmtEUR(v)}${b?"</b>":""}</span></div>`;
+  return `<div class="card"><h3>💶 Verdienst · ${esc(new Date().toLocaleDateString("de-DE",{month:"long"}))}</h3>
+   <div class="grid2 az-sum" style="grid-template-columns:1fr 1fr!important"><div><span>Brutto bisher</span><b>${fmtEUR(bisher.brutto)}</b></div><div><span>Netto ca.</span><b class="pos">${fmtEUR(bisher.netto)}</b></div></div>
+   <div class="small mute" style="text-align:center;margin-top:4px">${fmtMin(mo.ist)} Std. × ${fmtEUR(lohn)} · voller Monat ca. ${fmtEUR(voll.brutto)} brutto / ${fmtEUR(voll.netto)} netto</div>
+   <details class="mini-f" style="margin-top:8px"><summary>So wird gerechnet</summary>
+    ${zeile("Brutto",bisher.brutto,1)}${zeile("Lohnsteuer (Klasse "+(st.steuerklasse||"1")+")",-bisher.lst)}${bisher.soli?zeile("Solidaritätszuschlag",-bisher.soli):""}${bisher.kist?zeile("Kirchensteuer",-bisher.kist):""}
+    ${zeile("Krankenversicherung",-bisher.kv)}${zeile("Pflegeversicherung",-bisher.pv)}${zeile("Rentenversicherung",-bisher.rv)}${zeile("Arbeitslosenversicherung",-bisher.av)}${zeile("Netto ca.",bisher.netto,1)}
+    <div class="small mute" style="margin-top:6px">Schätzung ohne Gewähr – verbindlich ist die Lohnabrechnung. Urlaub, Krank und Feiertage zählen mit den Soll-Stunden.</div></details>
+   ${eig?`<button class="btn sm ghost" id="meineDaten" style="margin-top:8px">🧾 Meine Steuerdaten${st.steuerklasse?` · Klasse ${esc(st.steuerklasse)}`:" eintragen"}</button>`:st.steuerklasse?`<div class="small mute" style="margin-top:6px">Steuerklasse ${esc(st.steuerklasse)}${st.kinder?` · ${esc(st.kinder)} Kinderfreibetr.`:""}${st.kirche?" · Kirchensteuer":""}</div>`:""}</div>`;
+}
+function meineDatenDialog(){
+  const st=steuerVon(myId());
+  modal(`<h2>🧾 Meine Steuerdaten</h2><div class="small mute">Nur für die Netto-Schätzung in der App. Nur du und JD Brüder sehen sie.</div>
+   <label class="f">Steuerklasse</label><div class="seg" id="sk">${["1","2","3","4","5","6"].map(k=>`<button data-sk="${k}" class="${(st.steuerklasse||"1")===k?"on":""}">${["I","II","III","IV","V","VI"][+k-1]}</button>`).join("")}</div>
+   <div class="small mute" style="margin-top:4px">I ledig · II alleinerziehend · III/V verheiratet (ungleiches Einkommen) · IV verheiratet (gleich) · VI Zweitjob</div>
+   <div class="grid2"><div><label class="f">Kinder(freibeträge)</label><input class="i" id="sKi" inputmode="decimal" value="${esc(st.kinder??0)}"></div><div><label class="f">Geburtsjahr</label><input class="i" id="sGj" inputmode="numeric" value="${esc(st.geburtsjahr??"")}" placeholder="z. B. 1990"></div></div>
+   <div class="grid2"><div><label class="f">Kirchensteuer</label><div class="seg" id="sKs"><button data-ks="0" class="${st.kirche?"":"on"}">Nein</button><button data-ks="1" class="${st.kirche?"on":""}">Ja</button></div></div><div><label class="f">KV-Zusatzbeitrag %</label><input class="i" id="sKv" inputmode="decimal" value="${esc(st.kvZusatz??2.9)}"></div></div>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    let kl=st.steuerklasse||"1", ki=!!st.kirche;
+    m.querySelectorAll("[data-sk]").forEach(b=>b.onclick=()=>{ kl=b.dataset.sk; m.querySelectorAll("[data-sk]").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelectorAll("[data-ks]").forEach(b=>b.onclick=()=>{ ki=b.dataset.ks==="1"; m.querySelectorAll("[data-ks]").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelector("#ok").onclick=async()=>{ await setDoc("arbeitszeit/"+myId()+"_P",{art:"person",uid:myId(),steuerklasse:kl,kinder:parseFloat(String(m.querySelector("#sKi").value).replace(",","."))||0,geburtsjahr:parseInt(m.querySelector("#sGj").value,10)||null,kirche:ki,kvZusatz:parseFloat(String(m.querySelector("#sKv").value).replace(",","."))||2.9,am:Date.now()});
+      close(); toast("Gespeichert ✓"); };
+  });
+}
+// Urlaub: Antrag → Chef bestätigt → Tage werden eingetragen
+const URLAUB_TYP={urlaub:"Urlaub",sonder:"Sonderurlaub",abbau:"Überstundenabbau",unbezahlt:"Unbezahlt frei"};
+const urlaubAlle=uid=>Object.values(S.az).filter(x=>x.art==="urlaub"&&(!uid||x.uid===uid)).sort((a,b)=>String(b.von).localeCompare(String(a.von)));
+const urlaubOffen=()=>urlaubAlle().filter(x=>x.status==="beantragt");
+const urlaubTage=(uid,von,bis)=>{ let n=0; for(let t=von;t<=bis;t=tagPlus(t,1)) if(azSoll(uid,t)>0) n++; return n; };
+function urlaubKarte(uid){
+  const j=String(new Date().getFullYear()), l=urlaubAlle(uid), anspr=nn(personalVon(uid).urlaubstage??30)||30;
+  const gen=l.filter(x=>x.status==="genehmigt"&&x.typ!=="abbau"&&x.typ!=="unbezahlt"&&String(x.von).startsWith(j)).reduce((s2,x)=>s2+nn(x.tage),0);
+  const ant=l.filter(x=>x.status==="beantragt"&&x.typ!=="abbau"&&x.typ!=="unbezahlt"&&String(x.von).startsWith(j)).reduce((s2,x)=>s2+nn(x.tage),0);
+  const st={beantragt:["warn","⏳ beantragt"],genehmigt:["ok","✓ genehmigt"],abgelehnt:["bad","✕ abgelehnt"]};
+  return `<div class="card"><div class="row between"><h3 style="margin:0">🏖 Urlaub ${j}</h3>${uid===myId()?`<button class="btn sm ok" id="urlAntrag">＋ Antrag</button>`:""}</div>
+   <div class="grid3 az-sum"><div><span>Anspruch</span><b>${anspr}</b></div><div><span>Genehmigt</span><b>${gen}</b></div><div><span>Rest</span><b class="${anspr-gen<0?"neg":"pos"}">${anspr-gen}</b></div></div>
+   ${ant?`<div class="small mute" style="text-align:center;margin-top:4px">${ant} Tag${ant>1?"e":""} beantragt</div>`:""}
+   ${l.length?`<div style="margin-top:8px">${l.slice(0,8).map(x=>`<div class="az-ein" style="cursor:default"><div style="flex:1;min-width:0"><b>${new Date(x.von+"T12:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}${x.bis!==x.von?"–"+new Date(x.bis+"T12:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"}):""}</b> · ${x.tage} Tag${x.tage>1?"e":""} · ${esc(URLAUB_TYP[x.typ]||"Urlaub")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${x.grund?`<div class="small" style="color:var(--bad)">${esc(x.grund)}</div>`:""}</div>
+      <span class="chip ${st[x.status]?.[0]||""}">${st[x.status]?.[1]||x.status}</span>${x.status==="beantragt"&&x.uid===myId()?`<button class="btn sm ghost" data-url-weg="${esc(x.id)}" title="Zurückziehen">✕</button>`:""}
+      ${x.status==="beantragt"&&can.planen()?`<button class="btn sm ok" data-url-ok="${esc(x.id)}">✓</button><button class="btn sm ghost" data-url-nein="${esc(x.id)}">✕</button>`:""}</div>`).join("")}</div>`:""}</div>`;
+}
+function urlaubAntraegeChef(){
+  const l=urlaubOffen(); if(!l.length) return "";
+  return `<div class="card" style="border-left:5px solid var(--accent)"><h3>📥 Urlaubsanträge (${l.length})</h3>${l.map(x=>`<div class="az-ein" style="cursor:default"><div style="flex:1;min-width:0"><b>${esc(nameOf(x.uid))}</b> · ${new Date(x.von+"T12:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}${x.bis!==x.von?"–"+new Date(x.bis+"T12:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"}):""} · ${x.tage} Tag${x.tage>1?"e":""}<div class="small mute">${esc(URLAUB_TYP[x.typ]||"Urlaub")}${x.bem?" · "+esc(x.bem):""}</div></div>
+    <button class="btn sm ok" data-url-ok="${esc(x.id)}">✓ Genehmigen</button><button class="btn sm ghost" data-url-nein="${esc(x.id)}">✕</button></div>`).join("")}</div>`;
+}
+function urlaubAntragDialog(){
+  const heute=tagKey(new Date());
+  modal(`<h2>🏖 Urlaubsantrag</h2>
+   <div class="grid2"><div><label class="f">Von</label><input class="i" type="date" id="uVon" value="${heute}"></div><div><label class="f">Bis</label><input class="i" type="date" id="uBis" value="${heute}"></div></div>
+   <div class="small" id="uTage" style="margin-top:6px;font-weight:650"></div>
+   <label class="f">Art</label><div class="seg" id="uTyp">${Object.entries(URLAUB_TYP).map(([k,l],i)=>`<button data-ut="${k}" class="${i?"":"on"}">${l}</button>`).join("")}</div>
+   <label class="f">Bemerkung (optional)</label><input class="i" id="uBem" placeholder="z. B. Familienfeier">
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Antrag stellen</button></div>`,(m,close)=>{
+    let typ="urlaub"; const tage=()=>{ const v=m.querySelector("#uVon").value, b=m.querySelector("#uBis").value; const n=v&&b&&b>=v?urlaubTage(myId(),v,b):0; m.querySelector("#uTage").textContent=n?`= ${n} Arbeitstag${n>1?"e":""}`:"Bitte gültigen Zeitraum wählen"; return n; };
+    tage(); m.querySelector("#uVon").onchange=()=>{ if(m.querySelector("#uBis").value<m.querySelector("#uVon").value) m.querySelector("#uBis").value=m.querySelector("#uVon").value; tage(); }; m.querySelector("#uBis").onchange=tage;
+    m.querySelectorAll("[data-ut]").forEach(b=>b.onclick=()=>{ typ=b.dataset.ut; m.querySelectorAll("[data-ut]").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelector("#ok").onclick=async()=>{ const n=tage(); if(!n) return toast("Im Zeitraum liegt kein Arbeitstag");
+      const rid=myId()+"_U_"+Date.now().toString(36);
+      await setDoc("arbeitszeit/"+rid,{art:"urlaub",uid:myId(),von:m.querySelector("#uVon").value,bis:m.querySelector("#uBis").value,typ,tage:n,bem:m.querySelector("#uBem").value.trim(),status:"beantragt",am:Date.now()});
+      close(); toast("Antrag gestellt ✓ – JD Brüder entscheidet",3000); };
+  });
+}
+async function urlaubEntscheiden(rid,ja){
+  const x=S.az[rid]; if(!x) return;
+  let grund="";
+  if(!ja){ grund=prompt("Grund der Ablehnung (optional):")||""; }
+  else if(!await confirmBox("Urlaub genehmigen?",`${esc(nameOf(x.uid))}: ${x.tage} Tag${x.tage>1?"e":""} ${esc(URLAUB_TYP[x.typ]||"Urlaub")} vom ${new Date(x.von+"T12:00").toLocaleDateString("de-DE")} bis ${new Date(x.bis+"T12:00").toLocaleDateString("de-DE")}. Die Tage werden in der Zeiterfassung eingetragen.`,"Genehmigen","ok")) return;
+  const d={...x}; delete d.id;
+  await setDoc("arbeitszeit/"+rid,{...d,status:ja?"genehmigt":"abgelehnt",grund,entscheidAm:Date.now(),entscheidVon:myId()});
+  if(ja){ const abw={urlaub:"urlaub",sonder:"urlaub",abbau:"abbau",unbezahlt:"unbezahlt"}[x.typ]||"urlaub";
+    for(let t=x.von;t<=x.bis;t=tagPlus(t,1)) if(azSoll(x.uid,t)>0) await azSpeichern(x.uid,t,{abw,notiz:URLAUB_TYP[x.typ]+" (genehmigt)"},S.az[azId(x.uid,t)]?"Urlaub genehmigt":null); }
+  toast(ja?"Genehmigt ✓":"Abgelehnt",2500); render();
 }
 /* ---------- Abrechnung ---------- */
 function viewGeld(){
@@ -4276,6 +4412,10 @@ function bindDetail(id){
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
   $("#subDazu") && ($("#subDazu").onclick=()=>subImEinsatzDialog(id));
+  document.querySelectorAll("[data-bs]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bs||null; if((o.berichtSchreiber||null)===u) return;
+    await upd(P,{berichtSchreiber:u}); S.orders[id]={...S.orders[id],berichtSchreiber:u}; render();
+    if(u && u!==myId()) nachrichtSenden(id,`📝 ${nameOf(u)}: Du schreibst den Montagebericht für diesen Auftrag – er ist für dich freigeschaltet.`);
+    toast(u?`📝 Bericht schreibt jetzt ${u===myId()?"du":nameOf(u)}`:"Bericht kann jeder schreiben",2500); });
   $("#bearbFertig") && ($("#bearbFertig").onclick=async()=>{
     const c=S.orders[id];
     if(c?.aenderung?.status==="frei"){
