@@ -221,6 +221,23 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+.erf{margin-top:12px}.card>.erf{margin-top:0}
+.erf-t{font-weight:700;margin-bottom:8px}
+.erf-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.erf-b{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:72px}
+.erf-b span{font-size:22px;line-height:1}.erf-b b{font-size:15px;margin-top:3px}.erf-b small{font-size:11.5px;color:var(--mute)}
+.erf-b.rk{border-color:#f3c7c3;background:var(--badbg)}
+.erf-b:active{transform:scale(.98)}
+details.erf-sum{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:0 10px;background:var(--card)}
+details.erf-sum>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;font-weight:700}
+details.erf-sum>summary::-webkit-details-marker{display:none}
+details.erf-sum>summary::after{content:"›";font-size:20px;color:var(--mute);transition:transform .15s}
+details.erf-sum[open]>summary::after{transform:rotate(90deg)}
+.erf-zahl{flex:1;text-align:right;font-weight:600;font-size:13px;color:var(--grey)}
+details.erf-sum[open]{padding-bottom:8px}
+.erf-h{font-size:12px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.03em;margin:10px 2px 4px}
+.nw-z.rk{border-color:#f3c7c3}
+.erf-wahl{display:flex;flex-wrap:wrap;gap:6px}
 .az-st.arbeit{border-left:5px solid var(--ok)}.az-st.pause{border-left:5px solid var(--warn)}
 .az-uhr{font-size:34px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
 .az-sum{text-align:center;margin-top:10px;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:6px}.az-sum span{display:block;font-size:12px;color:var(--mute)}.az-sum b{font-size:17px}.az-sum b.neg{color:var(--bad)}.az-sum b.pos{color:var(--ok)}
@@ -2121,8 +2138,7 @@ function einsatzCard(o,fk){
         :`<button class="btn ok block" id="weiterBtn" style="margin-top:12px;min-height:56px;font-size:16px">▶ ${neuerTag?"Neuer Arbeitstag – weiterarbeiten":"Weiterarbeiten"}</button>`}
      ${tageListe(o)}
      ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}
-     ${nachweiseTeil(o,fk)}
-     ${montageFotosTeil(o,fk)}
+     ${erfassenTeil(o,fk)}
      <button class="btn ok block" id="montageFertig" style="margin-top:14px;min-height:56px;font-size:16px">■ Timer stoppen – Montage abgeschlossen</button>`;
   } else if(st==="rekla"){
     const rl=Object.values(S.reklas).filter(r=>r.auftragId===id&&!r.leerfahrt).sort((a,c)=>a.am-c.am), rf=b.reklaFrage;
@@ -2248,30 +2264,95 @@ function fotoWahlBinden(m,liste){
   m.querySelectorAll("[data-fw]").forEach(inp=>inp.onchange=e=>{ [...e.target.files].forEach(f=>liste.push({file:f,url:URL.createObjectURL(f)})); e.target.value=""; zeig(); });
 }
 function nachweisDialog(id,k){
-  const o=S.orders[id]; let pos=k;
-  const auswahl=k==="andere"?`<label class="f">Position</label><select class="i" id="nwK">${nachNutzung(posListe(o),o).filter(x=>x.k!=="stunden").map(x=>`<option value="${esc(x.k)}">${esc(x.label)}</option>`).join("")}</select>`:"";
-  modal(`<h2>${k==="andere"?"📋 Nachweis":esc(NACHWEISE.find(x=>x[0]===k)?.[1]||nwLabel(k))}</h2>${auswahl}
+  const o=S.orders[id]; let pos=k&&k!=="andere"?k:"";
+  const andere=nachNutzung(posListe(o),o).filter(x=>x.k!=="stunden"&&!NACHWEISE.some(n=>n[0]===x.k));
+  modal(`<h2>✂️ Nachweis</h2>
+   <label class="f" style="margin-top:0">Was?</label>
+   <div class="erf-wahl">${NACHWEISE.map(([k2,l])=>`<button class="fp ${pos===k2?"on":""}" data-np="${k2}">${l}</button>`).join("")}</div>
+   <select class="i" id="nwK" style="margin-top:8px"><option value="">${andere.length?"… oder andere Position wählen":"– keine weiteren Positionen –"}</option>${andere.map(x=>`<option value="${esc(x.k)}">${esc(x.label)}</option>`).join("")}</select>
    <label class="f">Anzahl</label>
    <div class="row" style="flex-wrap:nowrap"><button class="btn" data-na="-1" style="width:56px">−</button><input class="i" id="nwM" inputmode="decimal" value="1" style="text-align:center;font-weight:700;font-size:18px"><button class="btn" data-na="1" style="width:56px">＋</button></div>
    <label class="f">Foto * <span class="mute" style="font-weight:500">(Nachweis)</span></label>${fotoWahlHtml()}
-   <label class="f">Bemerkung (optional)</label><input class="i" id="nwB" placeholder="z. B. Kabine 3, Wand links">
+   <input class="i" id="nwB" placeholder="Notiz (optional), z. B. Kabine 3" style="margin-top:8px">
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
     const fotos=[]; fotoWahlBinden(m,fotos);
+    m.querySelectorAll("[data-np]").forEach(b=>b.onclick=()=>{ pos=b.dataset.np; m.querySelector("#nwK").value=""; m.querySelectorAll("[data-np]").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelector("#nwK").onchange=()=>{ if(m.querySelector("#nwK").value){ pos=m.querySelector("#nwK").value; m.querySelectorAll("[data-np]").forEach(x=>x.classList.remove("on")); } };
     m.querySelectorAll("[data-na]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#nwM"); i.value=Math.max(1,(parseFloat(String(i.value).replace(",","."))||0)+Number(b.dataset.na)); });
     m.querySelector("#ok").onclick=async()=>{
-      if(k==="andere") pos=m.querySelector("#nwK").value;
+      if(!pos) return toast("Bitte wählen, was es ist (z. B. Passschnitt)");
       const menge=parseFloat(String(m.querySelector("#nwM").value).replace(",",".")); if(!(menge>0)) return toast("Bitte die Anzahl eintragen");
       if(!fotos.length) return toast("Bitte ein Foto als Nachweis machen");
       const bt=m.querySelector("#ok"); bt.disabled=true; bt.textContent="Wird gespeichert …";
       const nid="n"+Date.now().toString(36), c=S.orders[id]||o;
       const e={id:nid,k:pos,label:nwLabel(pos),einheit:nwEinheit(pos),menge,bem:m.querySelector("#nwB").value.trim(),von:myId(),am:Date.now()};
       await upd(orderPath(id),{nachweise:[...(c.nachweise||[]),e]});
-      // Menge im Montagebericht (Preisliste) mitzählen – nur für echte Positionen der Preisliste
       if(S.lohnPos.some(p=>p.k===pos)){ const l=S.lohn[lohnDocId(id,myId())]; await saveLohn(c,myId(),{mengen:{[pos]:Math.round((nn(l?.mengen?.[pos])+menge)*100)/100}}).catch(()=>{}); }
       close(); await uploadFotos(id,"nachweis:"+nid,fotos.map(f=>f.file),{position:e.label});
-      toast(`${e.label} · ${String(menge).replace(".",",")} eingetragen ✓`,3000);
+      toast(`✓ ${e.label} · ${String(menge).replace(".",",")} – steht im Montagebericht`,3000);
     };
   });
+}
+// Reklamation direkt während der Arbeit: was ist betroffen, was ist los, Anzahl, Foto – fertig
+const RK_TEILE=["🚪 Tür","▮ Seitenwand","▯ Trennwand","▭ Vorderfront","📏 Aluprofil","🔩 Beschlag / Schloss","🪑 Zubehör","✏️ Sonstiges"];
+const RK_ART=[["geliefert","🔨 Beschädigt geliefert","teile"],["fehlt","📦 Fehlt","teile"],["mass","📐 Falsches Maß / falsch gefertigt","teile"],["montage","⚠️ Bei der Montage beschädigt","selbst"],["baustelle","🏗 Baustelle nicht fertig","baustelle"]];
+function reklaSchnellDialog(id){
+  const o=S.orders[id]; let teil="", art="";
+  modal(`<h2>⚠️ Reklamation</h2><div class="small mute">Geht sofort an JD Brüder und landet im Montagebericht unter „Fertigung“.</div>
+   <label class="f">Was ist betroffen?</label><div class="erf-wahl">${RK_TEILE.map(t=>`<button class="fp" data-rt="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+   <input class="i" id="rkTx" placeholder="Was genau? (bei Sonstiges)" style="margin-top:8px;display:none">
+   <label class="f">Was ist los?</label><div class="erf-wahl">${RK_ART.map(([k,l])=>`<button class="fp" data-ra="${k}">${esc(l)}</button>`).join("")}</div>
+   <label class="f">Anzahl</label>
+   <div class="row" style="flex-wrap:nowrap"><button class="btn" data-rn="-1" style="width:56px">−</button><input class="i" id="rkM" inputmode="numeric" value="1" style="text-align:center;font-weight:700;font-size:18px"><button class="btn" data-rn="1" style="width:56px">＋</button></div>
+   <label class="f">Foto *</label>${fotoWahlHtml()}
+   <input class="i" id="rkN" placeholder="Notiz (optional), z. B. Kabine 3, Delle unten" style="margin-top:8px">
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn warn" id="ok">Reklamation speichern</button></div>`,(m,close)=>{
+    const fotos=[]; fotoWahlBinden(m,fotos);
+    m.querySelectorAll("[data-rt]").forEach(b=>b.onclick=()=>{ teil=b.dataset.rt; m.querySelectorAll("[data-rt]").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#rkTx").style.display=/Sonstiges/.test(teil)?"":"none"; });
+    m.querySelectorAll("[data-ra]").forEach(b=>b.onclick=()=>{ art=b.dataset.ra; m.querySelectorAll("[data-ra]").forEach(x=>x.classList.toggle("on",x===b)); });
+    m.querySelectorAll("[data-rn]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#rkM"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.rn)); });
+    m.querySelector("#ok").onclick=async()=>{
+      const tx=m.querySelector("#rkTx").value.trim(), name=/Sonstiges/.test(teil)?tx:teil.replace(/^\S+\s/,"");
+      if(!name) return toast(teil?"Bitte kurz schreiben, was betroffen ist":"Bitte wählen, was betroffen ist");
+      if(!art) return toast("Bitte wählen, was los ist");
+      if(!fotos.length) return toast("Bitte ein Foto machen");
+      if(!S.assets) return toast("Foto-Upload ist für dich nicht freigeschaltet");
+      const bt=m.querySelector("#ok"); bt.disabled=true; bt.textContent="Wird gespeichert …";
+      const ids=[]; for(const f of fotos){ try{ const b2=await shrink(f.file,1600,.82); const a=await S.assets.upload(b2); ids.push(a.id); }catch(e){} }
+      if(!ids.length){ bt.disabled=false; bt.textContent="Reklamation speichern"; return toast("Foto-Upload fehlgeschlagen – bitte nochmal"); }
+      const menge=parseInt(m.querySelector("#rkM").value,10)||1, a=RK_ART.find(x=>x[0]===art), notiz=m.querySelector("#rkN").value.trim();
+      const text=`${name}${menge>1?` (${menge}×)`:""} – ${a[1].replace(/^\S+\s/,"")}${notiz?": "+notiz:""}`;
+      const rid=id+"_"+Date.now().toString(36);
+      await setDoc("reklamationen/"+rid,{auftragId:id,ursache:a[2],text,teil:name,art,menge,fotos:ids,offen:true,am:Date.now(),von:myId(),leerfahrt:false,waehrendMontage:true});
+      S.sync?.run({reklamation:rid}).catch(()=>{});
+      if((S.orders[id]||o).bericht?.reklaFrage!=="ja") upd(orderPath(id),{bericht:{reklaFrage:"ja"}}).catch(()=>{});
+      close(); toast("⚠️ Reklamation gespeichert – JD Brüder bekommt Bescheid",3500);
+    };
+  });
+}
+// Ein Bereich für alles, was während der Arbeit festgehalten wird – Übersicht erst beim Antippen
+function erfassenTeil(o,fk,imBericht=false){
+  const id=o.id, nw=o.nachweise||[], so=sonderFertig(o.bericht||{}), rk=Object.values(S.reklas).filter(r=>r.auftragId===id&&!r.leerfahrt).sort((a,c)=>a.am-c.am), mf=fk("montage");
+  const anz=fk2=>fk(fk2).length;
+  const fotoKlappe=(n,inhalt)=>n?`<details class="mini-f"><summary>📷 ${n} Foto${n>1?"s":""}</summary>${inhalt}</details>`:"";
+  const rkThumbs=r=>`<div class="thumbs">${(r.fotos||[]).map(a=>`<div class="t" data-zoom="/_blob/${esc(a)}"><img loading="lazy" src="/_blob/${esc(a)}" alt=""></div>`).join("")}</div>`;
+  const gr={}; mf.forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push(f); });
+  const teile=[nw.length?`✂️ ${nw.length}`:"",rk.length?`⚠️ ${rk.length}`:"",so.length?`⏱ ${so.length}`:"",mf.length?`📷 ${mf.length}`:""].filter(Boolean);
+  return `<div class="erf" id="nachweise">
+   <div class="erf-t">📸 ${imBericht?"Erfasst während der Arbeit":"Während der Arbeit erfassen"}</div>
+   <div class="erf-g">
+    <button class="erf-b" id="erfNw"><span>✂️</span><b>Nachweis</b><small>Passschnitt, Bohrung …</small></button>
+    <button class="erf-b rk" id="erfRk"><span>⚠️</span><b>Reklamation</b><small>kaputt, fehlt, falsch</small></button>
+    <button class="erf-b" id="mehrAufw"><span>⏱</span><b>Mehraufwand</b><small>Zeit + Grund</small></button>
+    <button class="erf-b" id="mFotoBtn"><span>📷</span><b>Foto</b><small>mit Position</small></button>
+   </div>
+   ${teile.length?`<details class="erf-sum" data-fold="${esc(id)}:erf" ${S.fold[id+":erf"]?"open":""}><summary><span>📂 Erfasst</span><span class="erf-zahl">${teile.join(" · ")}</span></summary>
+    ${nw.length?`<div class="erf-h">✂️ Nachweise</div>${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?` <span class="mute small">· ${esc(x.bem)}</span>`:""}${fotoKlappe(anz("nachweis:"+x.id),thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false))}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}`:""}
+    ${rk.length?`<div class="erf-h">⚠️ Reklamationen</div>${rk.map(r=>`<div class="nw-z rk"><div style="flex:1;min-width:0"><b>${esc(r.text||"")}</b> <span class="chip ${r.offen?"bad":"ok"}" style="font-size:11px">${r.offen?"offen":"erledigt"}</span>${fotoKlappe((r.fotos||[]).length,rkThumbs(r))}</div>${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}" title="Bearbeiten">✏️</button>`:""}</div>`).join("")}`:""}
+    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b> · ${x.min?fmtStd(x.min)+" Std. · ":""}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
+    ${mf.length?`<div class="erf-h">📷 Fotos</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div></div>`).join("")}`:""}
+   </details>`:`<div class="small mute" style="margin-top:8px">${imBericht?"Nichts erfasst.":"Noch nichts erfasst. Nachweise zählen automatisch im Montagebericht mit."}</div>`}
+  </div>`;
 }
 const MEHR_GRUENDE=["Räume nur teilweise montierbar","Anhänger abladen & sortieren","Material fehlt / falsch geliefert","Wartezeit auf der Baustelle","Baustelle nicht frei / andere Gewerke"];
 function mehrAufwandDialog(id){
@@ -2395,7 +2476,7 @@ function berichtCard(o,fk){
   return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
    ${S.lohnPos.length?lohnCard(o,{montagebericht:true}):""}
    ${uebernachtungFold(o)}
-   <div class="card">${nachweiseTeil(o,fk,true)}</div>
+   <div class="card">${erfassenTeil(o,fk,true)}</div>
    <div class="card"><h3>Geschosse &amp; Fotos</h3>${geschTeil(o)}<label class="f">Fotos nach der Montage</label>${thumbs(fk("nachher"),"nachher",true)}</div>`;
 }
 function uebernachtungFold(o){
@@ -2518,6 +2599,8 @@ function bindEinsatz(o){
   $("#mFotoBtn") && ($("#mFotoBtn").onclick=()=>montageFotoDialog(id));
   document.querySelectorAll("[data-nw]").forEach(b=>b.onclick=()=>nachweisDialog(id,b.dataset.nw));
   $("#mehrAufw") && ($("#mehrAufw").onclick=()=>mehrAufwandDialog(id));
+  $("#erfNw") && ($("#erfNw").onclick=()=>nachweisDialog(id,""));
+  $("#erfRk") && ($("#erfRk").onclick=()=>reklaSchnellDialog(id));
   document.querySelectorAll("[data-nwdel]").forEach(b=>b.onclick=async()=>{ const c=S.orders[id], x=(c.nachweise||[]).find(n=>n.id===b.dataset.nwdel); if(!x) return;
     if(!await confirmBox("Nachweis entfernen?",`${esc(x.label)} · ${esc(String(x.menge))} wird entfernt${S.lohnPos.some(p=>p.k===x.k)?" und die Menge im Montagebericht entsprechend verringert":""}.`,"Entfernen","bad")) return;
     await upd(P,{nachweise:(c.nachweise||[]).filter(n=>n.id!==x.id)});
