@@ -1628,7 +1628,8 @@ function viewDetail(id){
 
   // Kopf
   if(imEinsatz) h+=`<div class="card ek"><div class="ek-t"><b>${esc(o.nr)}</b>${o.bauvorhaben?` <span>${esc(o.bauvorhaben)}</span>`:""}</div>
-     <div class="kopf-akt">${addr?`<a class="btn" href="${esc(navUrl(addr))}" target="_blank" rel="noopener">🧭 Navi</a>`:""}${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:""}</div></div>`;
+     <div class="kopf-akt">${addr?`<a class="btn" href="${esc(navUrl(addr))}" target="_blank" rel="noopener">🧭 Navi</a>`:""}${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:""}${!can.sub()?`<button class="btn" id="subDazu">👷 Subunternehmer hinzufügen</button>`:""}</div>
+     ${(o.monteure||[]).filter(u=>S.roles[u]==="sub").length?`<div class="small mute" style="margin-top:6px">🤝 Mit dabei: ${(o.monteure||[]).filter(u=>S.roles[u]==="sub").map(u=>esc(nameOf(u))).join(", ")}</div>`:""}</div>`;
   else h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
@@ -3940,6 +3941,7 @@ function bindDetail(id){
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
+  $("#subDazu") && ($("#subDazu").onclick=()=>subImEinsatzDialog(id));
   $("#bearbFertig") && ($("#bearbFertig").onclick=async()=>{
     const c=S.orders[id];
     if(c?.aenderung?.status==="frei"){
@@ -4200,6 +4202,24 @@ async function mitDazuDialog(id){
       close(); render();
       nachrichtSenden(id,`👷 ${sel.map(nameOf).join(", ")}: Du warst bei dieser Montage mit dabei. Bitte trag in der App unter „🤝 Mein Anteil“ deine Positionen ein und gib sie ab.`);
       toast(`${sel.length===1?nameOf(sel[0])+" ist":sel.length+" Personen sind"} dazugenommen ✓ – Nachricht ist raus`,3500);
+    };
+  });
+}
+async function subImEinsatzDialog(id){
+  const o=S.orders[id];
+  const subs=Object.keys(S.roles).filter(k=>S.roles[k]==="sub"&&!(o.monteure||[]).includes(k)&&(k!=="test-sub"||istTest(o)));
+  await loadProfiles(subs);
+  modal(`<h2>👷 Subunternehmer hinzufügen</h2><div class="small mute" style="margin-bottom:10px">Der Subunternehmer bekommt diesen Auftrag sofort aufs Handy – mit der ganzen Einsatz-Seite: Nachweise, Fotos, Unterlagen. Nach dem Abschluss trägt er seinen Anteil (Preisliste) ein, du bestätigst ihn.</div>
+   ${subs.length?subs.map(c=>`<label class="person" style="cursor:pointer"><input type="checkbox" value="${esc(c)}" style="width:20px;height:20px"><span class="av">${esc(initials(c))}</span><b style="flex:1">${esc(nameOf(c))}</b></label>`).join(""):`<div class="small mute">Alle Subunternehmer sind schon dabei.</div>`}
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Hinzufügen</button></div>`,(m,close)=>{
+    m.querySelector("#ok").onclick=async()=>{
+      const sel=[...m.querySelectorAll("input:checked")].map(i=>i.value); if(!sel.length) return toast("Bitte einen Subunternehmer wählen");
+      const c=S.orders[id]||o, ng={...(c.nachgetragen||{})}; sel.forEach(u=>ng[u]={am:Date.now(),von:myId(),imEinsatz:true});
+      const patch={monteure:[...new Set([...(c.monteure||[]),...sel])],nachgetragen:ng};
+      if(c.termin) patch.terminOk={...(c.terminOk||{}),...Object.fromEntries(sel.map(u=>[u,String(c.termin)]))};
+      await upd(orderPath(id),patch); S.orders[id]={...S.orders[id],...patch}; close(); render();
+      nachrichtSenden(id,`👷 ${sel.map(nameOf).join(", ")}: Du bist bei dieser Montage mit dabei. Du siehst jetzt den Auftrag mit Unterlagen und kannst Nachweise und Fotos hinzufügen.`);
+      toast(`${sel.map(nameOf).join(", ")} ist dabei ✓ – Nachricht ist raus`,3500);
     };
   });
 }
