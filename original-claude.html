@@ -1135,7 +1135,7 @@ function orderChips(o){
   const c=[];
   if(o.storniert){ if(landOf(o)==="lu") c.push(`<span class="chip info">🇱🇺 Luxemburg</span>`); c.push(`<span class="chip bad">❌ Storniert${o.storniert.am?" am "+new Date(o.storniert.am).toLocaleDateString("de-DE"):""}</span>`); if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`); return c.join(""); }
   if(landOf(o)==="lu") c.push(`<span class="chip info">🇱🇺 Luxemburg</span>`);
-  if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o)) c.push(`<span class="chip gold">NEU</span>`);
+  if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o) && phase(o)!=="erledigt") c.push(`<span class="chip gold">NEU</span>`);
   if(o.abschluss){
     const t=o.abschluss.typ;
     c.push(t==="ok"?`<span class="chip ok">✓ Montiert</span>`:`<span class="chip warn">✓ Montiert mit Reklamation</span>`);
@@ -1145,6 +1145,8 @@ function orderChips(o){
     if(o.bestaetigtAm&&!can.planen()) c.push(`<span class="chip ok">✓ bestätigt</span>`);
     if(o.berichtStatus==="gesendet") c.push(`<span class="chip ok">Bericht gesendet</span>`);
     if(wartetAufAbrechnung(o)) c.push(`<span class="chip warn">⏳ Warten auf Abrechnung</span>`);
+  } else if(phase(o)==="erledigt"){
+    c.push(`<span class="chip ok">✓ erledigt</span>`);
   } else {
     if(running(o)) c.push(`<span class="chip info">⏱ läuft</span>`);
     if(o.terminStatus==="fest") c.push(`<span class="chip ok">Fest: ${esc(o.termin?fmtDate(o.termin):"terminiert")}</span>`);
@@ -1327,7 +1329,10 @@ function viewListe(){
     h+=`<div class="empty">Noch keine Aufträge.<br>${can.mails()?"Tippe oben auf „Mails abrufen“, um die Aufträge von meta zu holen.":"Sobald der Chef die Mails abruft, erscheinen sie hier."}</div>`;
     return h;
   }
-  if(S.filter==="arbeit" && !suche && !spez){ h+=kalender(list); return h; } // Terminiert: als Kalender
+  if(S.filter==="arbeit" && !suche && !spez){
+    const tests=list.filter(istTest);
+    if(tests.length) h+=`<section class="li-gr" style="margin-top:12px"><div class="kal-kopf"><span>🧪 Testaufträge</span><span>${tests.length}</span></div><div class="li-grid">${tests.map(o=>`<div class="li-w">${liKarte(o)}</div>`).join("")}</div></section>`;
+    h+=kalender(list.filter(o=>!istTest(o))); return h; } // Terminiert: als Kalender
   if(!list.length) h+=`<div class="empty">${spez?"Alles erledigt 👍":"Keine Aufträge in dieser Ansicht."}</div>`;
   h+=`<div style="margin-top:10px">${gruppen(list)}</div>`;
   return h;
@@ -2057,8 +2062,9 @@ function einsatzCard(o,fk){
        <div class="row" style="flex-wrap:nowrap;align-items:center"><input class="i" id="anKm" inputmode="decimal" value="${esc(akm)}" placeholder="${esc(o.sollKm||"z. B. 85")}" style="font-size:18px;text-align:center;font-weight:700"><b>km</b></div>
        ${o.sollKm?`<div class="small mute" style="margin-top:4px">Laut Route ca. ${esc(o.sollKm)} km</div>`:""}</div>
      <div class="q">Montage beginnen?</div>
-     <label class="f">Wie viele Personen sind vor Ort?</label>
-     <div class="row" style="flex-wrap:nowrap"><button class="btn" data-pv="-1" style="width:56px">−</button><input class="i" id="pvo" inputmode="numeric" value="${esc(pv)}" style="text-align:center;font-weight:700"><button class="btn" data-pv="1" style="width:56px">＋</button></div>
+     ${e.personenVorOrt?`<div class="small" style="margin:8px 0 2px;font-weight:600" id="pvInfo">👷 ${esc(e.personenVorOrt)} Person${e.personenVorOrt==1?"":"en"} vor Ort · <a href="#" id="pvAend">ändern</a></div>`:""}
+     <div id="pvW" ${e.personenVorOrt?'style="display:none"':""}><label class="f">Wie viele Personen sind vor Ort?</label>
+     <div class="row" style="flex-wrap:nowrap"><button class="btn" data-pv="-1" style="width:56px">−</button><input class="i" id="pvo" inputmode="numeric" value="${esc(pv)}" style="text-align:center;font-weight:700"><button class="btn" data-pv="1" style="width:56px">＋</button></div></div>
      <div class="grid2" style="margin-top:12px"><button class="btn" id="startNein" style="min-height:52px">Nein, noch nicht</button><button class="btn ok" id="startJa" style="min-height:52px">▶ Ja, beginnen</button></div>`;
   } else if(st==="uebernachtung"){
     const u=uebernachtet(b);
@@ -2356,7 +2362,8 @@ function bindEinsatz(o){
     if(fzW){ if(kmW===""||isNaN(nn(kmW))){ $("#eKm")?.focus(); return toast("Bitte den Kilometerstand eintragen"); }
       const fid=await fahrtStarten({fzId:fzW,startKm:kmW,auftragId:id,zweck:`Montage Auftrag ${o.nr}`,von:(fahrtenVon(fzW).filter(f=>!f.offen).slice(-1)[0]?.nach)||S.settings.firmenAdresse||"",nach:adresseOf(o),ziel:"baustelle"});
       if(!fid) return false; extra={fahrtId:fid,fahrtFz:fzW}; startGeoMerken(fid); }
-    await upd(P,{einsatz:{...patch,abfahrtAm:Date.now(),von:myId(),...extra}}); if(fzW) toast("Gute Fahrt 🚗 – Kilometerstand gespeichert",3000);
+    const mon=(o.monteure||[]).includes(myId())?null:[...(o.monteure||[]),myId()];
+    await upd(P,{einsatz:{...patch,abfahrtAm:Date.now(),von:myId(),...extra},...(mon?{monteure:mon}:{})}); if(fzW) toast("Gute Fahrt 🚗 – Kilometerstand gespeichert",3000);
     return true;
   };
   document.querySelectorAll("#einsatzCard [data-fz]").forEach(b=>b.onclick=()=>{ S.fzWahl[id]={fahrzeug:b.dataset.fz,fahrzeugText:null}; render(); });
@@ -2390,9 +2397,11 @@ function bindEinsatz(o){
     const pv=parseInt($("#pvo").value,10); if(!(pv>0)) return toast("Bitte die Anzahl der Personen vor Ort eintragen");
     const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(!running(o)) z.push({s:now,by:myId(),p:pv});
     const bp={personen:String(pv)}; if(leer(o.bericht?.istKm)) bp.istKm=km;
-    await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv,anfahrtKm:km},bericht:bp}); toast("Montage läuft ⏱ – jetzt Vorher-Fotos machen 📷",3500);
+    const monS=(o.monteure||[]).includes(myId())?null:[...(o.monteure||[]),myId()];
+    await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv,anfahrtKm:km},bericht:bp,...(monS?{monteure:monS}:{})}); toast("Montage läuft ⏱ – jetzt Vorher-Fotos machen 📷",3500);
   });
   $("#montageFertig") && ($("#montageFertig").onclick=()=>montageFertigDialog(id));
+  $("#pvAend") && ($("#pvAend").onclick=ev=>{ ev.preventDefault(); $("#pvW").style.display=""; $("#pvInfo").remove(); });
   $("#mFotoBtn") && ($("#mFotoBtn").onclick=()=>montageFotoDialog(id));
   $("#toBericht") && ($("#toBericht").onclick=()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}));
   // Bericht fertig → Reklamation? → Sichtabnahme? → Unterschreiben / Versenden
