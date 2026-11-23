@@ -229,6 +229,7 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .erf-b{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:72px}
 .erf-b span{font-size:22px;line-height:1}.erf-b b{font-size:15px;margin-top:3px}.erf-b small{font-size:11.5px;color:var(--mute)}
 .erf-b.rk{border-color:#f3c7c3;background:var(--badbg)}
+.erf-b.voll{grid-column:1/-1;flex-direction:row;align-items:center;gap:10px;min-height:56px}.erf-b.voll b{margin-top:0}.erf-b.voll small{margin-left:auto;text-align:right}
 .erf-b:active{transform:scale(.98)}
 details.erf-sum{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:0 10px;background:var(--card)}
 details.erf-sum>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;font-weight:700}
@@ -549,7 +550,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="97fbab6a6da9";</script>
+<script>window.JD_BUILD="236cbc293593";</script>
 </head>
 <body>
 <header class="top">
@@ -1906,7 +1907,7 @@ function berichtAnsicht(id){
     ${z("Reklamationen",rk.map(r=>`${r.offen?"● ":"✓ "}${esc(URSACHEN[r.ursache]||r.ursache||"")}: ${esc(r.text||"")}`).join("<br>"))}
     ${z("Sichtabnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
    </dl>
-   ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Montage · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${(o.nachweise||[]).map(x=>gruppe(`Nachweis · ${esc(x.label)} · ${esc(String(x.menge).replace(".",","))}`,fk("nachweis:"+x.id))).join("")}${sonderFertig(b).map(x=>gruppe(`Mehraufwand · ${esc(x.arbeit)}`,fk("sonder:"+x.id))).join("")}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"_blob/"+a)))}
+   ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Fertigstellung · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${(o.nachweise||[]).map(x=>gruppe(`Nachweis · ${esc(x.label)} · ${esc(String(x.menge).replace(".",","))}`,fk("nachweis:"+x.id))).join("")}${sonderFertig(b).map(x=>gruppe(`Mehraufwand · ${esc(x.arbeit)}`,fk("sonder:"+x.id))).join("")}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"_blob/"+a)))}
    <div style="display:grid;gap:8px;margin-top:14px">
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
     ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
@@ -2302,9 +2303,9 @@ function fotoWahlBinden(m,liste){
 function nachweisDialog(id,k){
   const o=S.orders[id]; let pos=k&&k!=="andere"?k:"";
   const andere=nachNutzung(posListe(o),o).filter(x=>x.k!=="stunden"&&!NACHWEISE.some(n=>n[0]===x.k));
-  modal(`<h2>✂️ Nachweis</h2>
+  modal(`<h2>✂️ Nachweis / Mehraufwand</h2>
    <label class="f" style="margin-top:0">Was?</label>
-   <div class="erf-wahl">${NACHWEISE.map(([k2,l])=>`<button class="fp ${pos===k2?"on":""}" data-np="${k2}">${l}</button>`).join("")}</div>
+   <div class="erf-wahl">${NACHWEISE.map(([k2,l])=>`<button class="fp ${pos===k2?"on":""}" data-np="${k2}">${l}</button>`).join("")}<button class="fp" id="zuMehr">⏱ Mehraufwand</button></div>
    <select class="i" id="nwK" style="margin-top:8px"><option value="">${andere.length?"… oder andere Position wählen":"– keine weiteren Positionen –"}</option>${andere.map(x=>`<option value="${esc(x.k)}">${esc(x.label)}</option>`).join("")}</select>
    <label class="f">Anzahl</label>
    <div class="row" style="flex-wrap:nowrap"><button class="btn" data-na="-1" style="width:56px">−</button><input class="i" id="nwM" inputmode="decimal" value="1" style="text-align:center;font-weight:700;font-size:18px"><button class="btn" data-na="1" style="width:56px">＋</button></div>
@@ -2312,6 +2313,7 @@ function nachweisDialog(id,k){
    <input class="i" id="nwB" placeholder="Notiz (optional), z. B. Kabine 3" style="margin-top:8px">
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
     const fotos=[]; fotoWahlBinden(m,fotos);
+    m.querySelector("#zuMehr").onclick=()=>{ close(); mehrAufwandDialog(id); };
     m.querySelectorAll("[data-np]").forEach(b=>b.onclick=()=>{ pos=b.dataset.np; m.querySelector("#nwK").value=""; m.querySelectorAll("[data-np]").forEach(x=>x.classList.toggle("on",x===b)); });
     m.querySelector("#nwK").onchange=()=>{ if(m.querySelector("#nwK").value){ pos=m.querySelector("#nwK").value; m.querySelectorAll("[data-np]").forEach(x=>x.classList.remove("on")); } };
     m.querySelectorAll("[data-na]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#nwM"); i.value=Math.max(1,(parseFloat(String(i.value).replace(",","."))||0)+Number(b.dataset.na)); });
@@ -2373,20 +2375,19 @@ function erfassenTeil(o,fk,imBericht=false){
   const fotoKlappe=(n,inhalt)=>n?`<details class="mini-f"><summary>📷 ${n} Foto${n>1?"s":""}</summary>${inhalt}</details>`:"";
   const rkThumbs=r=>`<div class="thumbs">${(r.fotos||[]).map(a=>`<div class="t" data-zoom="_blob/${esc(a)}"><img loading="lazy" src="_blob/${esc(a)}" alt=""></div>`).join("")}</div>`;
   const gr={}; mf.forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push(f); });
-  const teile=[nw.length?`✂️ ${nw.length}`:"",rk.length?`⚠️ ${rk.length}`:"",so.length?`⏱ ${so.length}`:"",mf.length?`📷 ${mf.length}`:""].filter(Boolean);
+  const teile=[nw.length+so.length?`✂️ ${nw.length+so.length}`:"",rk.length?`⚠️ ${rk.length}`:"",mf.length?`📷 ${mf.length}`:""].filter(Boolean);
   return `<div class="erf" id="nachweise">
    <div class="erf-t">📸 ${imBericht?"Erfasst während der Arbeit":"Während der Arbeit erfassen"}</div>
    <div class="erf-g">
-    <button class="erf-b" id="erfNw"><span>✂️</span><b>Nachweis</b><small>Passschnitt, Bohrung …</small></button>
+    <button class="erf-b" id="erfNw"><span>✂️</span><b>Nachweis / Mehraufwand</b><small>Passschnitt, Bohrung, Zeit …</small></button>
     <button class="erf-b rk" id="erfRk"><span>⚠️</span><b>Reklamation</b><small>kaputt, fehlt, falsch</small></button>
-    <button class="erf-b" id="mehrAufw"><span>⏱</span><b>Mehraufwand</b><small>Zeit + Grund</small></button>
-    <button class="erf-b" id="mFotoBtn"><span>📷</span><b>Foto</b><small>mit Position</small></button>
+    <button class="erf-b voll" id="mFotoBtn"><span>📷</span><b>Fertigstellung</b><small>Fotos je Position, wenn etwas fertig ist</small></button>
    </div>
    ${teile.length?`<details class="erf-sum" data-fold="${esc(id)}:erf" ${S.fold[id+":erf"]?"open":""}><summary><span>📂 Erfasst</span><span class="erf-zahl">${teile.join(" · ")}</span></summary>
     ${nw.length?`<div class="erf-h">✂️ Nachweise</div>${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?` <span class="mute small">· ${esc(x.bem)}</span>`:""}${fotoKlappe(anz("nachweis:"+x.id),thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false))}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}`:""}
     ${rk.length?`<div class="erf-h">⚠️ Reklamationen</div>${rk.map(r=>`<div class="nw-z rk"><div style="flex:1;min-width:0"><b>${esc(r.text||"")}</b> <span class="chip ${r.offen?"bad":"ok"}" style="font-size:11px">${r.offen?"offen":"erledigt"}</span>${fotoKlappe((r.fotos||[]).length,rkThumbs(r))}</div>${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}" title="Bearbeiten">✏️</button>`:""}</div>`).join("")}`:""}
     ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b> · ${x.min?fmtStd(x.min)+" Std. · ":""}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
-    ${mf.length?`<div class="erf-h">📷 Fotos</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div></div>`).join("")}`:""}
+    ${mf.length?`<div class="erf-h">📷 Fertigstellung</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div></div>`).join("")}`:""}
    </details>`:`<div class="small mute" style="margin-top:8px">${imBericht?"Nichts erfasst.":"Noch nichts erfasst. Nachweise zählen automatisch im Montagebericht mit."}</div>`}
   </div>`;
 }
@@ -2429,7 +2430,7 @@ function positionVorschlaege(o){
 }
 function montageFotoDialog(id){
   const o=S.orders[id]; const vs=positionVorschlaege(o); let letzte=""; try{ letzte=localStorage.getItem("jdPos:"+id)||""; }catch(e){}
-  modal(`<h2>📷 Fotos hinzufügen</h2><div class="small mute">Wähle oder schreib, welche Position vom Auftrag das ist – die Fotos landen sortiert im Bericht.</div>
+  modal(`<h2>📷 Fertigstellung</h2><div class="small mute">Welche Position ist fertig? Antippen oder schreiben – die Fotos landen sortiert im Bericht.</div>
    <label class="f">Position *</label><input class="i" id="mpos" value="${esc(letzte)}" placeholder="z. B. WC Damen EG · Kabine 2 · Urinaltrennwand" list="mposL"><datalist id="mposL">${vs.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
    ${vs.length?`<div class="ziel-w" style="margin-top:8px">${vs.map(v=>`<button class="fp" data-mp="${esc(v)}">${esc(v)}</button>`).join("")}</div>`:""}
    <div class="grid2" style="margin-top:14px"><label class="btn ok" style="min-height:52px">📷 Kamera<input type="file" accept="image/*" capture="environment" multiple hidden id="mcam"></label><label class="btn" style="min-height:52px">🖼 Galerie<input type="file" accept="image/*" multiple hidden id="mgal"></label></div>
