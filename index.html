@@ -221,6 +221,11 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
+.nw-k{background:var(--greybg);border-radius:12px;padding:10px 12px;margin-top:12px}
+.card .nw-k{margin-top:0;background:transparent;padding:0}
+.nw-l{margin-top:10px;display:grid;gap:6px}
+.nw-z{display:flex;gap:8px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px}
+.nw-z .thumbs{margin-top:6px}
 .weiter-k{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:var(--ok,#15803d);color:#fff;text-decoration:none;box-shadow:0 0 0 0 rgba(21,128,61,.6),0 8px 24px rgba(0,0,0,.25);animation:weiterGlow 1.8s ease-in-out infinite;max-width:560px;margin:0 auto}
 .weiter-k>span{font-size:22px}.weiter-k>div{flex:1;min-width:0}.weiter-k b{display:block;font-size:15px}.weiter-k small{display:block;font-size:12px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @keyframes weiterGlow{0%,100%{box-shadow:0 0 0 0 rgba(21,128,61,.55),0 8px 24px rgba(0,0,0,.25)}50%{box-shadow:0 0 0 10px rgba(21,128,61,0),0 8px 24px rgba(0,0,0,.25)}}
@@ -506,7 +511,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="849f64bbf6d2";</script>
+<script>window.JD_BUILD="53d2fc27f320";</script>
 </head>
 <body>
 <header class="top">
@@ -1842,7 +1847,7 @@ function berichtAnsicht(id){
     ${z("Reklamationen",rk.map(r=>`${r.offen?"● ":"✓ "}${esc(URSACHEN[r.ursache]||r.ursache||"")}: ${esc(r.text||"")}`).join("<br>"))}
     ${z("Sichtabnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
    </dl>
-   ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Montage · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"_blob/"+a)))}
+   ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Montage · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${(o.nachweise||[]).map(x=>gruppe(`Nachweis · ${esc(x.label)} · ${esc(String(x.menge).replace(".",","))}`,fk("nachweis:"+x.id))).join("")}${sonderFertig(b).map(x=>gruppe(`Mehraufwand · ${esc(x.arbeit)}`,fk("sonder:"+x.id))).join("")}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"_blob/"+a)))}
    <div style="display:grid;gap:8px;margin-top:14px">
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
     ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
@@ -2101,6 +2106,7 @@ function einsatzCard(o,fk){
         :`<button class="btn ok block" id="weiterBtn" style="margin-top:12px;min-height:56px;font-size:16px">▶ ${neuerTag?"Neuer Arbeitstag – weiterarbeiten":"Weiterarbeiten"}</button>`}
      ${tageListe(o)}
      ${hotelFahrten(o).length?`<div class="small mute" style="margin-top:6px">🏨 Hotelfahrten: ${esc(hotelText(o))}</div>`:""}
+     ${nachweiseTeil(o,fk)}
      ${montageFotosTeil(o,fk)}
      <button class="btn ok block" id="montageFertig" style="margin-top:14px;min-height:56px;font-size:16px">■ Timer stoppen – Montage abgeschlossen</button>`;
   } else if(st==="rekla"){
@@ -2202,6 +2208,80 @@ function montageFertigDialog(id){
 }
 // Berichte, die noch offen sind (Montage fertig, Bericht nicht abgegeben) – z. B. während der Fahrt weiterschreiben
 const offeneBerichte=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&(o.monteure||[]).includes(myId())&&["bericht","rekla","abnahme"].includes(schritt(o)));
+// Nachweise während der Montage: Position + Anzahl + Foto (Menge geht direkt in den Montagebericht)
+const NACHWEISE=[["passschnitt","✂️ Passschnitt"],["aussparung","⭕ Aussparung"],["bohrung_fsz","🔩 Feinsteinzeug bohren"],["ausklinkung_fliese","📐 Ausklinkung Fliese"]];
+const nwLabel=k=>(NACHWEISE.find(x=>x[0]===k)?.[1]||"").replace(/^\S+\s/,"")||(S.lohnPos.find(p=>p.k===k)||{}).label||k;
+const nwEinheit=k=>(S.lohnPos.find(p=>p.k===k)||{}).einheit||"Stück";
+function nachweiseTeil(o,fk,imBericht=false){
+  const nw=o.nachweise||[], so=sonderFertig(o.bericht||{});
+  const fz=k=>fk(k).length;
+  return `<div class="nw-k" id="nachweise">
+   <div style="font-weight:700;margin-bottom:6px">📋 Nachweise – mit Foto</div>
+   <div class="ziel-w">${NACHWEISE.map(([k,l])=>`<button class="fp" data-nw="${k}">${l}</button>`).join("")}<button class="fp" data-nw="andere">＋ andere Position</button></div>
+   <button class="btn block" id="mehrAufw" style="margin-top:8px;min-height:46px">⏱ Mehraufwand / Sonderbemerkung</button>
+   ${nw.length||so.length?`<div class="nw-l">${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false)}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}
+     ${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>⏱ ${esc(x.arbeit)}</b> · ${fmtStd(x.min)} Std. · ${esc(x.personen||1)} Pers.${x.bemerkung?`<div class="small mute">${esc(x.bemerkung)}</div>`:""}${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false)}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}</div>`
+     :`<div class="small mute" style="margin-top:6px">${imBericht?"Keine Nachweise erfasst.":"Antippen, Anzahl eintragen, Foto machen – die Menge steht danach automatisch im Montagebericht."}</div>`}
+  </div>`;
+}
+// gewählte Fotos merken und erst beim Speichern hochladen
+function fotoWahlHtml(){ return `<div class="thumbs" id="fwL" style="margin-top:8px"></div>
+   <div class="grid2" style="margin-top:8px"><label class="btn ok" style="min-height:50px">📷 Kamera<input type="file" accept="image/*" capture="environment" multiple hidden data-fw></label><label class="btn" style="min-height:50px">🖼 Galerie<input type="file" accept="image/*" multiple hidden data-fw></label></div>`; }
+function fotoWahlBinden(m,liste){
+  const zeig=()=>{ m.querySelector("#fwL").innerHTML=liste.map((f,i)=>`<div class="t"><img src="${f.url}" alt=""><button class="rk-x" data-fwx="${i}">✕</button></div>`).join("");
+    m.querySelectorAll("[data-fwx]").forEach(b=>b.onclick=e=>{ e.preventDefault(); liste.splice(Number(b.dataset.fwx),1); zeig(); }); };
+  m.querySelectorAll("[data-fw]").forEach(inp=>inp.onchange=e=>{ [...e.target.files].forEach(f=>liste.push({file:f,url:URL.createObjectURL(f)})); e.target.value=""; zeig(); });
+}
+function nachweisDialog(id,k){
+  const o=S.orders[id]; let pos=k;
+  const auswahl=k==="andere"?`<label class="f">Position</label><select class="i" id="nwK">${nachNutzung(posListe(o),o).filter(x=>x.k!=="stunden").map(x=>`<option value="${esc(x.k)}">${esc(x.label)}</option>`).join("")}</select>`:"";
+  modal(`<h2>${k==="andere"?"📋 Nachweis":esc(NACHWEISE.find(x=>x[0]===k)?.[1]||nwLabel(k))}</h2>${auswahl}
+   <label class="f">Anzahl</label>
+   <div class="row" style="flex-wrap:nowrap"><button class="btn" data-na="-1" style="width:56px">−</button><input class="i" id="nwM" inputmode="decimal" value="1" style="text-align:center;font-weight:700;font-size:18px"><button class="btn" data-na="1" style="width:56px">＋</button></div>
+   <label class="f">Foto * <span class="mute" style="font-weight:500">(Nachweis)</span></label>${fotoWahlHtml()}
+   <label class="f">Bemerkung (optional)</label><input class="i" id="nwB" placeholder="z. B. Kabine 3, Wand links">
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    const fotos=[]; fotoWahlBinden(m,fotos);
+    m.querySelectorAll("[data-na]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#nwM"); i.value=Math.max(1,(parseFloat(String(i.value).replace(",","."))||0)+Number(b.dataset.na)); });
+    m.querySelector("#ok").onclick=async()=>{
+      if(k==="andere") pos=m.querySelector("#nwK").value;
+      const menge=parseFloat(String(m.querySelector("#nwM").value).replace(",",".")); if(!(menge>0)) return toast("Bitte die Anzahl eintragen");
+      if(!fotos.length) return toast("Bitte ein Foto als Nachweis machen");
+      const bt=m.querySelector("#ok"); bt.disabled=true; bt.textContent="Wird gespeichert …";
+      const nid="n"+Date.now().toString(36), c=S.orders[id]||o;
+      const e={id:nid,k:pos,label:nwLabel(pos),einheit:nwEinheit(pos),menge,bem:m.querySelector("#nwB").value.trim(),von:myId(),am:Date.now()};
+      await upd(orderPath(id),{nachweise:[...(c.nachweise||[]),e]});
+      // Menge im Montagebericht (Preisliste) mitzählen – nur für echte Positionen der Preisliste
+      if(S.lohnPos.some(p=>p.k===pos)){ const l=S.lohn[lohnDocId(id,myId())]; await saveLohn(c,myId(),{mengen:{[pos]:Math.round((nn(l?.mengen?.[pos])+menge)*100)/100}}).catch(()=>{}); }
+      close(); await uploadFotos(id,"nachweis:"+nid,fotos.map(f=>f.file),{position:e.label});
+      toast(`${e.label} · ${String(menge).replace(".",",")} eingetragen ✓`,3000);
+    };
+  });
+}
+const MEHR_GRUENDE=["Räume nur teilweise montierbar","Anhänger abladen & sortieren","Material fehlt / falsch geliefert","Wartezeit auf der Baustelle","Baustelle nicht frei / andere Gewerke"];
+function mehrAufwandDialog(id){
+  const o=S.orders[id], pv=nn(o.einsatz?.personenVorOrt)||nn(o.bericht?.personen)||"";
+  modal(`<h2>⏱ Mehraufwand / Sonderbemerkung</h2>
+   <label class="f">Was ist passiert? *</label>
+   <div class="ziel-w">${MEHR_GRUENDE.map(g=>`<button class="fp" data-mg="${esc(g)}">${esc(g)}</button>`).join("")}</div>
+   <textarea class="i" id="maT" style="margin-top:8px" placeholder="z. B. Mehraufwand, weil die Räume nur teilweise montierbar waren"></textarea>
+   <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="maS" inputmode="decimal" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen</label><input class="i" id="maP" inputmode="numeric" value="${esc(pv)}"></div></div>
+   <label class="f">Fotos</label>${fotoWahlHtml()}
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    const fotos=[]; fotoWahlBinden(m,fotos);
+    m.querySelectorAll("[data-mg]").forEach(b=>b.onclick=()=>{ const t=m.querySelector("#maT"); t.value=t.value.trim()?t.value.trim()+" – "+b.dataset.mg:b.dataset.mg; });
+    m.querySelector("#ok").onclick=async()=>{
+      const t=m.querySelector("#maT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
+      const sv=m.querySelector("#maS").value.trim(), min=sv?parseMin(sv):null; if(sv && min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
+      const bt=m.querySelector("#ok"); bt.disabled=true;
+      const sid="s"+Date.now().toString(36), c=S.orders[id]||o;
+      const neu=[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:String(parseInt(m.querySelector("#maP").value,10)||1),min:min||null,bemerkung:"",von:myId(),am:Date.now()}];
+      await upd(orderPath(id),{bericht:{sonder:neu}});
+      close(); if(fotos.length) await uploadFotos(id,"sonder:"+sid,fotos.map(f=>f.file),{position:"Mehraufwand"});
+      toast("Mehraufwand eingetragen ✓ – steht im Montagebericht",3000);
+    };
+  });
+}
 // Fotos während der Montage – jedes mit Position (z. B. „WC Damen EG · Kabine 2“)
 function montageFotosTeil(o,fk){
   const l=fk("montage"), gr={};
@@ -2300,6 +2380,7 @@ function berichtCard(o,fk){
   return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
    ${S.lohnPos.length?lohnCard(o,{montagebericht:true}):""}
    ${uebernachtungFold(o)}
+   <div class="card">${nachweiseTeil(o,fk,true)}</div>
    <div class="card"><h3>Geschosse &amp; Fotos</h3>${geschTeil(o)}<label class="f">Fotos nach der Montage</label>${thumbs(fk("nachher"),"nachher",true)}</div>`;
 }
 function uebernachtungFold(o){
@@ -2420,6 +2501,14 @@ function bindEinsatz(o){
   $("#montageFertig") && ($("#montageFertig").onclick=()=>montageFertigDialog(id));
   $("#pvAend") && ($("#pvAend").onclick=ev=>{ ev.preventDefault(); $("#pvW").style.display=""; $("#pvInfo").remove(); });
   $("#mFotoBtn") && ($("#mFotoBtn").onclick=()=>montageFotoDialog(id));
+  document.querySelectorAll("[data-nw]").forEach(b=>b.onclick=()=>nachweisDialog(id,b.dataset.nw));
+  $("#mehrAufw") && ($("#mehrAufw").onclick=()=>mehrAufwandDialog(id));
+  document.querySelectorAll("[data-nwdel]").forEach(b=>b.onclick=async()=>{ const c=S.orders[id], x=(c.nachweise||[]).find(n=>n.id===b.dataset.nwdel); if(!x) return;
+    if(!await confirmBox("Nachweis entfernen?",`${esc(x.label)} · ${esc(String(x.menge))} wird entfernt${S.lohnPos.some(p=>p.k===x.k)?" und die Menge im Montagebericht entsprechend verringert":""}.`,"Entfernen","bad")) return;
+    await upd(P,{nachweise:(c.nachweise||[]).filter(n=>n.id!==x.id)});
+    if(S.lohnPos.some(p=>p.k===x.k)){ const uid=x.von||myId(), l=S.lohn[lohnDocId(id,uid)]; if(l) await saveLohn(c,uid,{mengen:{[x.k]:Math.max(0,Math.round((nn(l.mengen?.[x.k])-nn(x.menge))*100)/100)||""}}).catch(()=>{}); } });
+  document.querySelectorAll("[data-sodel]").forEach(b=>b.onclick=async()=>{ const c=S.orders[id]; if(!await confirmBox("Mehraufwand entfernen?","Der Eintrag wird aus dem Montagebericht entfernt.","Entfernen","bad")) return;
+    await upd(P,{bericht:{sonder:sonderListe(c.bericht||{}).filter(x=>x.id!==b.dataset.sodel)}}); });
   $("#toBericht") && ($("#toBericht").onclick=()=>$("#berichtCard")?.scrollIntoView({behavior:"smooth"}));
   // Bericht fertig → Reklamation? → Sichtabnahme? → Unterschreiben / Versenden
   const nachOben=()=>setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),120);
