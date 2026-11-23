@@ -3323,8 +3323,20 @@ function geoPos(ms=6000){
 async function geoAdresse(adr){
   adr=String(adr||"").trim(); if(adr.length<6||!/\d/.test(adr)) return null;
   const k="jdGeo:"+adr.toLowerCase(); try{ const c=JSON.parse(localStorage.getItem(k)||"null"); if(c) return c; }catch(e){}
-  try{ const r=await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=de&q=${encodeURIComponent(adr)}`)).json();
-    if(!r?.[0]) return null; const g={lat:+r[0].lat,lon:+r[0].lon}; try{ localStorage.setItem(k,JSON.stringify(g)); }catch(e){} return g; }catch(e){ return null; }
+  // mehrere Schreibweisen probieren: wie geschrieben → ohne Klammern/Länderkürzel („L-8389“) → nur PLZ + Ort
+  const ohne=adr.replace(/\([^)]*\)/g," ").replace(/\b(?:L|D|A|B|F|NL|CH)-(?=\d{4,5}\b)/g,"").replace(/\s+/g," ").replace(/\s+,/g,",").trim();
+  const lu=/\bL-\d{4}\b|luxemb/i.test(adr)?"lu":"";
+  const plzOrt=(ohne.match(/(\d{4,5}\s+[^,]+)$/)||[])[1]||"";
+  const varianten=[...new Set([adr,ohne,plzOrt].filter(x=>x&&x.length>=4))];
+  // Kartendienst erlaubt etwa 1 Anfrage pro Sekunde → bei „zu viele“ kurz warten und erneut versuchen
+  const holen=async q=>{ for(let v=0;v<3;v++){ try{ const res=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=de&countrycodes=${lu||"de,lu,fr,be,nl,at,ch"}&q=${encodeURIComponent(q)}`);
+      if(res.status===429||res.status>=500){ await new Promise(r=>setTimeout(r,1500*(v+1))); continue; } return await res.json(); }catch(e){ await new Promise(r=>setTimeout(r,1200)); } } return null; };
+  for(const q of varianten){
+    const r=await holen(q);
+    if(r?.[0]){ const g={lat:+r[0].lat,lon:+r[0].lon,genau:q!==plzOrt}; try{ localStorage.setItem(k,JSON.stringify(g)); }catch(e){} return g; }
+    await new Promise(r=>setTimeout(r,1100));
+  }
+  return null;
 }
 // Strecken-km mit dem Auto (wie die Route in Google Maps)
 async function strasseKm(a,b){
@@ -3363,7 +3375,7 @@ async function ankunftPruefen(){
     if(Date.now()-(g.startAm||0)<4*60000) return;
     if(await geoErlaubt()==="denied") return;
     const p=await geoPos(); if(!p) return;
-    if(geoAbst(p,g.zielGeo)>700) return;
+    if(geoAbst(p,g.zielGeo)>(g.zielGeo.genau===false?3000:700)) return;
     S.ankunftGefragt=f.id;
     if(document.querySelector("#modalRoot .modalbg")) return;
     const o=S.orders[g.auftragId];
