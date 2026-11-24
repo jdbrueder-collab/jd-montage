@@ -51,6 +51,8 @@ Deno.serve(async (req) => {
       // Unterlagen/Zusagen für vorhandene Aufträge aus älteren Mails nachladen – legt keine neuen Aufträge an
       if (body?.ergaenzen) return json(await abruf(db, "ergaenzen", "", { abfrage: String(body.ergaenzen), nurBestehende: true }));
       if (body?.erinnerung) return json(await metaErinnerung(db, false));
+      // Fertige Aufträge mit Lexware-Rechnungen abgleichen (lexFertig: "probe" = nur auflisten, "anwenden" = eindeutige → erledigt)
+      if (body?.lexFertig) { try { return json(await lexFertig(db, body.lexFertig === "anwenden")); } catch (e: any) { return json({ fehler: e.message || String(e) }); } }
       // Unterlagen vorhandener Aufträge neu auslesen (z. B. nach besserer Auslese) – nur offene Aufträge, wenige pro Lauf
       if (body?.dokNachlesen) return json(await dokNachlesen(db, Math.min(+body.anzahl || 3, 6), String(body.ab || "")));
     } else {
@@ -963,6 +965,45 @@ async function lexRechnung(db: any, fid: string) {
     await updDoc(db, "finanzen", fid, { lexId: r.id, lexAm: Date.now(), lexKunde: kontakt.name, kunde, rechnungStatus: f.rechnungStatus === "offen" ? "freigegeben" : f.rechnungStatus });
     return { ok: true, id: r.id, link: LEX_LINK + r.id, kunde: kontakt.name, positionen: zeilen.length, text };
   } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
+}
+/** Aufträge unter „Fertig“ (Bericht da, keine Abrechnung): gibt es in Lexware schon eine Rechnung an meta mit der Auftragsnummer?
+ *  anwenden=false: nur auflisten. anwenden=true: Aufträge mit eindeutiger, geschriebener Rechnung → erledigt. */
+async function lexFertig(db: any, anwenden: boolean) {
+  const orders = await getCol(db, "auftraege"), fin = await getCol(db, "finanzen");
+  const fertig = Object.entries(orders).filter(([id, o]: any) => o.abschluss && o.abgerechnet !== true && !o.storniert && !fin[id] && !/^TEST/i.test(o.nr || ""));
+  if (!fertig.length) return { ok: true, auftraege: 0, ergebnis: [] };
+  const ab = new Date(Math.min(...fertig.map(([, o]: any) => o.abschluss.am || Date.now())) - 45 * 864e5).toISOString().slice(0, 10);
+  const k = await lexKunden(db);
+  const rechnungen: any[] = [];
+  for (const c of k.alle) {
+    for (let seite = 0; seite < 6; seite++) {
+      const l = await lex(`/voucherlist?voucherType=invoice&voucherStatus=draft,open,paid,paidoff&contactId=${c.id}&voucherDateFrom=${ab}&size=100&page=${seite}`);
+      for (const v of l.content || []) rechnungen.push({ id: v.id, nr: v.voucherNumber || "", status: v.voucherStatus, datum: v.voucherDate, betrag: v.totalAmount, kunde: c.name });
+      if (l.last !== false) break;
+    }
+  }
+  if (rechnungen.length > 150) return { fehler: `${rechnungen.length} Rechnungen seit ${ab} – zu viele für einen Lauf.` };
+  for (const r of rechnungen) { const d = await lex(`/invoices/${r.id}`);
+    r.text = [d.title, d.introduction, d.remark, ...(d.lineItems || []).flatMap((x: any) => [x.name, x.description])].filter(Boolean).join(" \n ").replace(/\s+/g, " "); }
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const ergebnis: any[] = [];
+  for (const [id, o] of fertig as any) {
+    const nr = String(o.nr || "").trim(), rk = nr.match(/^R[\s-]?(\d+)/i), [grund, teil] = nr.split("/");
+    const genau = rk ? new RegExp(`\\bR\\s*-?\\s*${rk[1]}\\b`, "i") : teil ? new RegExp(`\\b${esc(grund)}\\s*/\\s*${esc(teil)}\\b`) : new RegExp(`\\b${esc(grund)}\\b(?!\\s*/\\s*\\d)`);
+    const aehnlich = rk ? new RegExp(`\\b${rk[1]}\\b`) : new RegExp(`\\b${esc(grund)}\\b`);
+    const g = rechnungen.filter((r) => genau.test(r.text)), a = g.length ? [] : rechnungen.filter((r) => aehnlich.test(r.text));
+    const stelle = (r: any, rx: RegExp) => { const m = r.text.match(rx); return m ? r.text.slice(Math.max(0, (m.index || 0) - 60), (m.index || 0) + 80) : ""; };
+    const zeig = (r: any) => ({ rechnung: r.nr || "(Entwurf)", status: r.status, datum: String(r.datum || "").slice(0, 10), betrag: r.betrag, kunde: r.kunde, stelle: stelle(r, genau.test(r.text) ? genau : aehnlich) });
+    const geschrieben = g.filter((r) => r.status !== "draft");
+    const e: any = { id, nr, ort: o.plzOrt || "", genau: g.map(zeig), aehnlich: a.map(zeig), erledigt: false };
+    if (anwenden && geschrieben.length) {
+      const r = [...geschrieben].sort((x, y) => String(x.datum).localeCompare(String(y.datum)))[0];
+      await updDoc(db, "auftraege", id, { abgerechnet: true, abgerechnetMit: `Lexware-Rechnung ${geschrieben.map((x) => x.nr).join(", ")}`, abgerechnetAm: Date.parse(r.datum) || Date.now(), lexRechnung: { id: r.id, nr: r.nr, status: r.status } });
+      e.erledigt = true;
+    }
+    ergebnis.push(e);
+  }
+  return { ok: true, ab, rechnungen: rechnungen.length, auftraege: fertig.length, ergebnis };
 }
 /** Stand der Rechnung aus Lexware holen: sobald sie dort fertig ist, Rechnungsnummer übernehmen */
 async function lexAbgleich(db: any, fid: string) {
