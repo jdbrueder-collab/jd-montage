@@ -538,6 +538,15 @@ body.nav-weg nav.bottom{transform:translateY(calc(100% + 20px));opacity:0;pointe
 
 .pl-kopf{font-size:12px;font-weight:750;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin:12px 4px 2px}
 .pl-kopf:first-child{margin-top:2px}
+.pl-tabs{display:flex;gap:6px;margin:2px 0 8px;overflow-x:auto;scrollbar-width:none}.pl-tabs::-webkit-scrollbar{display:none}
+.pl-tabs button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:650;cursor:pointer;white-space:nowrap}
+.pl-tabs button.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.pl-tabs .pl-n{opacity:.7;font-weight:600}.pl-tabs .pl-n:empty{display:none}
+.pl-fenster{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scroll-snap-type:y proximity;border:1px solid var(--line);border-radius:12px;padding:0 8px;background:var(--card)}
+.pl-fenster .pl-z{scroll-snap-align:start}.pl-fenster .pl-z:last-of-type{border-bottom:0}
+.pl-fenster[data-zeige=oft] .pl-z[data-oft="0"],.pl-fenster[data-zeige=voll] .pl-z:not(.voll){display:none}
+.pl-leer{display:none;padding:14px 4px}
+.pl-mehr{text-align:center;margin:4px 0 2px}.pl-mehr:empty{display:none}
 </style>
 </head>
 <body>
@@ -1770,6 +1779,7 @@ function anteilChefKarte(o){
 }
 function bindAnteil(id){
   const o=S.orders[id]; if(!o) return; const P=orderPath(id);
+  requestAnimationFrame(()=>plFenster());
   document.querySelectorAll("[data-bfehlt]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bfehlt, c=S.orders[id]||o; b.disabled=true;
     const patch={berichtFehlt:{[u]:{am:Date.now(),von:myId()}}};
     // Bericht an meta ist schon geschrieben → der Sub trägt seinen Anteil nach
@@ -1798,7 +1808,7 @@ function bindAnteil(id){
   $("#gemeinsam") && ($("#gemeinsam").onchange=async()=>{ const v=$("#gemeinsam").checked; await upd(P,{gemeinsam:v}); S.orders[id]={...S.orders[id],gemeinsam:v}; render(); toast(v?"🤝 Gemeinsamer Auftrag – jeder trägt seins ein, im Bericht wird alles zusammengezählt":"Normaler Auftrag",3500); });
   // Preisliste: Betrag je Zeile sofort mitrechnen (gespeichert wird beim Verlassen des Feldes)
   document.querySelectorAll("#preisliste .pl-z:not(.pl-etage) .pl-q, .pl-liste .pl-q").forEach(i=>i.addEventListener("input",()=>{ const z=i.closest(".pl-z"), ep=z.dataset.ep;
-    z.classList.toggle("voll",!!nn(i.value)); z.querySelector(".pl-gp").textContent=nn(i.value)&&ep!==""?fmtEUR(r2(nn(i.value.replace(",","."))*nn(ep))):""; }));
+    z.classList.toggle("voll",!!nn(i.value)); const t=z.closest(".pl-fenster")?.previousElementSibling?.querySelector(".pl-anz"); if(t) t.textContent=z.closest(".pl-fenster").querySelectorAll(".pl-z.voll").length||""; z.querySelector(".pl-gp").textContent=nn(i.value)&&ep!==""?fmtEUR(r2(nn(i.value.replace(",","."))*nn(ep))):""; }));
   $("#anteilAb") && ($("#anteilAb").onclick=async()=>{
     if(document.activeElement?.closest?.("#preisliste")){ document.activeElement.dispatchEvent(new Event("change")); document.activeElement.blur(); await new Promise(r=>setTimeout(r,300)); }
     const mitPreis=!!S.preise&&(!istSubUid(myId())||subPreiseAn());
@@ -3176,11 +3186,35 @@ function nachNutzung(list,o){
   return [...list].sort((a,b)=>(n[b.k]||0)-(n[a.k]||0)||(b.haeufig?1:0)-(a.haeufig?1:0)||(idx.get(a.k)??999)-(idx.get(b.k)??999));
 }
 // Zeilen mit Überschrift „Oft verwendet“ / „Weitere Positionen“
+// Positionen als Fenster mit Reitern: immer ca. 4 Positionen sichtbar, der Rest per Wischen
 function posBloecke(list,o,zeileFn){
-  const n=posNutzung(o?.id), sortiert=nachNutzung(list,o), oft=sortiert.filter(p=>(n[p.k]||0)>=2);
-  if(!oft.length || oft.length===sortiert.length) return sortiert.map(zeileFn).join("");
-  return `<div class="pl-kopf">⭐ Oft verwendet</div>${oft.map(zeileFn).join("")}<div class="pl-kopf">Weitere Positionen</div>${sortiert.filter(p=>!oft.includes(p)).map(zeileFn).join("")}`;
+  const n=posNutzung(o?.id), sortiert=nachNutzung(list,o), oft=new Set(sortiert.filter(p=>(n[p.k]||0)>=2).map(p=>p.k));
+  const mitOft=oft.size>0 && oft.size<sortiert.length, start=S.plTab==="voll"||S.plTab==="alle"||(S.plTab==="oft"&&mitOft)?S.plTab:mitOft?"oft":"alle"; // gewählter Reiter bleibt beim Speichern
+  const zeilen=sortiert.map(p=>zeileFn(p).replace('<div class="pl-z','<div data-oft="'+(oft.has(p.k)?1:0)+'" class="pl-z')).join("");
+  const tab=(k,t)=>`<button type="button" class="${k===start?"on":""}" data-plt="${k}">${t}</button>`;
+  return `<div class="pl-tabs">${mitOft?tab("oft",`⭐ Häufig`):""}${tab("alle",`Alle <span class="pl-n">${sortiert.length}</span>`)}${tab("voll",`✓ Eingetragen <span class="pl-n pl-anz"></span>`)}</div>
+   <div class="pl-fenster" data-zeige="${start}">${zeilen}<div class="pl-leer small mute">Noch nichts eingetragen.</div></div><div class="pl-mehr small mute"></div>`;
 }
+// Fensterhöhe = 4 sichtbare Positionen; Zähler „Eingetragen“ und Hinweis „wischen für mehr“
+function plFenster(root=document){
+  root.querySelectorAll(".pl-fenster").forEach(f=>{
+    if(f.offsetParent===null) return; // zugeklappt – beim Aufklappen neu
+    const zeilen=[...f.querySelectorAll(".pl-z")].filter(z=>z.offsetParent!==null);
+    const voll=f.querySelectorAll(".pl-z.voll").length, tabs=f.previousElementSibling;
+    tabs?.querySelector(".pl-anz") && (tabs.querySelector(".pl-anz").textContent=voll||"");
+    f.querySelector(".pl-leer").style.display=zeilen.length?"none":"block";
+    const h=zeilen.slice(0,4).reduce((a,z)=>a+z.offsetHeight,0);
+    f.style.maxHeight=zeilen.length>4&&h?(h+2)+"px":"none";
+    if(!f.dataset.da){ f.dataset.da=1; f.scrollTop=S.plScroll||0; f.addEventListener("scroll",()=>{ S.plScroll=f.scrollTop; },{passive:true}); }
+    const mehr=f.nextElementSibling; if(mehr?.classList.contains("pl-mehr")) mehr.textContent=zeilen.length>4?`↕ ${zeilen.length-4} weitere – in der Liste wischen`:"";
+  });
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-plt]"); if(!b) return; e.preventDefault();
+  const tabs=b.closest(".pl-tabs"), f=tabs?.nextElementSibling; if(!f) return;
+  tabs.querySelectorAll("[data-plt]").forEach(x=>x.classList.toggle("on",x===b)); f.dataset.zeige=b.dataset.plt; S.plTab=b.dataset.plt; S.plScroll=0; f.scrollTop=0; plFenster(f.parentElement); });
+document.addEventListener("change",e=>{ if(e.target.closest?.(".pl-fenster")) setTimeout(()=>plFenster(),0); });
+document.addEventListener("toggle",()=>requestAnimationFrame(()=>plFenster()),true);
+document.addEventListener("click",()=>requestAnimationFrame(()=>plFenster()));
 function posNutzung(ohneAuftrag){
   const n={};
   Object.values(S.lohn).forEach(l=>{ if(l.auftragId===ohneAuftrag) return; Object.entries(l.mengen||{}).forEach(([k,v])=>{ if(nn(v)) n[k]=(n[k]||0)+1; }); });
