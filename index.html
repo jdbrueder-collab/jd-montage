@@ -142,6 +142,7 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .tun-p.on{box-shadow:inset 0 0 0 2px currentColor}
 .fzeile{display:flex;gap:6px;margin-top:8px;align-items:center;overflow-x:auto;scrollbar-width:none}
 .fzeile::-webkit-scrollbar{display:none}
+@media (max-width:520px){ .fzeile{margin-left:-16px;margin-right:-16px;padding:0 16px} } /* bis zum Bildschirmrand: alles passt, sonst sieht man, dass es weitergeht */
 .fp{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:650;color:var(--grey);cursor:pointer;white-space:nowrap;min-height:32px}
 .fp .n{font-weight:700;opacity:.75;margin-left:2px}
 .fp.on{background:var(--ink);border-color:var(--ink);color:#fff}
@@ -552,7 +553,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="fdf96226bc75";</script>
+<script>window.JD_BUILD="7ad11391c831";</script>
 </head>
 <body>
 <header class="top">
@@ -777,7 +778,7 @@ let pdfjsP=null;
 function loadPdfJs(){ if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib); if(!pdfjsP) pdfjsP=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"; sc.onload=()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); }; sc.onerror=()=>{ pdfjsP=null; rej(new Error("PDF-Anzeige konnte nicht geladen werden")); }; document.head.appendChild(sc); }); return pdfjsP; }
 function dokViewer(src, art="bild", titel="", opt={}){
   const d=document.createElement("div"); d.className="dv";
-  const sauberMgl=art==="scan"||(art==="pdf"&&opt.sauber!==false);
+  const sauberMgl=false; // Unterlagen werden im Original gezeigt (so gewünscht), keine Aufbereitung
   d.innerHTML=`<div class="dvbar"><button class="dvb" data-dv="zu" title="Schließen">✕</button><span class="dvt">${esc(titel||(art==="pdf"?"PDF":"Foto"))}</span>
     <button class="dvb" data-dv="minus" title="Kleiner">−</button><span class="dvp">100 %</span><button class="dvb" data-dv="plus" title="Größer">＋</button><button class="dvb" data-dv="fit" title="Einpassen">⤢</button><button class="dvb" data-dv="dreh" title="Drehen">⟳</button>${sauberMgl?`<button class="dvb dvs" data-dv="scan" title="Sauber (aufbereitet) / Original">✨</button>`:""}
     ${opt.datei?`<button class="dvb" data-dv="laden" title="Speichern / Teilen">⬇</button>`:art==="pdf"?`<a class="dvb" href="${esc(src)}" target="_blank" rel="noopener" title="Im Browser öffnen">↗</a>`:""}</div>
@@ -980,7 +981,7 @@ function offeneReklas(id){ return Object.values(S.reklas).filter(r=>r.auftragId=
 function istFertig(o){ return !!o.abschluss; }
 // Bereiche der Startansicht: nicht verplant → verplant & in Arbeit → erledigt; stornierte extra
 // Weg eines Auftrags: nicht verplant → abholbereit → terminiert → erledigt (Storniert steht abseits)
-const PHASEN=[["offen","Aufträge"],["abholbereit","Abholbereit"],["arbeit","Terminiert"],["fertig","Fertig­gestellt"],["erledigt","Erledigt"],["storniert","Storniert"]];
+const PHASEN=[["offen","Neu"],["abholbereit","Abholbereit"],["arbeit","Terminiert"],["fertig","Fertig"],["erledigt","Erledigt"],["storniert","Storniert"]];
 const HAUPT_PHASEN=PHASEN.filter(([k])=>k!=="storniert");
 // Land der Baustelle: von Hand festgelegt, sonst aus der Adresse erkannt (L-1234, 4-stellige PLZ, „Luxemburg“)
 const LAENDER={de:["🇩🇪","Deutschland"],lu:["🇱🇺","Luxemburg"]};
@@ -1107,29 +1108,32 @@ function reinschrift(pdf,o){
   const li=(d.liste||[]).filter(x=>x.art||x.inhalt);
   if(li.length){ abschnitt("Enthaltene Unterlagen"); li.forEach(x=>absatz(`- ${x.art||"Datei"}${x.seiten?` (${x.seiten} S.)`:""}${x.inhalt?": "+x.inhalt:""}`,{einzug:2})); }
   platz(14); y+=4; pdf.setFont("helvetica","italic"); pdf.setFontSize(8); pdf.setTextColor(130);
-  pdf.text(pdf.splitTextToSize(pdfTxt(`Automatisch aus den Unterlagen gelesen${d.am?" am "+fmtDT(d.am):""}. Maßgeblich sind die Originalseiten, die im Anschluss aufbereitet folgen.`),BR),X,y);
+  pdf.text(pdf.splitTextToSize(pdfTxt(`Automatisch aus den Unterlagen gelesen${d.am?" am "+fmtDT(d.am):""}. Maßgeblich sind die Originalseiten, die im Anschluss unverändert folgen.`),BR),X,y);
 }
 // Bild oder PDF-Seite laden → Canvas
+// Nur verkleinern (für die PDF-Größe), sonst unverändert
+function nurVerkleinern(src,max=2200){ const w0=src.naturalWidth||src.width, h0=src.naturalHeight||src.height, k=Math.min(1,max/Math.max(w0,h0));
+  if(k===1 && src instanceof HTMLCanvasElement) return src; const c=leinwand(Math.round(w0*k),Math.round(h0*k)), cx=c.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,c.width,c.height); cx.drawImage(src,0,0,c.width,c.height); return c; }
 const bildLaden=src=>new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error("Bild konnte nicht geladen werden")); im.src=src; });
 async function unterlagenPdf(id){
   const o=S.orders[id]; if(!o) return;
   const files=Object.values(S.fotos).filter(f=>f.auftragId===id&&f.kat==="unterlagen").sort((a,b)=>(a.am||0)-(b.am||0)||String(a.name||"").localeCompare(String(b.name||""),"de",{numeric:true}));
   const key=files.map(f=>f.id).join()+"|"+(o.dokInfo?.am||"")+"|"+(o.geaendertAm||"");
   S._pdfCache=S._pdfCache||{};
-  const fort=document.createElement("div"); fort.className="toast"; fort.textContent="✨ Unterlagen werden aufbereitet …"; document.body.appendChild(fort);
+  const fort=document.createElement("div"); fort.className="toast"; fort.textContent="📑 PDF wird erstellt …"; document.body.appendChild(fort);
   try{ if(S._pdfCache[id]?.key!==key){
     const jsPDF=await loadJsPDF(); const pdf=new jsPDF({unit:"mm",format:"a4",compress:true});
     reinschrift(pdf,o);
     let n=0; const ges=files.length;
     const seite=c=>{ const quer=c.width>c.height, pw=quer?297:210, ph=quer?210:297, m=7, k=Math.min((pw-2*m)/c.width,(ph-2*m-4)/c.height), w=c.width*k, h=c.height*k;
-      pdf.addPage("a4",quer?"l":"p"); pdf.addImage(c.toDataURL("image/jpeg",.8),"JPEG",(pw-w)/2,m,w,h,undefined,"FAST"); };
-    for(const f of files){ n++; fort.textContent=`✨ Unterlagen werden aufbereitet … ${n} von ${ges}`;
+      pdf.addPage("a4",quer?"l":"p"); pdf.addImage(c.toDataURL("image/jpeg",.88),"JPEG",(pw-w)/2,m,w,h,undefined,"FAST"); };
+    for(const f of files){ n++; fort.textContent=`📑 PDF wird erstellt … ${n} von ${ges}`;
       await new Promise(r=>setTimeout(r,20));
       try{
         if(/pdf/i.test(f.typ||"")){ const lib=await loadPdfJs(); const doc=await lib.getDocument({data:await (await fetch("_blob/"+f.assetId)).arrayBuffer()}).promise;
           for(let i=1;i<=Math.min(doc.numPages,40);i++){ const pg=await doc.getPage(i), v1=pg.getViewport({scale:1}), v=pg.getViewport({scale:2000/Math.max(v1.width,v1.height)});
-            const c=leinwand(Math.floor(v.width),Math.floor(v.height)), cx=c.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,c.width,c.height); await pg.render({canvasContext:cx,viewport:v}).promise; seite(scanSauber(c,2000)); } }
-        else seite(scanSauber(await bildLaden("_blob/"+f.assetId),2000));
+            const c=leinwand(Math.floor(v.width),Math.floor(v.height)), cx=c.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,c.width,c.height); await pg.render({canvasContext:cx,viewport:v}).promise; seite(c); } }
+        else seite(nurVerkleinern(await bildLaden("_blob/"+f.assetId)));
       }catch(e){ console.error(e); }
     }
     const N=pdf.getNumberOfPages(); for(let i=1;i<=N;i++){ pdf.setPage(i); const ps=pdf.internal.pageSize, pw=ps.getWidth(), ph=ps.getHeight(); pdf.setFont("helvetica","normal"); pdf.setFontSize(7.5); pdf.setTextColor(140); pdf.text(pdfTxt(`Auftrag ${o.nr||o.id}`),8,ph-4); pdf.text(`Seite ${i} von ${N}`,pw-8,ph-4,{align:"right"}); }
@@ -1380,7 +1384,7 @@ function orderChips(o){
     else c.push(`<span class="chip warn">Muss terminiert werden</span>`);
     const p=PROD[o.prodStatus||"offen"];
     if(abhBereit(o)) c.push(`<span class="chip abh">✓ Abholbereit${o.abholbereitBestaetigt?" · meta":""}</span>`);
-    else if(o.prodStatus==="abholbereit" && o.nichtVerplant) c.push(`<span class="chip">↩ von Hand nach „Aufträge“</span>`);
+    else if(o.prodStatus==="abholbereit" && o.nichtVerplant) c.push(`<span class="chip">↩ von Hand nach „Neu“</span>`);
     // Produktionsstand (offen / in Produktion / produziert) wird nicht mehr angezeigt – nur „Abholbereit“
     if(o.quelle==="mail-dispo"&&!o.zusage) c.push(`<span class="chip gold">📨 Anfrage von meta</span>`);
     if(o.versand) c.push(`<span class="chip ${/nicht/i.test(o.versand)?"":"ok"}">${esc(o.versand)}</span>`);
@@ -1470,7 +1474,7 @@ function gruppen(list){
   const absteigend=S.filter==="erledigt"||S.filter==="fertig"||S.filter==="storniert";
   const keys=Object.keys(groups).map(Number).sort((a,b)=>absteigend?b-a:a-b);
   const nowK=wkKey(NOW.jahr,NOW.kw);
-  const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Aufträge“</button>`:"";
+  const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Neu“</button>`:"";
   return keys.map(k=>{ const g=groups[k];
     g.items.sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
     let range=""; if(k){ const m=mondayOf(g.w.jahr,g.w.kw); const f=new Date(m); f.setDate(f.getDate()+4); range=`${m.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${f.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`; }
@@ -1822,7 +1826,7 @@ function viewDetail(id){
   const erl=phase(o)==="erledigt"||(phase(o)==="fertig"&&(berichtVerschickt(o)||berichtAbgegeben(o)));
   // Nicht verplant / Abholbereit: nur Kopf, Baustelle & Kunde, Unterlagen (+ Knopf „Terminieren“)
   const frueh=phase(o)==="offen"||phase(o)==="abholbereit";
-  const nurAnsehen=phase(o)==="offen"; // Bereich „Aufträge“: nur ansehen – Nummer, Baustelle, Unterlagen
+  const nurAnsehen=phase(o)==="offen"; // Bereich „Neu“: nur ansehen – Nummer, Baustelle, Unterlagen
   // Laufender Einsatz: nur das Nötigste – Nummer, Bauvorhaben, Navi/Anrufen; ab Montagestart ohne Planung/Baustelle
   const imEinsatz=!istFertig(o) && phase(o)==="arbeit" && !!(o.einsatz?.abfahrtAm||(o.zeiten||[]).length) && can.einsatz() && !S.bearbeiten[id];
   const montageLaeuft=imEinsatz && !!(o.einsatz?.startAm||(o.zeiten||[]).length);
@@ -1848,7 +1852,7 @@ function viewDetail(id){
      ${addr?`<button class="btn ${frueh?"":"pri"}" data-zur-baustelle="${esc(id)}">🧭 Zur Baustelle</button>`:`<button class="btn" data-dok="1">📄 Adresse im Dokument</button>`}
      ${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:fk("unterlagen").length?`<button class="btn" data-dok="1">📄 Telefon im Dokument</button>`:""}
      ${can.planen()&&!erl&&!o.storniert&&o.terminStatus!=="fest"?`<button class="btn" id="terminAnfrage">📧 Termin anfragen</button>`:""}
-     ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost" data-nv="${esc(id)}">↩ nach „Aufträge“</button>`:""}
+     ${frueh&&can.planen()&&phase(o)==="abholbereit"?`<button class="btn ghost" data-nv="${esc(id)}">↩ nach „Neu“</button>`:""}
      ${frueh&&can.planen()&&o.nichtVerplant&&o.prodStatus==="abholbereit"?`<button class="btn ghost" data-nv-zurueck="${esc(id)}">✓ Wieder abholbereit</button>`:""}
      </div>`}
      ${!kompakt&&!nurAnsehen&&((addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel")))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
@@ -1906,7 +1910,7 @@ function viewDetail(id){
   if(!kompakt && !montageLaeuft) knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
 
   // Unterlagen
-  const unterInhalt=`${fk("unterlagen").length?`<button class="btn ok block" id="unterPdf" style="margin-bottom:10px">📑 Unterlagen lesen <span style="font-weight:500;opacity:.85">– sauber aufbereitet als PDF</span></button>`:""}
+  const unterInhalt=`${fk("unterlagen").length?`<button class="btn ok block" id="unterPdf" style="margin-bottom:10px">📑 Unterlagen als PDF <span style="font-weight:500;opacity:.85">– mit Übersicht vorne</span></button>`:""}
    ${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
    ${dokListe(o)?`<div style="margin-top:8px">${dokListe(o)}</div>`:""}
    <div class="row" style="margin-top:10px">
@@ -4620,7 +4624,7 @@ function bind(r){
   app.querySelectorAll("[data-ankunft]").forEach(b=>b.onclick=()=>ankunftDialog(b.dataset.ankunft));
   app.querySelectorAll("[data-kal-tag]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalTag)).getTime()}; render(); });
   app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
-    const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Aufträge“`,3000); });
+    const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Neu“`,3000); });
   app.querySelectorAll("[data-nv-zurueck]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); const o=S.orders[b.dataset.nvZurueck]; if(!o) return;
     await upd(orderPath(o.id),{nichtVerplant:null}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:null}; render(); toast(`${o.nr} steht wieder unter „Abholbereit“`,3000); });
   app.querySelectorAll("[data-rk-toggle]").forEach(b=>b.onclick=async()=>{ const rk=S.reklas[b.dataset.rkToggle]; await upd("reklamationen/"+rk.id,{offen:!rk.offen, erledigtAm:rk.offen?Date.now():null, erledigtVon:rk.offen?myId():null}); toast(rk.offen?"Reklamation erledigt ✓":"Wieder geöffnet"); });
