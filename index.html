@@ -555,7 +555,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="17a94ac055c0";</script>
+<script>window.JD_BUILD="149b266de98c";</script>
 </head>
 <body>
 <header class="top">
@@ -1746,7 +1746,7 @@ function anteilKarte(o){
   const inp=(attr,k,v)=>`<input class="i pl-q" ${attr}="${esc(k)}" inputmode="decimal" value="${esc(v??"")}" placeholder="0" ${zu?"disabled":""}>`;
   const zeile=(label,einheit,ep,attr,k,v)=>`<div class="pl-z ${nn(v)?"voll":""}" data-ep="${ep}"><div class="pl-l">${esc(label)}<span>${esc(einheit||"")}${ep!==""?" · "+fmtEUR(ep):""}</span></div>${inp(attr,k,v)}<div class="pl-gp">${nn(v)&&ep!==""?fmtEUR(r2(nn(v)*ep)):""}</div></div>`;
   let h=`<div class="card"><div class="row between" style="flex-wrap:nowrap;gap:8px"><h3 style="margin:0">🤝 Mein Anteil</h3>${P?.name?`<span class="chip">${esc(P.name)}</span>`:""}</div>
-    <div class="small mute" style="margin:4px 0 10px">Deine Preisliste – trag bei jeder Position die Menge ein. JD Brüder bekommt daraus deine fertige Montageabrechnung.</div>
+    <div class="small mute" style="margin:4px 0 10px">Trag nur ein, was du selbst montiert hast. Das sieht nur du – JD Brüder zählt am Ende alles zusammen.</div>
     ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:a.abgegebenAm?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
     ${zu?(o.aenderung?.status==="angefragt"&&o.aenderung.von===me?`<div class="small mute" style="margin-bottom:8px">✏️ Änderung angefragt – wartet auf Freigabe</div>`:`<button class="btn sm ghost" id="anteilAend" style="margin-bottom:8px">✏️ Änderung anfragen</button>`):""}
     ${!P?`<div class="banner info small">Preise in Bearbeitung – trag einfach die Mengen ein. JD Brüder rechnet ab.</div>`:""}
@@ -1783,7 +1783,7 @@ function anteilChefKarte(o){
       ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,serieId(o)):null):`<div class="small mute">${esc(nameOf(u))} trägt die Positionen gerade ein.</div>`}
       ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Abrechnung bestätigen</button>`:""}
       ${o.aenderung?.status==="angefragt"&&o.aenderung.von===u?`<div class="banner warn small" style="margin:8px 0 0">✏️ Änderungswunsch: „${esc(o.aenderung.grund||"")}“<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div></div>`:""}</div>`; }).join("")}
-    <div class="small mute" style="margin-top:6px">Nur für die interne Abrechnung – geht nicht an meta.</div></div>`;
+    <div class="small mute" style="margin-top:6px">${subs.every(u=>o.nachgetragen?.[u])?"Nachträglich dazugenommen: nur für die interne Abrechnung – geht nicht an meta.":"Die Positionen zählen mit in den Bericht an meta (siehe „Alle Positionen zusammen“)."}</div></div>`;
 }
 function bindAnteil(id){
   const o=S.orders[id]; if(!o) return; const P=orderPath(id);
@@ -1812,7 +1812,7 @@ function bindAnteil(id){
     try{ const r=await S.sync?.run({kalender:id}); toast(r?.gesendet?`Kalendereinladung an ${r.an} gesendet ✓`:`Nicht gesendet: ${r?.grund||"unbekannt"}`,4000); }catch(e){ toast("Kalender fehlgeschlagen: "+(e.message||e)); } b.disabled=false; });
   document.querySelectorAll("[data-serie]").forEach(b=>b.onclick=async()=>{ const v=b.dataset.serie; if(!can.planen()||o.serie===v) return; // nur der Chef legt die Serie fest
     await upd(P,{serie:v}); S.orders[id]={...S.orders[id],serie:v}; render(); toast(`${serieName(S.orders[id])} gewählt`,2200); });
-  $("#gemeinsam") && ($("#gemeinsam").onchange=async()=>{ const v=$("#gemeinsam").checked; await upd(P,{gemeinsam:v}); S.orders[id]={...S.orders[id],gemeinsam:v}; render(); toast(v?"🤝 Gemeinsamer Auftrag – der Sub trägt nur seinen Anteil ein":"Normaler Auftrag",3000); });
+  $("#gemeinsam") && ($("#gemeinsam").onchange=async()=>{ const v=$("#gemeinsam").checked; await upd(P,{gemeinsam:v}); S.orders[id]={...S.orders[id],gemeinsam:v}; render(); toast(v?"🤝 Gemeinsamer Auftrag – jeder trägt seins ein, im Bericht wird alles zusammengezählt":"Normaler Auftrag",3500); });
   // Preisliste: Betrag je Zeile sofort mitrechnen (gespeichert wird beim Verlassen des Feldes)
   document.querySelectorAll("#preisliste .pl-z:not(.pl-etage) .pl-q, .pl-liste .pl-q").forEach(i=>i.addEventListener("input",()=>{ const z=i.closest(".pl-z"), ep=z.dataset.ep;
     z.classList.toggle("voll",!!nn(i.value)); z.querySelector(".pl-gp").textContent=nn(i.value)&&ep!==""?fmtEUR(r2(nn(i.value.replace(",","."))*nn(ep))):""; }));
@@ -1838,12 +1838,12 @@ function viewDetail(id){
   if(!o||!sichtbar(o)) return `<button class="back" data-back>‹ Zurück</button><div class="empty">Auftrag nicht gefunden.</div>`;
   if(S.fotoFor!==id) subscribeFotos(id);
   const f=S.fin[id];
-  const fotos=Object.values(S.fotos).sort((a,b)=>(a.am||0)-(b.am||0));
+  const fotos=Object.values(S.fotos).filter(fotoMeins).sort((a,b)=>(a.am||0)-(b.am||0));
   const fk=k=>fotos.filter(x=>x.kat===k);
   const addr=adresseOf(o);
   const nav=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;
   const route=S.settings.firmenAdresse?`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(S.settings.firmenAdresse)}&destination=${encodeURIComponent(addr)}`:"";
-  const reklas=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,b)=>b.am-a.am);
+  const reklas=Object.values(S.reklas).filter(r=>r.auftragId===id&&istMeins(r)).sort((a,b)=>b.am-a.am);
   const w=planWeek(o);
   const erl=phase(o)==="erledigt"||(phase(o)==="fertig"&&(berichtVerschickt(o)||berichtAbgegeben(o)));
   // Nicht verplant / Abholbereit: nur Kopf, Baustelle & Kunde, Unterlagen (+ Knopf „Terminieren“)
@@ -1901,7 +1901,7 @@ function viewDetail(id){
     ${can.planen()?`<button class="btn sm ghost" id="addMonteur">＋ zuteilen</button>`:""}</div>
     ${can.planen()&&o.terminStatus==="fest"&&o.termin?`<button class="btn sm ghost" id="kalBtn" style="margin-top:10px">📅 ${o.kalender?.termin===o.termin?"Im Google Kalender ✓ – erneut senden":"In Google Kalender eintragen"}</button>`:""}
     ${can.planen()&&SERIEN().length&&!o.einsatz?.fertigAm?serieWahl(o,true):""}
-    ${can.planen()&&(o.monteure||[]).some(m=>S.roles[m]==="sub")?`<label class="gem-k"><input type="checkbox" id="gemeinsam" ${o.gemeinsam?"checked":""}><span><b>🤝 Zusammen mit dem Subunternehmer</b><span class="small mute" style="display:block">Der Sub trägt nur seinen Anteil ein (Zeit, Positionen) – für seine Abrechnung. Den Montagebericht an meta schreibst du.</span></span></label>`:""}
+    ${can.planen()&&(o.monteure||[]).some(m=>S.roles[m]==="sub")?`<label class="gem-k"><input type="checkbox" id="gemeinsam" ${o.gemeinsam?"checked":""}><span><b>🤝 Zusammen mit dem Subunternehmer</b><span class="small mute" style="display:block">Jeder trägt nur ein, was er selbst montiert hat – der Sub unter „Mein Anteil“. Im Bericht an meta wird alles zusammengezählt; den schickst du.</span></span></label>`:""}
     ${can.planen()&&!o.storniert?`<button class="btn sm ghost" id="stornoSetzen" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}
   `));
 
@@ -1969,6 +1969,8 @@ function viewDetail(id){
     }
   }
 
+  // Chef: alle Positionen aller Monteure zusammen
+  if(can.planen() && !frueh) h+=gesamtKarte(o);
   // Berichte der Subunternehmer: wer hat abgegeben, wem fehlt er – mit „Bericht anfordern“
   if(can.planen() && !o.storniert && subsVon(o).length && (o.termin||istFertig(o))) h+=subBerichtKarte(o);
   // Anteil des Subunternehmers (gemeinsamer Auftrag) – nur für die Abrechnung, geht nicht an meta
@@ -2080,11 +2082,11 @@ function aenderungAnfragen(id,art){
 function berichtAnsicht(id){
   const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o), rek=istReklaAuftrag(o);
   const titel=o.berichtTyp==="leerfahrt"?"Leerfahrt":rek?"Reklamationsbericht":"Montagebericht";
-  const pos=Object.entries(summeMengen(o)).filter(([k])=>k!=="stunden").map(([k,v])=>`${String(v).replace(".",",")}× ${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}`);
+  const pos=Object.entries(summeMengen(o,can.planen()?null:myId())).filter(([k])=>k!=="stunden").map(([k,v])=>`${String(v).replace(".",",")}× ${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}`);
   const z=(k,v)=>v?`<dt>${k}</dt><dd>${v}</dd>`:"";
   const gruppe=(t,l)=>l.length?`<label class="f">${t} <span class="mute">(${l.length})</span></label><div class="thumbs">${l.map(u=>`<div class="t" data-z="${esc(u)}"><img loading="lazy" src="${esc(u)}" alt=""></div>`).join("")}</div>`:"";
-  const fk=k=>Object.values(S.fotos).filter(f=>f.kat===k&&!/pdf/i.test(f.typ||"")).sort((a,c)=>(a.am||0)-(c.am||0)).map(f=>"_blob/"+f.assetId);
-  const rk=Object.values(S.reklas).filter(r=>r.auftragId===id);
+  const fk=k=>Object.values(S.fotos).filter(f=>f.kat===k&&!/pdf/i.test(f.typ||"")&&fotoMeins(f)).sort((a,c)=>(a.am||0)-(c.am||0)).map(f=>"_blob/"+f.assetId);
+  const rk=Object.values(S.reklas).filter(r=>r.auftragId===id&&istMeins(r));
   const darfBearb=can.einsatz() && !berichtGesperrt(o) && (can.planen() || !berichtAbgegeben(o));
   modal(`<h2>${titel} ${esc(o.nr)}</h2><div class="small mute" style="margin-bottom:10px">${esc(o.bauvorhaben||"")}${o.abschluss?` · abgeschlossen ${fmtDT(o.abschluss.am)}`:""}${o.berichtGesendetAm?` · an meta ${fmtDT(o.berichtGesendetAm)}`:""}</div>
    ${(()=>{ const nt=naechteText(b); const fa=[rek&&az?"⏱ "+fmtHMin(az)+" Std.":"",b.personen?"👷 "+esc(b.personen)+" Pers.":"",b.istKm?"🚗 "+esc(b.istKm)+" km":"",nt&&nt!=="keine"?"🛏 "+esc(nt):"",b.geschosse?"🏢 "+esc(b.geschosse):""].filter(Boolean);
@@ -2492,14 +2494,14 @@ const NACHWEISE=[["passschnitt","✂️ Passschnitt"],["aussparung","⭕ Ausspar
 const nwLabel=k=>(NACHWEISE.find(x=>x[0]===k)?.[1]||"").replace(/^\S+\s/,"")||(S.lohnPos.find(p=>p.k===k)||{}).label||k;
 const nwEinheit=k=>(S.lohnPos.find(p=>p.k===k)||{}).einheit||"Stück";
 function nachweiseTeil(o,fk,imBericht=false){
-  const nw=o.nachweise||[], so=sonderFertig(o.bericht||{});
+  const nw=(o.nachweise||[]).filter(istMeins), so=sonderFertig(o.bericht||{}).filter(istMeins);
   const fz=k=>fk(k).length;
   return `<div class="nw-k" id="nachweise">
    <div style="font-weight:700;margin-bottom:6px">✂️ Nachweise & Mehraufwand</div>
    <div class="ziel-w">${NACHWEISE.map(([k,l])=>`<button class="fp" data-nw="${k}">${l}</button>`).join("")}<button class="fp" data-nw="andere">＋ andere Position</button></div>
    <button class="btn block" id="mehrAufw" style="margin-top:8px;min-height:46px">⏱ Mehraufwand / Sonderbemerkung</button>
-   ${nw.length||so.length?`<div class="nw-l">${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${fz("nachweis:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("nachweis:"+x.id)} Foto${fz("nachweis:"+x.id)>1?"s":""}</summary>${thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false)}</details>`:""}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}
-     ${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>⏱ ${esc(x.arbeit)}</b> · ${fmtStd(x.min)} Std. · ${esc(x.personen||1)} Pers.${x.bemerkung?`<div class="small mute">${esc(x.bemerkung)}</div>`:""}${fz("sonder:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("sonder:"+x.id)} Foto${fz("sonder:"+x.id)>1?"s":""}</summary>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false)}</details>`:""}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}</div>`
+   ${nw.length||so.length?`<div class="nw-l">${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b>${vonTag(x)} · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${fz("nachweis:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("nachweis:"+x.id)} Foto${fz("nachweis:"+x.id)>1?"s":""}</summary>${thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false)}</details>`:""}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}
+     ${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>⏱ ${esc(x.arbeit)}</b>${vonTag(x)} · ${fmtStd(x.min)} Std. · ${esc(x.personen||1)} Pers.${x.bemerkung?`<div class="small mute">${esc(x.bemerkung)}</div>`:""}${fz("sonder:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("sonder:"+x.id)} Foto${fz("sonder:"+x.id)>1?"s":""}</summary>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false)}</details>`:""}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}</div>`
      :`<div class="small mute" style="margin-top:6px">${imBericht?"Keine Nachweise erfasst.":"Antippen, Anzahl eintragen, Foto machen – die Menge steht danach automatisch im Montagebericht."}</div>`}
   </div>`;
 }
@@ -2581,7 +2583,7 @@ function reklaSchnellDialog(id){
 }
 // Ein Bereich für alles, was während der Arbeit festgehalten wird – Übersicht erst beim Antippen
 function erfassenTeil(o,fk,imBericht=false){
-  const id=o.id, nw=o.nachweise||[], so=sonderFertig(o.bericht||{}), rk=Object.values(S.reklas).filter(r=>r.auftragId===id&&!r.leerfahrt).sort((a,c)=>a.am-c.am), mf=fk("montage");
+  const id=o.id, nw=(o.nachweise||[]).filter(istMeins), so=sonderFertig(o.bericht||{}).filter(istMeins), rk=Object.values(S.reklas).filter(r=>r.auftragId===id&&!r.leerfahrt&&istMeins(r)).sort((a,c)=>a.am-c.am), mf=fk("montage");
   const anz=fk2=>fk(fk2).length;
   const fotoKlappe=(n,inhalt)=>n?`<details class="mini-f"><summary>📷 ${n} Foto${n>1?"s":""}</summary>${inhalt}</details>`:"";
   const rkThumbs=r=>`<div class="thumbs">${(r.fotos||[]).map(a=>`<div class="t" data-zoom="_blob/${esc(a)}"><img loading="lazy" src="_blob/${esc(a)}" alt=""></div>`).join("")}</div>`;
@@ -2595,9 +2597,9 @@ function erfassenTeil(o,fk,imBericht=false){
     <button class="erf-b voll" id="mFotoBtn"><span>📷</span><b>Fertigstellung</b><small>Fotos je Position, wenn etwas fertig ist</small></button>
    </div>
    ${teile.length?`<details class="erf-sum" data-fold="${esc(id)}:erf" ${S.fold[id+":erf"]?"open":""}><summary><span>📂 Erfasst</span><span class="erf-zahl">${teile.join(" · ")}</span></summary>
-    ${nw.length?`<div class="erf-h">✂️ Nachweise</div>${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?` <span class="mute small">· ${esc(x.bem)}</span>`:""}${fotoKlappe(anz("nachweis:"+x.id),thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false))}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}`:""}
+    ${nw.length?`<div class="erf-h">✂️ Nachweise</div>${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b>${vonTag(x)} · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?` <span class="mute small">· ${esc(x.bem)}</span>`:""}${fotoKlappe(anz("nachweis:"+x.id),thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false))}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}`:""}
     ${rk.length?`<div class="erf-h">⚠️ Reklamationen</div>${rk.map(r=>`<div class="nw-z rk"><div style="flex:1;min-width:0"><b>${esc(r.text||"")}</b> <span class="chip ${r.offen?"bad":"ok"}" style="font-size:11px">${r.offen?"offen":"erledigt"}</span>${fotoKlappe((r.fotos||[]).length,rkThumbs(r))}</div>${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}" title="Bearbeiten">✏️</button>`:""}</div>`).join("")}`:""}
-    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b> · ${x.min?fmtStd(x.min)+" Std. · ":`<a href="#" class="chip warn" style="font-size:11px;text-decoration:none" data-soedit="${esc(x.id)}" data-umo="${esc(id)}">⏱ Stunden fehlen</a> · `}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-soedit="${esc(x.id)}" data-umo="${esc(id)}" title="Bearbeiten">✏️</button><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
+    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b>${vonTag(x)} · ${x.min?fmtStd(x.min)+" Std. · ":`<a href="#" class="chip warn" style="font-size:11px;text-decoration:none" data-soedit="${esc(x.id)}" data-umo="${esc(id)}">⏱ Stunden fehlen</a> · `}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-soedit="${esc(x.id)}" data-umo="${esc(id)}" title="Bearbeiten">✏️</button><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
     ${mf.length?`<div class="erf-h">📷 Fertigstellung</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div>${a.some(f=>f.von===myId()||can.planen())?`<button class="btn sm ghost" data-umgr="${esc(a.filter(f=>f.von===myId()||can.planen()).map(f=>f.id).join(","))}" data-umo="${esc(id)}" title="Falsch einsortiert? Umstellen">↔</button>`:""}</div>`).join("")}`:""}
    </details>`:`<div class="small mute" style="margin-top:8px">${imBericht?"Nichts erfasst.":"Noch nichts erfasst. Nachweise zählen automatisch im Montagebericht mit."}</div>`}
   </div>`;
@@ -3507,10 +3509,29 @@ function tageText(o){
   if(a.getMonth()===b.getMonth()) return `${a.getDate()}.–${b.toLocaleDateString("de-DE")}`;
   return `${a.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${b.toLocaleDateString("de-DE")}`;
 }
-function summeMengen(o){
+// Eigene Einträge: Mitarbeiter und Subunternehmer sehen nur, was sie selbst erfasst haben – die Chefs sehen alles
+const istMeins=x=>can.planen()||x?.von===myId();
+const fotoMeins=f=>can.planen()||f?.kat==="unterlagen"||f?.von===myId();
+const vonTag=x=>can.planen()&&x?.von&&x.von!==myId()?` <span class="chip info" style="font-size:11px">${esc(nameOf(x.von).split(" ")[0])}</span>`:"";
+// Positionen für den Bericht an meta: alle Beteiligten zusammengezählt. Ausnahme: nachträglich dazugenommene Leute –
+// ihr Anteil ist nur für die eigene Abrechnung (der Bericht stand da schon). uid: nur die Positionen dieser Person.
+const lohnFuerBericht=o=>Object.values(S.lohn).filter(l=>l.auftragId===o.id && !o.nachgetragen?.[l.uid]);
+function summeMengen(o,uid){
   const tot={};
-  Object.values(S.lohn).filter(l=>l.auftragId===o.id && !(o.gemeinsam && (S.roles[l.uid]==="sub" || o.subAnteil?.[l.uid]))).forEach(l=>Object.entries(l.mengen||{}).forEach(([k,v])=>{ const q=nn(v); if(q) tot[k]=(tot[k]||0)+q; }));
+  (uid?Object.values(S.lohn).filter(l=>l.auftragId===o.id&&l.uid===uid):lohnFuerBericht(o)).forEach(l=>Object.entries(l.mengen||{}).forEach(([k,v])=>{ const q=nn(v); if(q) tot[k]=(tot[k]||0)+q; }));
   return tot;
+}
+// Chef: alle Positionen aller Monteure auf einer Liste – je Person und zusammen
+function gesamtKarte(o){
+  const ls=Object.values(S.lohn).filter(l=>l.auftragId===o.id && Object.values(l.mengen||{}).some(v=>nn(v)));
+  if(ls.length<2) return "";
+  const leute=ls.map(l=>l.uid), tot=summeMengen(o);
+  const keys=S.lohnPos.map(p=>p.k).filter(k=>ls.some(l=>nn(l.mengen?.[k])));
+  const kurz=u=>esc((u===myId()?"Ich":nameOf(u)).split(" ")[0]);
+  return `<div class="card"><h3>📋 Alle Positionen zusammen</h3>
+   <div class="small mute" style="margin-bottom:8px">Was jeder selbst eingetragen hat – die Summe geht in den Montagebericht an meta.${leute.some(u=>o.nachgetragen?.[u])?" Nachträglich Dazugenommene (kursiv) zählen nur für ihre eigene Abrechnung.":""}</div>
+   <div style="overflow-x:auto"><table class="pos"><thead><tr><th>Position</th>${leute.map(u=>`<th style="${o.nachgetragen?.[u]?"font-style:italic":""}">${kurz(u)}</th>`).join("")}<th>Summe</th></tr></thead>
+   <tbody>${keys.map(k=>`<tr><td>${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}</td>${ls.map(l=>`<td style="${o.nachgetragen?.[l.uid]?"font-style:italic;color:var(--mute)":""}">${nn(l.mengen?.[k])?fmtZahl(nn(l.mengen[k])):""}</td>`).join("")}<td><b>${tot[k]?fmtZahl(tot[k]):""}</b></td></tr>`).join("")}</tbody></table></div></div>`;
 }
 const fmtZahl=v=>String(v).replace(".",",");
 function vdDefaults(o){
