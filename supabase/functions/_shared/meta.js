@@ -156,6 +156,20 @@ export function kundeAusAbrechnung(a) {
   return /lux/i.test(t) ? "lu" : "de";
 }
 
+/** Ort ohne Postleitzahl: „67059 Ludwigshafen“ → „Ludwigshafen“, „L-1234 Luxembourg“ → „Luxembourg“ */
+export function ortOhnePlz(t) { return String(t || "").replace(/^\s*(?:[A-Z]{1,2}-)?\d{4,5}\s+/, "").trim(); }
+
+/** Text unter der Position „Bauleistung Meta“: Reklamation → „Reklamation R 47006, Ort“,
+ *  sonst „Über die erfolgte Montage von Auftrag 17714/1, Ort“ (Sichtabnahme / Sammelabrechnung entsprechend) */
+export function rechnungsZeile(f, o) {
+  const ort = ortOhnePlz(o?.plzOrt || splitBV(String(f?.bauvorhaben || "")).plzOrt) || String(o?.bauvorhaben || f?.bauvorhaben || "").trim();
+  const nr = String(o?.nr || f?.nr || "").trim(), mit = (t) => ort ? `${t}, ${ort}` : t;
+  if (/^R[\s-]?\d/i.test(nr)) return mit(`Reklamation ${nr}`);
+  if (f?.art === "abnahme") return mit(`Sichtabnahme zu Auftrag ${nr}`);
+  const nrs = f?.art === "andere" && (f.fuer || []).length ? f.fuer.join(", ") : nr;
+  return mit(`Über die erfolgte Montage von Auftrag ${nrs}`);
+}
+
 /** Passenden Auftrag finden: exakt, sonst eindeutig über die Grundnummer (16872 ↔ 16872/1) */
 export function findeAuftrag(orders, nr) {
   if (!nr) return null;

@@ -9,7 +9,7 @@ import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
   art, cleanSubject, DECK_FELDER, kundeAusAbrechnung, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istAbnahmeVerguetung, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
-  parseAbrechnung, parseUebersicht, parseZusage, reklaAufstellung, splitBV, unterlagen, vonMeta,
+  parseAbrechnung, parseUebersicht, parseZusage, rechnungsZeile, reklaAufstellung, splitBV, unterlagen, vonMeta,
 } from "../_shared/meta.js";
 
 const cors = {
@@ -659,6 +659,7 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
               if (rk.summe && (!ex || (ex.datum || 0) <= d)) {
                 const doc = { nr: orders[id].nr || rk.nr, bauvorhaben: orders[id].bauvorhaben || "", summe: rk.summe, positionen: [], bemerkung: "Aufstellung von meta per Mail", datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
                 await setDoc(db, "finanzen", id, doc); fin[id] = doc; z.abrechnungen++;
+                if (!ex) await pushAbrechnung(db, id, doc); // Reklamation abgerechnet → auch hier Freigabe für die Rechnung erfragen
               }
             }
             st.msgs[m.id] = 1; continue;
@@ -890,8 +891,19 @@ async function lexKunden(db: any) {
   const wahl = (k: string, land: string) => alle.find((c) => c.id === fest[k]) || (alle.filter((c) => c.land === land).length === 1 ? alle.find((c) => c.land === land) : null);
   return { de: wahl("de", "DE"), lu: wahl("lu", "LU"), alle };
 }
+// Dienstleistung „Bauleistung Meta“ aus Lexware (Artikel → Dienstleistungen) – steht auf jeder Rechnung an meta
+async function lexArtikel() {
+  for (let seite = 0; seite < 8; seite++) {
+    const r = await lex(`/articles?type=SERVICE&size=250&page=${seite}`);
+    const a = (r.content || []).find((x: any) => /bauleistung\s*meta/i.test(x.title || ""));
+    if (a) return { id: a.id, name: a.title, einheit: a.unitName || "" };
+    if (r.last !== false) break;
+  }
+  return null;
+}
 async function lexStatus(db: any) {
-  try { return { ok: true, ...(await lexKunden(db)) }; }
+  try { const k = await lexKunden(db); let artikel = null; try { artikel = await lexArtikel(); } catch (_) { /* ohne Artikel-Recht: Position ohne Verknüpfung */ }
+    return { ok: true, ...k, artikel }; }
   catch (e: any) { return { ok: false, code: e.code || "", fehler: e.message || String(e) }; }
 }
 async function lexVorlage(kontaktId: string) {
@@ -914,15 +926,12 @@ async function lexRechnung(db: any, fid: string) {
     const steuer = tc.taxType && tc.taxType !== "gross" ? { taxType: tc.taxType, ...(tc.taxTypeNote ? { taxTypeNote: tc.taxTypeNote } : {}) } : { taxType: "net" };
     const satz = vorlage.lineItems?.find((x: any) => x.unitPrice)?.unitPrice?.taxRatePercentage ?? 19;
     const o = (await getDoc(db, "auftraege", f.auftragId || fid)) || {};
-    const bv = f.bauvorhaben || [o.bauvorhaben, o.plzOrt].filter(Boolean).join(", ");
-    const titel = `Montage Auftrag ${f.nr}${bv ? " – " + bv : ""}`;
-    const pos = (f.positionen || []).filter((p: any) => p.artikel && Number(p.menge));
-    const r2 = (x: number) => Math.round(x * 100) / 100;
-    const passt = pos.length && Math.abs(r2(pos.reduce((s: number, p: any) => s + r2(Number(p.menge) * Number(p.ep)), 0)) - Number(f.summe)) < 0.02;
-    const einheit = (a: string) => /\bKM\b/i.test(a) ? "km" : /stunde/i.test(a) ? "Std." : "Stück";
-    const zeilen = passt
-      ? pos.map((p: any) => ({ type: "custom", name: String(p.artikel).slice(0, 255), quantity: Number(p.menge), unitName: einheit(p.artikel), unitPrice: { currency: "EUR", netAmount: Number(p.ep), taxRatePercentage: satz } }))
-      : [{ type: "custom", name: titel.slice(0, 255), quantity: 1, unitName: "pauschal", unitPrice: { currency: "EUR", netAmount: Number(f.summe), taxRatePercentage: satz } }];
+    // Eine Position „Bauleistung Meta“ (Dienstleistung aus Lexware) über die ganze Summe, darunter Auftrag bzw. Reklamation und Ort
+    const art = await lexArtikel().catch(() => null);
+    const text = rechnungsZeile(f, o);
+    const zeile = (mitArtikel: boolean) => [{ type: mitArtikel ? "service" : "custom", ...(mitArtikel ? { id: art!.id } : {}), name: art?.name || "Bauleistung Meta", description: text.slice(0, 2000),
+      quantity: 1, unitName: art?.einheit || "pauschal", unitPrice: { currency: "EUR", netAmount: Math.round(Number(f.summe) * 100) / 100, taxRatePercentage: satz } }];
+    let zeilen = zeile(!!art);
     const tag = (t: number) => new Date(t).toISOString().replace("Z", "+00:00");
     const body: any = {
       voucherDate: tag(Date.now()),
@@ -932,13 +941,15 @@ async function lexRechnung(db: any, fid: string) {
       taxConditions: steuer,
       shippingConditions: { shippingType: "service", shippingDate: tag(o.abschluss?.am || f.datum || Date.now()) },
       title: "Rechnung",
-      introduction: `${titel}\nGemäß Montageabrechnung von meta vom ${new Date(f.datum || Date.now()).toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })}.`,
     };
+    if (vorlage.introduction) body.introduction = vorlage.introduction;
     if (vorlage.paymentConditions) body.paymentConditions = vorlage.paymentConditions;
     if (vorlage.remark) body.remark = vorlage.remark;
-    const r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) });
+    let r: any;
+    try { r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) }); }
+    catch (e: any) { if (!art || e.code !== "lex_fehler") throw e; body.lineItems = zeilen = zeile(false); r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) }); } // Verknüpfung mit dem Artikel abgelehnt → gleiche Position ohne Verknüpfung
     await updDoc(db, "finanzen", fid, { lexId: r.id, lexAm: Date.now(), lexKunde: kontakt.name, kunde, rechnungStatus: f.rechnungStatus === "offen" ? "freigegeben" : f.rechnungStatus });
-    return { ok: true, id: r.id, link: LEX_LINK + r.id, kunde: kontakt.name, positionen: zeilen.length };
+    return { ok: true, id: r.id, link: LEX_LINK + r.id, kunde: kontakt.name, positionen: zeilen.length, text };
   } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
 }
 /** Stand der Rechnung aus Lexware holen: sobald sie dort fertig ist, Rechnungsnummer übernehmen */
