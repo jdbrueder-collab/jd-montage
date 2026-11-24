@@ -1402,11 +1402,13 @@ const montagVon=d=>{ const m=new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const WT=["Mo","Di","Mi","Do","Fr","Sa","So"];
 function statusPills(o, imKal){
   if(o.storniert) return [["bad","storniert"]];
+  if(can.sub() && (o.monteure||[]).includes(myId()) && subBerichtFehlt(o,myId())){ const q=[["bad","📝 Bericht fehlt"]]; const un=ungelesen(o.id); if(un) q.push(["msg",un]); return q; }
   if(o.gemeinsam && can.sub()){ const an=o.subAnteil?.[myId()]||{}, q=[];
     if(an.bestaetigtAm) q.push(["ok","✓ bestätigt · Rechnung schreiben"]); else if(an.abgegebenAm) q.push(["info","⏳ wartet auf Bestätigung"]);
     else { q.push(["","🤝 mit JD Brüder"]); if(!imKal&&o.termin) q.push(["",kurzDatum(o.termin)]); if(terminOffenFuerMich(o)) q.push(["warn","👍 bestätigen"]); }
     const un=ungelesen(o.id); if(un) q.push(["msg",un]); return q; }
   const p=[], chef=can.planen(), ph=phase(o);
+  if(chef){ const fehlt=subsVon(o).filter(u=>subBerichtFehlt(o,u)); if(fehlt.length) p.push(["bad",`📝 Bericht fehlt: ${fehlt.map(u=>nameOf(u).split(" ")[0]).join(", ")}`]); }
   if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o)) p.push(["gold","NEU"]);
   if(istFertig(o) || ph==="erledigt" || ph==="fertig"){
     if(chef){
@@ -1750,6 +1752,13 @@ function abrechnungTabelle(l,P){
   return `<table class="abr"><thead><tr><th>Position</th><th>Menge</th><th>Preis</th><th>Betrag</th></tr></thead><tbody>${c.lines.map(z=>`<tr><td>${esc(z.label)}</td><td>${z.menge!==""?String(z.menge).replace(".",","):""}</td><td>${z.ep!==""?fmtEUR(z.ep):""}</td><td>${fmtEUR(z.gp)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="3">Gesamt</td><td>${fmtEUR(c.total)}</td></tr></tfoot></table>`;
 }
+function subBerichtKarte(o){
+  const zeilen=subsVon(o).map(u=>{ const da=subBerichtDa(o,u), fehlt=subBerichtFehlt(o,u), ang=o.berichtFehlt?.[u], art=subNurAnteil(o,u)?"Anteil":"Montagebericht";
+    return `<div class="person" style="flex-wrap:wrap"><span class="av">${esc(initials(u))}</span><div style="flex:1;min-width:0"><b>${esc(nameOf(u))}</b><div class="small mute">${da?`✓ ${art} abgegeben`:ang?`📣 angefordert am ${fmtDT(ang.am)}`:`${art} noch nicht abgegeben`}</div></div>
+      ${da?`<span class="chip ok">✓ da</span>`:`<button class="btn sm ${fehlt?"pri":"ghost"}" data-bfehlt="${esc(u)}">${ang?"📣 Nochmal erinnern":"📣 Bericht fehlt – anfordern"}</button>`}</div>`; }).join("");
+  return `<div class="card" ${subsVon(o).some(u=>subBerichtFehlt(o,u))?'style="border-left:5px solid var(--accent)"':""}><h3>📝 Berichte der Subunternehmer</h3>${zeilen}
+   <div class="small mute" style="margin-top:6px">Subunternehmer schreiben ihren Bericht immer selbst. „Anfordern“ schickt ihnen eine Nachricht aufs Handy.</div></div>`;
+}
 function anteilChefKarte(o){
   const subs=[...new Set([...(o.gemeinsam?(o.monteure||[]).filter(m=>S.roles[m]==="sub"):[]),...Object.keys(o.nachgetragen||{}),...Object.keys(o.subAnteil||{})])]; if(!subs.length) return "";
   return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Anteile der Mitmonteure</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)];
@@ -1761,6 +1770,15 @@ function anteilChefKarte(o){
 }
 function bindAnteil(id){
   const o=S.orders[id]; if(!o) return; const P=orderPath(id);
+  document.querySelectorAll("[data-bfehlt]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bfehlt, c=S.orders[id]||o; b.disabled=true;
+    const patch={berichtFehlt:{[u]:{am:Date.now(),von:myId()}}};
+    // Bericht an meta ist schon geschrieben → der Sub trägt seinen Anteil nach
+    if(istFertig(c) && !subNurAnteil(c,u) && c.abschluss?.by!==u){ patch.nachgetragen={[u]:{am:Date.now(),von:myId()}}; patch.gemeinsam=true; }
+    await upd(P,patch); const neu=S.orders[id]||c;
+    const wo=subNurAnteil(neu,u)||patch.nachgetragen?"unter „🤝 Mein Anteil“":"im Auftrag unter Einsatz → Montagebericht";
+    await nachrichtSenden(id,`📝 ${nameOf(u)}: Du bist bei diesem Auftrag als Monteur eingeteilt – dein Montagebericht fehlt noch. Bitte schreib ihn ${wo} und gib ihn ab.`);
+    toast(`📣 ${nameOf(u)} hat die Nachricht bekommen`,3000); render(); });
+  $("#zumBericht") && ($("#zumBericht").onclick=()=>{ const z=$("#berichtCard")||$("#preisliste")||$("#anteilAb")||document.querySelector(".einsatz,.card.einsatz"); z?.scrollIntoView({behavior:"smooth",block:"start"}); });
   $("#rkAz") && ($("#rkAz").onchange=()=>{ const m=parseMin($("#rkAz").value); if($("#rkAz").value.trim() && m==null) return toast("Bitte z. B. 3:30 oder 3,5 eintragen"); upd(P,{bericht:{arbeitszeitMin:m}}); });
   $("#terminAnfrage") && ($("#terminAnfrage").onclick=()=>terminAnfrageDialog(id));
   $("#taNeu") && ($("#taNeu").onclick=()=>terminAnfrageDialog(id));
@@ -1828,8 +1846,8 @@ function viewDetail(id){
   // Kopf
   if(imEinsatz) h+=`<div class="card ek"><div class="ek-t"><b>${esc(o.nr)}</b>${o.bauvorhaben?` <span>${esc(o.bauvorhaben)}</span>`:""}</div>
      <div class="kopf-akt">${addr?`<a class="btn" href="${esc(navUrl(addr))}" target="_blank" rel="noopener">🧭 Navi</a>`:""}${o.bauleiterTel?`<a class="btn" href="tel:${esc(o.bauleiterTel.replace(/[^\d+]/g,""))}">📞 Anrufen</a>`:""}${!can.sub()?`<button class="btn" id="subDazu">👷 Subunternehmer hinzufügen</button>`:""}</div>
-     ${can.planen()&&(o.monteure||[]).length?`<details class="mini-f" style="margin-top:6px"><summary>📝 Bericht schreibt: ${o.berichtSchreiber?esc(o.berichtSchreiber===myId()?"Ich":nameOf(o.berichtSchreiber)):"jeder"}</summary>${berichtSchreiberHtml(o)}</details>`
-       :o.berichtSchreiber?`<div class="small mute" style="margin-top:6px">📝 Bericht schreibt: <b>${esc(o.berichtSchreiber===myId()?"du":nameOf(o.berichtSchreiber))}</b></div>`:""}
+     ${can.planen()&&(o.monteure||[]).length?`<details class="mini-f" style="margin-top:6px"><summary>📝 Bericht schreibt: ${schreiberVon(o)?esc(schreiberVon(o)===myId()?"Ich":nameOf(schreiberVon(o))):"jeder"}</summary>${berichtSchreiberHtml(o)}</details>`
+       :schreiberVon(o)?`<div class="small mute" style="margin-top:6px">📝 Bericht schreibt: <b>${esc(schreiberVon(o)===myId()?"du":nameOf(schreiberVon(o)))}</b></div>`:""}
      ${(o.monteure||[]).filter(u=>S.roles[u]==="sub").length?`<div class="small mute" style="margin-top:6px">🤝 Mit dabei: ${(o.monteure||[]).filter(u=>S.roles[u]==="sub").map(u=>esc(nameOf(u))).join(", ")}</div>`:""}</div>`;
   else h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
      <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
@@ -1907,6 +1925,9 @@ function viewDetail(id){
   knoepfe.push(sk("unter","📂","Unterlagen",`${fk("unterlagen").length} Datei${fk("unterlagen").length===1?"":"en"}`,unterInhalt,'id="unterlagenCard"'));
   h+=`<div class="det-grid" style="grid-template-columns:repeat(${knoepfe.length},minmax(0,1fr))">${knoepfe.join("")}</div>`;
 
+  // Sub: Bericht fehlt (angefordert oder Montagetag vorbei)
+  if(can.sub() && (o.monteure||[]).includes(myId()) && subBerichtFehlt(o,myId())){ const ang=o.berichtFehlt?.[myId()];
+    h+=`<div class="banner warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:200px"><b>📝 Dein Montagebericht fehlt</b><div class="small">${ang?`JD Brüder hat ihn am ${fmtDT(ang.am)} angefordert. `:""}Du bist hier als Monteur eingeteilt – bitte schreib deinen Bericht selbst und gib ihn ab.</div></div><button class="btn sm pri" id="zumBericht">Jetzt schreiben ›</button></div>`; }
   // Einsatz-Ablauf: Abfahrt → Ankunft → Vorher-Fotos → Montagebereit → Montagestart → Bericht → Sichtabnahme → Versand
   if(kompakt){ if(!can.planen() && o.nachgetragen?.[myId()]) h+=anteilKarte(o); }
   else if(o.gemeinsam && can.sub()){
@@ -1931,6 +1952,8 @@ function viewDetail(id){
     }
   }
 
+  // Berichte der Subunternehmer: wer hat abgegeben, wem fehlt er – mit „Bericht anfordern“
+  if(can.planen() && !o.storniert && subsVon(o).length && (o.termin||istFertig(o))) h+=subBerichtKarte(o);
   // Anteil des Subunternehmers (gemeinsamer Auftrag) – nur für die Abrechnung, geht nicht an meta
   if((o.gemeinsam||o.nachgetragen) && can.planen() && !frueh && (!kompakt||anteilOffen(o)||Object.keys(o.nachgetragen||{}).some(u=>!o.subAnteil?.[u]?.bestaetigtAm))) h+=anteilChefKarte(o);
 
@@ -2261,7 +2284,7 @@ function einsatzCard(o,fk){
    <div class="steps" style="margin-top:10px">${SCHRITTE.map((s,i)=>`<div class="${i<idx||st==="fertig"?"on":i===idx?"cur":""}"></div>`).join("")}</div>
    <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
   if(!darfBericht(o) && ["bericht","rekla","abnahme"].includes(st)){
-    return h+`<div class="banner info" style="margin:0">📝 Den Montagebericht schreibt <b>${esc(nameOf(o.berichtSchreiber))}</b>. Deine Zeit, Nachweise und Fotos sind gespeichert und fließen mit ein.</div></div>`;
+    return h+`<div class="banner info" style="margin:0">📝 Den Montagebericht schreibt <b>${esc(nameOf(schreiberVon(o)))}</b>${S.roles[schreiberVon(o)]==="sub"?" selbst":""}. Deine Zeit, Nachweise und Fotos sind gespeichert und fließen mit ein.</div></div>`;
   }
   if(st==="fahrzeug"){
     if((o.leerfahrten||[]).length) h+=`<div class="banner warn small">${vorleistungZeilen(o).map(esc).join("<br>")}</div>`;
@@ -2428,10 +2451,22 @@ function montageFertigDialog(id){
   });
 }
 // Berichte, die noch offen sind (Montage fertig, Bericht nicht abgegeben) – z. B. während der Fahrt weiterschreiben
-const darfBericht=o=>!o?.berichtSchreiber||o.berichtSchreiber===myId()||can.planen();
+// Subunternehmer schreiben ihren Bericht immer selbst: zusammen mit JD Brüder → „Mein Anteil“, allein → den ganzen Montagebericht
+const subsVon=o=>(o?.monteure||[]).filter(u=>S.roles[u]==="sub");
+const subNurAnteil=(o,u)=>!!(o?.gemeinsam||o?.nachgetragen?.[u]);
+// Wer schreibt den Montagebericht? Ist ein Sub allein eingeteilt, immer er selbst
+function schreiberVon(o){ const subs=subsVon(o); if(!o?.gemeinsam && subs.length && !subs.includes(o.berichtSchreiber)) return subs[0]; return o?.berichtSchreiber||null; }
+const subBerichtDa=(o,u)=>subNurAnteil(o,u)?!!o.subAnteil?.[u]?.abgegebenAm:(o.berichtVonSub===u||o.abschluss?.by===u);
+// Fällig: angefordert, oder Montagetag vorbei und Auftrag noch nicht fertig
+const subBerichtFehlt=(o,u)=>!o.storniert && !subBerichtDa(o,u) && (!!o.berichtFehlt?.[u] || (!istFertig(o) && !abgerechnet(o) && !!o.termin && terminTag(o)<tagHeute()));
+const darfBericht=o=>{ const w=schreiberVon(o); if(!w||w===myId()) return true; return can.planen() && !(S.roles[w]==="sub" && !o.gemeinsam); };
 const offeneBerichte=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&(o.monteure||[]).includes(myId())&&darfBericht(o)&&["bericht","rekla","abnahme"].includes(schritt(o)));
 // Chef legt fest, wer den Montagebericht schreibt
 function berichtSchreiberHtml(o){
+  const subs=subsVon(o);
+  if(subs.length && !o.gemeinsam){ const w=schreiberVon(o);
+    return `<div class="ziel-w">${subs.map(u=>`<button class="fp ${w===u?"on":""}" data-bs="${esc(u)}">📝 ${esc(nameOf(u))}</button>`).join("")}</div>
+    <div class="small mute" style="margin-top:4px">Subunternehmer schreiben ihren Montagebericht immer selbst. Wart ihr zusammen dort? Dann unten „Zusammen mit dem Subunternehmer“ ankreuzen – du schreibst den Bericht an meta, er seinen Anteil.</div>`; }
   const leute=[...new Set([...(o.monteure||[])])];
   return `<div class="ziel-w">${[["","👥 jeder"],...leute.map(u=>[u,(u===myId()?"Ich":nameOf(u))])].map(([u,l])=>`<button class="fp ${(o.berichtSchreiber||"")===u?"on":""}" data-bs="${esc(u)}">${u?"📝 ":""}${esc(l)}</button>`).join("")}</div>`;
 }
@@ -3176,7 +3211,8 @@ function lohnCard(o,opts={}){
   if(istSubUid(uid) && !subPreiseAn()) P=null; // Sub-Preise in Bearbeitung
   const pr=P?.preise||{};
   const anU=o.gemeinsam?o.subAnteil?.[uid]:null;
-  const editable=(uid===myId()||darfAndere) && !anU?.bestaetigtAm && !(anU?.abgegebenAm && !can.planen());
+  const fuerSub=uid!==myId() && istSubUid(uid) && !subBerichtDa(o,uid); // Sub trägt selbst ein
+  const editable=(uid===myId()||(darfAndere&&!fuerSub)) && !anU?.bestaetigtAm && !(anU?.abgegebenAm && !can.planen());
   const nurPos={mengen:d.mengen||{},uid};
   const c=calcLohn(nurPos,P);
   const anz=Object.values(d.mengen||{}).filter(v=>nn(v)).length;
@@ -4314,7 +4350,7 @@ function meineEinsaetzeKarte(){
   if(!l.length) return `<div class="card"><h3>🔧 Meine Einsätze</h3><div class="small mute">Gerade keine Einsätze für dich.</div></div>`;
   return `<div class="card"><h3>🔧 Meine Einsätze</h3>${l.map(o=>{ const st=schritt(o), lauf=running(o), ber=["bericht","rekla","abnahme"].includes(st)&&darfBericht(o);
     return `<a class="az-ein" href="#a-${esc(o.id)}"><div style="flex:1;min-width:0"><b>${esc(o.nr)}</b> <span class="mute">${esc(o.bauvorhaben||"")}</span><div class="small mute">${o.termin?(terminTag(o)===heute?"heute":kurzDatum(o.termin)):"ohne Datum"}${o.plzOrt?" · "+esc(o.plzOrt):""}</div></div>
-      ${lauf?`<span class="chip ok">⏱ läuft</span>`:ber?`<span class="chip warn">📝 Bericht</span>`:o.berichtSchreiber===myId()?`<span class="chip info">📝 du</span>`:""}<span class="mute">›</span></a>`; }).join("")}</div>`;
+      ${lauf?`<span class="chip ok">⏱ läuft</span>`:ber?`<span class="chip warn">📝 Bericht</span>`:schreiberVon(o)===myId()?`<span class="chip info">📝 du</span>`:""}<span class="mute">›</span></a>`; }).join("")}</div>`;
 }
 // Lohn (nur Chef pflegt) und eigene Steuerdaten (Mitarbeiter pflegt)
 const personalVon=uid=>({...(S.az[uid+"_L"]||{}),...((S.preise?.personal||{})[uid]||{})});
