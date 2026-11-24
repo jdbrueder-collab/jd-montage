@@ -150,6 +150,12 @@ export function parseAbrechnung(m, parseHTML) {
   return { nr: nr.replace(/[^\w\/\-]/g, ""), positionen: pos, summe, bemerkung: bem, bv: mm ? mm[1] : "" };
 }
 
+/** Welcher Kunde: meta Luxemburg, wenn die Abrechnung den Luxemburg-Zuschlag enthält („D-+20%LUX“ / „Luxemburg 20 %“), sonst meta Deutschland */
+export function kundeAusAbrechnung(a) {
+  const t = [a?.bemerkung, ...(a?.positionen || []).map((p) => p.artikel)].join(" ");
+  return /lux/i.test(t) ? "lu" : "de";
+}
+
 /** Passenden Auftrag finden: exakt, sonst eindeutig über die Grundnummer (16872 ↔ 16872/1) */
 export function findeAuftrag(orders, nr) {
   if (!nr) return null;

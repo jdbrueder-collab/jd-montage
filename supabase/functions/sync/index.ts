@@ -8,7 +8,7 @@ import { DOMParser } from "npm:linkedom@0.18.5";
 import * as webpush from "jsr:@negrel/webpush@0.3.0";
 import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
-  art, cleanSubject, DECK_FELDER, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istAbnahmeVerguetung, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
+  art, cleanSubject, DECK_FELDER, kundeAusAbrechnung, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istAbnahmeVerguetung, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
   parseAbrechnung, parseUebersicht, parseZusage, reklaAufstellung, splitBV, unterlagen, vonMeta,
 } from "../_shared/meta.js";
 
@@ -73,6 +73,10 @@ Deno.serve(async (req) => {
       }
       const { data: owner } = await user.rpc("is_owner");
       if (!owner) return json({ code: "approval_required", message: "Nur Admins dürfen Mails abrufen." }, 403);
+      // Admin: Lexware Office (Verbindung prüfen, Rechnungsentwurf anlegen, Stand der Rechnung holen)
+      if (body?.lexStatus) return json(await lexStatus(db));
+      if (body?.lexRechnung) return json(await lexRechnung(db, String(body.lexRechnung)));
+      if (body?.lexAbgleich) return json(await lexAbgleich(db, String(body.lexAbgleich)));
       // Admin: Unterlagen eines Auftrags komplett neu auslesen
       if (body?.dokLesen) {
         const id = String(body.dokLesen), o = await getDoc(db, "auftraege", id); const log: string[] = [];
@@ -195,6 +199,12 @@ async function pushAbholbereit(db: any, id: string) {
 }
 /** Neue Reklamation (oder Leerfahrt) → Chefs sofort benachrichtigen (einmal je Reklamation) */
 const URSACHEN_TEXT: Record<string, string> = { selbst: "Selbst verursacht", baustelle: "Baustelle nicht montagefertig", teile: "Fehlerhafte Teile", sonst: "Sonstiges" };
+/** Neue Montageabrechnung von meta → Chefs fragen, ob die Rechnung geschrieben werden soll */
+async function pushAbrechnung(db: any, id: string, f: any) {
+  const kunde = f.kunde === "lu" ? "meta Luxemburg 🇱🇺" : "meta Deutschland 🇩🇪";
+  const betrag = Number(f.summe || 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+  await pushSenden(db, await chefIds(db), { titel: `💶 Abrechnung ${f.nr}: Rechnung freigeben?`, text: `${kunde} · ${betrag} netto${f.art === "abnahme" ? " (Sichtabnahme)" : ""} – antippen zum Freigeben`, url: APP_URL + "#a-" + id }).catch((e) => console.error(e));
+}
 async function pushReklamation(db: any, rid: string) {
   const r = await getDoc(db, "reklamationen", rid);
   if (!r || !r.am || Date.now() - r.am > 15 * 60_000) return { gesendet: 0, grund: "nicht gefunden oder zu alt" };
@@ -573,8 +583,9 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
             if (istAbnahmeVerguetung(a)) {
               const fid = id + "~abnahme"; const exA = fin[fid];
               if (!exA || (exA.datum || 0) <= d) {
-                const doc = { nr: a.nr, auftragId: id, art: "abnahme", bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: exA?.rechnungStatus || "offen", rechnungsNr: exA?.rechnungsNr || "", quelle: "mail" };
+                const doc = { nr: a.nr, auftragId: id, art: "abnahme", kunde: kundeAusAbrechnung(a), bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: exA?.rechnungStatus || "offen", rechnungsNr: exA?.rechnungsNr || "", quelle: "mail" };
                 await setDoc(db, "finanzen", fid, doc); fin[fid] = doc;
+                if (!exA) await pushAbrechnung(db, id, doc);
               }
               if (orders[id]) { const p = { abnahmeVerguetet: { summe: a.summe, am: d } }; await updDoc(db, "auftraege", id, p); Object.assign(orders[id], p); z.aktualisiert++; }
               z.abrechnungen++; log.push(`💶 Sichtabnahme vergütet ${a.nr}: ${a.summe.toFixed(2)} € (keine Montage-Abrechnung)`);
@@ -586,8 +597,9 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
             if (mit.length && !mit.includes(id) && /\d{4,6}/.test(String(a.bemerkung || ""))) {
               const fid = id + "~fuer"; const exF = fin[fid];
               if (!exF || (exF.datum || 0) <= d) {
-                const doc = { nr: a.nr, auftragId: id, art: "andere", fuer: mit.map((r) => orders[r].nr || r), bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: exF?.rechnungStatus || "offen", rechnungsNr: exF?.rechnungsNr || "", quelle: "mail" };
+                const doc = { nr: a.nr, auftragId: id, art: "andere", kunde: kundeAusAbrechnung(a), fuer: mit.map((r) => orders[r].nr || r), bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: exF?.rechnungStatus || "offen", rechnungsNr: exF?.rechnungsNr || "", quelle: "mail" };
                 await setDoc(db, "finanzen", fid, doc); fin[fid] = doc;
+                if (!exF) await pushAbrechnung(db, id, doc);
               }
               for (const rid of mit) {
                 if (orders[rid].abgerechnet) continue;
@@ -599,8 +611,9 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
               st.msgs[m.id] = 1; continue;
             }
             if (!ex || (ex.datum || 0) <= d) {
-              const doc = { nr: a.nr, bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
+              const doc = { ...(ex?.lexId ? { lexId: ex.lexId, lexAm: ex.lexAm } : {}), nr: a.nr, kunde: kundeAusAbrechnung(a), bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
               await setDoc(db, "finanzen", id, doc); fin[id] = doc;
+              if (!ex) await pushAbrechnung(db, id, doc);
             }
             if (!orders[id]) { const bv = splitBV(a.bv); const doc = { nr: a.nr, bauvorhaben: bv.bauvorhaben, plzOrt: bv.plzOrt, terminStatus: "fest", prodStatus: "abholbereit", erstelltAm: Date.now(), quelle: "mail", abgerechnet: true, abschluss: { typ: "ok", am: d, by: null }, berichtStatus: "gesendet", berichtGesendetAm: d }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; }
             else if (!orders[id].abgerechnet) await updDoc(db, "auftraege", id, { abgerechnet: true });
@@ -842,4 +855,104 @@ async function deckblattUebernehmen(db: any, id: string, o: any, res: any, datei
   p.deckUnsicher = unsicher;
   await updDoc(db, "auftraege", id, { ...p, deckblattGelesenAm: Date.now() }); Object.assign(o, p);
   return Object.keys(p).filter((k) => k !== "deckUnsicher" && k !== "dokInfo").length;
+}
+
+// ---------- Lexware Office: Rechnung als Entwurf anlegen, sobald der Chef sie freigibt ----------
+// Schlüssel: Secret LEXWARE_API_KEY. Zwei Kunden in Lexware: meta Deutschland (de) und meta Luxemburg (lu).
+// Luxemburg erkennt die App am Zuschlag „+20%LUX“ in der meta-Abrechnung. Steuer, Zahlungsbedingungen und
+// Schlusstext übernimmt sie von der letzten Rechnung an denselben Kunden – so wie ihr es bisher macht.
+const LEX_API = "https://api.lexware.io/v1";
+const LEX_LINK = "https://app.lexware.de/permalink/invoices/edit/";
+const warte = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function lex(pfad: string, init: any = {}) {
+  const key = Deno.env.get("LEXWARE_API_KEY");
+  if (!key) throw Object.assign(new Error("Der Lexware-Schlüssel ist noch nicht hinterlegt."), { code: "lex_fehlt" });
+  for (let i = 0; i < 4; i++) {
+    const r = await fetch(LEX_API + pfad, { ...init, headers: { Authorization: "Bearer " + key, Accept: "application/json", "Content-Type": "application/json" } });
+    if (r.status === 429) { await warte(900 * (i + 1)); continue; }
+    const t = await r.text();
+    if (!r.ok) throw Object.assign(new Error(r.status === 401 ? "Lexware lehnt den Schlüssel ab – bitte neu hinterlegen." : `Lexware ${r.status}: ${t.slice(0, 300)}`), { code: r.status === 401 ? "lex_schluessel" : "lex_fehler" });
+    await warte(550); // Lexware erlaubt höchstens 2 Anfragen pro Sekunde
+    return t ? JSON.parse(t) : {};
+  }
+  throw new Error("Lexware ist gerade ausgelastet – bitte gleich noch einmal.");
+}
+const kontaktLand = (c: any) => String(c?.addresses?.billing?.[0]?.countryCode || c?.addresses?.shipping?.[0]?.countryCode || "").toUpperCase();
+const kontaktName = (c: any) => c?.company?.name || [c?.person?.firstName, c?.person?.lastName].filter(Boolean).join(" ") || "";
+async function lexKunden(db: any) {
+  const alle: any[] = [];
+  for (let seite = 0; seite < 8; seite++) {
+    const r = await lex(`/contacts?customer=true&size=250&page=${seite}`);
+    for (const c of r.content || []) if (/\bmeta\b/i.test(kontaktName(c))) alle.push({ id: c.id, name: kontaktName(c), land: kontaktLand(c), nr: c.roles?.customer?.number ?? "" });
+    if (r.last !== false) break;
+  }
+  const fest = (await getDoc(db, "lohn", "lexware")) || {};
+  const wahl = (k: string, land: string) => alle.find((c) => c.id === fest[k]) || (alle.filter((c) => c.land === land).length === 1 ? alle.find((c) => c.land === land) : null);
+  return { de: wahl("de", "DE"), lu: wahl("lu", "LU"), alle };
+}
+async function lexStatus(db: any) {
+  try { return { ok: true, ...(await lexKunden(db)) }; }
+  catch (e: any) { return { ok: false, code: e.code || "", fehler: e.message || String(e) }; }
+}
+async function lexVorlage(kontaktId: string) {
+  const l = await lex(`/voucherlist?voucherType=invoice&voucherStatus=open,paid,paidoff&contactId=${kontaktId}&sort=voucherDate,DESC&size=5`);
+  for (const v of l.content || []) { try { return await lex(`/invoices/${v.id}`); } catch (_) { /* nächste */ } }
+  return null;
+}
+async function lexRechnung(db: any, fid: string) {
+  try {
+    const f = await getDoc(db, "finanzen", fid);
+    if (!f) return { fehler: "Abrechnung nicht gefunden." };
+    if (f.lexId) return { ok: true, id: f.lexId, link: LEX_LINK + f.lexId, schon: true, kunde: f.lexKunde || "" };
+    const kunde = f.kunde || kundeAusAbrechnung(f);
+    const k = await lexKunden(db), kontakt = (k as any)[kunde];
+    const kName = kunde === "lu" ? "meta Luxemburg" : "meta Deutschland";
+    if (!kontakt) return { fehler: `In Lexware gibt es keinen eindeutigen Kunden „${kName}“ – bitte unter Setup → Lexware zuordnen.`, alle: k.alle };
+    const vorlage = await lexVorlage(kontakt.id);
+    if (!vorlage) return { fehler: `Für ${kontakt.name} gibt es in Lexware noch keine Rechnung, von der die App Steuer und Zahlungsbedingungen übernehmen kann. Bitte die erste Rechnung von Hand schreiben.` };
+    const tc = vorlage.taxConditions || {};
+    const steuer = tc.taxType && tc.taxType !== "gross" ? { taxType: tc.taxType, ...(tc.taxTypeNote ? { taxTypeNote: tc.taxTypeNote } : {}) } : { taxType: "net" };
+    const satz = vorlage.lineItems?.find((x: any) => x.unitPrice)?.unitPrice?.taxRatePercentage ?? 19;
+    const o = (await getDoc(db, "auftraege", f.auftragId || fid)) || {};
+    const bv = f.bauvorhaben || [o.bauvorhaben, o.plzOrt].filter(Boolean).join(", ");
+    const titel = `Montage Auftrag ${f.nr}${bv ? " – " + bv : ""}`;
+    const pos = (f.positionen || []).filter((p: any) => p.artikel && Number(p.menge));
+    const r2 = (x: number) => Math.round(x * 100) / 100;
+    const passt = pos.length && Math.abs(r2(pos.reduce((s: number, p: any) => s + r2(Number(p.menge) * Number(p.ep)), 0)) - Number(f.summe)) < 0.02;
+    const einheit = (a: string) => /\bKM\b/i.test(a) ? "km" : /stunde/i.test(a) ? "Std." : "Stück";
+    const zeilen = passt
+      ? pos.map((p: any) => ({ type: "custom", name: String(p.artikel).slice(0, 255), quantity: Number(p.menge), unitName: einheit(p.artikel), unitPrice: { currency: "EUR", netAmount: Number(p.ep), taxRatePercentage: satz } }))
+      : [{ type: "custom", name: titel.slice(0, 255), quantity: 1, unitName: "pauschal", unitPrice: { currency: "EUR", netAmount: Number(f.summe), taxRatePercentage: satz } }];
+    const tag = (t: number) => new Date(t).toISOString().replace("Z", "+00:00");
+    const body: any = {
+      voucherDate: tag(Date.now()),
+      address: { contactId: kontakt.id },
+      lineItems: zeilen,
+      totalPrice: { currency: "EUR" },
+      taxConditions: steuer,
+      shippingConditions: { shippingType: "service", shippingDate: tag(o.abschluss?.am || f.datum || Date.now()) },
+      title: "Rechnung",
+      introduction: `${titel}\nGemäß Montageabrechnung von meta vom ${new Date(f.datum || Date.now()).toLocaleDateString("de-DE", { timeZone: "Europe/Berlin" })}.`,
+    };
+    if (vorlage.paymentConditions) body.paymentConditions = vorlage.paymentConditions;
+    if (vorlage.remark) body.remark = vorlage.remark;
+    const r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) });
+    await updDoc(db, "finanzen", fid, { lexId: r.id, lexAm: Date.now(), lexKunde: kontakt.name, kunde, rechnungStatus: f.rechnungStatus === "offen" ? "freigegeben" : f.rechnungStatus });
+    return { ok: true, id: r.id, link: LEX_LINK + r.id, kunde: kontakt.name, positionen: zeilen.length };
+  } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
+}
+/** Stand der Rechnung aus Lexware holen: sobald sie dort fertig ist, Rechnungsnummer übernehmen */
+async function lexAbgleich(db: any, fid: string) {
+  try {
+    const f = await getDoc(db, "finanzen", fid);
+    if (!f?.lexId) return { fehler: "Noch kein Entwurf in Lexware." };
+    const r = await lex(`/invoices/${f.lexId}`);
+    const st = r.voucherStatus || "";
+    if (st === "draft") return { ok: true, status: st };
+    const patch: any = { rechnungsNr: r.voucherNumber || f.rechnungsNr || "" };
+    if (f.rechnungStatus === "offen" || f.rechnungStatus === "freigegeben") { patch.rechnungStatus = "erstellt"; patch.erstelltAm = Date.now(); }
+    if ((st === "paid" || st === "paidoff") && f.rechnungStatus !== "bezahlt") { patch.rechnungStatus = "bezahlt"; patch.bezahltAm = Date.now(); }
+    await updDoc(db, "finanzen", fid, patch);
+    return { ok: true, status: st, rechnungsNr: patch.rechnungsNr };
+  } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
 }

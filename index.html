@@ -555,7 +555,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="55dbdd6c850a";</script>
+<script>window.JD_BUILD="b3c247b31b0d";</script>
 </head>
 <body>
 <header class="top">
@@ -2118,17 +2118,25 @@ function fahrtZeile(o){
   const summe=r2(fahrten.reduce((a,f)=>a+f.km*kmSatz(f.x),0)), anh=fahrten.some(f=>mitAnhaenger(f.x));
   return `<div class="small" style="margin-top:8px;background:var(--greybg);border-radius:10px;padding:8px 10px">🚐 <b>Fahrtkosten ${fmtEUR(summe)}</b> – ${fahrten.map(f=>`${f.was}: ${String(f.km).replace(".",",")} km × ${fmtEUR(kmSatz(f.x))} (${esc(fahrzeugText(f.x)||"Fahrzeug unbekannt")})`).join(" · ")}${anh?`<div style="color:var(--warn);font-weight:700;margin-top:3px">⚠ Bitte beachten: Anhängerfahrt</div>`:""}</div>`;
 }
+// Zwei verschiedene Kunden in Lexware: meta Luxemburg (Abrechnung enthält den Zuschlag „+20%LUX“) oder meta Deutschland
+const kundeVon=f=>f?.kunde||(/lux/i.test([f?.bemerkung,...(f?.positionen||[]).map(p=>p.artikel)].join(" "))?"lu":"de");
+const KUNDEN={de:["🇩🇪","meta Deutschland"],lu:["🇱🇺","meta Luxemburg"]};
+const kundeText=f=>KUNDEN[kundeVon(f)].join(" ");
+const LEX_LINK="https://app.lexware.de/permalink/invoices/edit/";
 function finanzCard(o,f){
   if(!f) return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3><div class="small mute">Noch keine Montageabrechnung von meta zu diesem Auftrag.</div>${fahrtZeile(o)}
    <button class="btn sm ghost" id="manFin" style="margin-top:8px">Summe von Hand eintragen</button></div>`;
   const st=f.rechnungStatus||"offen"; const order=["offen","freigegeben","erstellt","versendet","bezahlt"]; const idx=order.indexOf(st);
   let actions="";
   if(st==="offen") actions=`<button class="btn pri block" id="rgFrei">Rechnung schreiben? → Freigeben</button>`;
-  if(st==="freigegeben") actions=`<button class="btn block" id="rgCopy">📋 Rechnungsdaten für Lexware kopieren</button><label class="f">Rechnungsnummer aus Lexware</label><input class="i" id="rgNr" placeholder="z. B. RE261105"><button class="btn pri block" id="rgErstellt" style="margin-top:8px">In Lexware erstellt ✓</button>`;
+  if(st==="freigegeben") actions=(f.lexId?`<a class="btn pri block" href="${LEX_LINK}${esc(f.lexId)}" target="_blank" rel="noopener">📄 Entwurf in Lexware öffnen</a><button class="btn block" id="lexAbgl" style="margin-top:8px">🔄 Rechnungsnummer aus Lexware holen</button>`
+    :`<button class="btn pri block" id="lexNeu">📑 Entwurf in Lexware anlegen</button>`)
+    +`<details style="margin-top:10px"><summary class="small mute" style="cursor:pointer">Von Hand in Lexware schreiben …</summary><button class="btn block" id="rgCopy" style="margin-top:8px">📋 Rechnungsdaten für Lexware kopieren</button><label class="f">Rechnungsnummer aus Lexware</label><input class="i" id="rgNr" placeholder="z. B. RE261105"><button class="btn block" id="rgErstellt" style="margin-top:8px">In Lexware erstellt ✓</button></details>`;
   if(st==="erstellt") actions=`<button class="btn pri block" id="rgSend">Rechnung abschicken? → Als versendet markieren</button>`;
-  if(st==="versendet") actions=`<button class="btn ghost block" id="rgPaid">Zahlung eingegangen ✓</button>`;
+  if(st==="versendet") actions=`<button class="btn ghost block" id="rgPaid">Zahlung eingegangen ✓</button>${f.lexId?`<button class="btn sm ghost block" id="lexAbgl" style="margin-top:6px">🔄 Zahlung in Lexware prüfen</button>`:""}`;
   return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3>
    <div class="row between"><div><div class="small mute">Montageabrechnung meta${f.datum?" vom "+new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="big">${fmtEUR(f.summe)}</div></div><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span></div>
+   <div class="small" style="margin-top:6px">Rechnung an <b>${kundeText(f)}</b>${f.lexKunde?` <span class="mute">(Lexware: ${esc(f.lexKunde)})</span>`:""}${landOf(o)&&landOf(o)!==kundeVon(f)?` <span class="chip warn">Baustelle liegt in ${esc(LAENDER[landOf(o)]?.[1]||landOf(o))} – bitte prüfen</span>`:""}</div>
    ${(()=>{ const k=kostenAuftrag(o.id); const g=r2((Number(f.summe)||0)-k); return `<div class="grid3" style="margin-top:10px;text-align:center"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Vergütung meta</div><b>${fmtEUR(f.summe)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Akkord / Subs</div><b>− ${fmtEUR(k)}</b></div><div style="background:${g>=0?"var(--okbg)":"var(--badbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b style="color:${g>=0?"var(--ok)":"var(--bad)"}">${fmtEUR(g)}</b></div></div>`; })()}
    ${fahrtZeile(o)}
    ${f.bemerkung?`<div class="small mute">Bem.: ${esc(f.bemerkung)}</div>`:""}
@@ -4451,7 +4459,7 @@ function viewGeld(){
      <tfoot><tr><td>Summe</td><td>${fmtEUR(S1)}</td><td>− ${fmtEUR(r2(S2))}</td><td style="color:var(--ok)">${fmtEUR(r2(S1-S2))}</td></tr></tfoot></table>`:`<div class="small mute" style="margin-top:8px">Noch keine Abrechnungen in diesem Monat.</div>`}</div>`; }
   h+=statistikCard();
   if(!rows.length) h+=`<div class="empty">Noch keine Montageabrechnungen.</div>`;
-  rows.forEach(({f,o})=>{ const st=f.rechnungStatus||"offen"; h+=`<a class="order" href="#a-${esc(f.auftragId||f.id)}"><div class="row between"><span class="nr">${esc(o.nr||f.nr)}${f.art==="abnahme"?` <span class="chip info">Sichtabnahme</span>`:f.art==="andere"?` <span class="chip info">für ${esc((f.fuer||[]).join(", "))}</span>`:""}</span><b>${fmtEUR(f.summe)}</b></div><div class="small mute">${esc(o.bauvorhaben||f.bauvorhaben||"")} · ${f.datum?new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="chips"><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span>${f.rechnungsNr?`<span class="chip">${esc(f.rechnungsNr)}</span>`:""}${(()=>{ const g=r2((Number(f.summe)||0)-kostenAuftrag(f.id)); return `<span class="chip ${g>=0?"ok":"bad"}">Gewinn ${fmtEUR(g)}</span>`; })()}</div></a>`; });
+  rows.forEach(({f,o})=>{ const st=f.rechnungStatus||"offen"; h+=`<a class="order" href="#a-${esc(f.auftragId||f.id)}"><div class="row between"><span class="nr">${esc(o.nr||f.nr)}${f.art==="abnahme"?` <span class="chip info">Sichtabnahme</span>`:f.art==="andere"?` <span class="chip info">für ${esc((f.fuer||[]).join(", "))}</span>`:""}</span><b>${fmtEUR(f.summe)}</b></div><div class="small mute">${esc(o.bauvorhaben||f.bauvorhaben||"")} · ${f.datum?new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="chips"><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span><span class="chip">${kundeText(f)}</span>${f.rechnungsNr?`<span class="chip">${esc(f.rechnungsNr)}</span>`:""}${(()=>{ const g=r2((Number(f.summe)||0)-kostenAuftrag(f.id)); return `<span class="chip ${g>=0?"ok":"bad"}">Gewinn ${fmtEUR(g)}</span>`; })()}</div></a>`; });
   return h;
 }
 
@@ -4597,6 +4605,7 @@ function viewSetup(){
       ${S.isOwner?`<button class="btn sm ghost" data-unrole="${esc(id)}">✕</button>`:""}</div>`).join("")}
     ${S.isOwner&&S.user?`<label class="f">Person hinzufügen</label><input class="i" id="pSearch" placeholder="Name oder E-Mail suchen …"><div id="pHits"></div>`:""}
   </div>
+  ${S.isOwner?lexwareCard():""}
   ${S.isOwner?(()=>{ const lid=S.plSel&&S.preise?.listen?.[S.plSel]?S.plSel:"std"; const L=lid==="std"?S.preise:S.preise.listen[lid]; const SE=SERIEN().find(x=>x.id===lid); const sub=subEinst(); const lName=(k,v)=>SERIEN().find(x=>x.id===k)?.name||v?.name||k;
    return `<div class="card"><h3>Preislisten je Serie</h3>
     <div class="small mute" style="margin-bottom:8px">Eure Preise je Serie (Anlagentyp). Die Serie wird aus den Unterlagen erkannt, der Chef bestätigt sie beim Terminieren. Sehen nur die Chefs.</div>
@@ -4834,7 +4843,16 @@ function bindDetail(id){
   // Finanzen
   const FP="finanzen/"+id;
   $("#manFin") && ($("#manFin").onclick=()=>modal(`<h2>Summe eintragen</h2><label class="f">Summe netto (€)</label><input class="i" id="sm" inputmode="decimal"><div class="grid2" style="margin-top:12px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ const v=parseFloat(m.querySelector("#sm").value.replace(",",".")); if(!(v>0)) return toast("Bitte Betrag eingeben"); await setDoc(FP,{nr:o.nr,bauvorhaben:o.bauvorhaben||"",summe:v,positionen:[],datum:Date.now(),rechnungStatus:"offen",quelle:"manuell"}); close(); }; }));
-  $("#rgFrei") && ($("#rgFrei").onclick=async()=>{ if(await confirmBox("Rechnung schreiben?",`Rechnung über <b>${fmtEUR(S.fin[id].summe)}</b> für Auftrag ${esc(o.nr)} freigeben?`,"Ja, freigeben","ok")) upd(FP,{rechnungStatus:"freigegeben",freigegebenAm:Date.now()}); });
+  const lexAnlegen=async()=>{ toast("📑 Entwurf wird in Lexware angelegt …",9000);
+    try{ const r=await S.sync.run({lexRechnung:id}); toast(r?.ok?`Entwurf in Lexware ✓ – ${r.kunde||kundeText(S.fin[id])}`:(r?.fehler||"Lexware: unbekannter Fehler"),r?.ok?4000:9000); }
+    catch(e){ toast("Lexware: "+(e.message||e),9000); } };
+  $("#rgFrei") && ($("#rgFrei").onclick=async()=>{ const f=S.fin[id];
+    if(!await confirmBox("Rechnung schreiben?",`Rechnung über <b>${fmtEUR(f.summe)}</b> netto an <b>${kundeText(f)}</b> für Auftrag ${esc(o.nr)} freigeben?<div class="small mute" style="margin-top:6px">Die App legt sie als Entwurf in Lexware Office an – dort prüfen und abschicken.</div>`,"Ja, freigeben","ok")) return;
+    await upd(FP,{rechnungStatus:"freigegeben",freigegebenAm:Date.now()}); await lexAnlegen(); });
+  $("#lexNeu") && ($("#lexNeu").onclick=async()=>{ const b=$("#lexNeu"); b.disabled=true; await lexAnlegen(); b.disabled=false; });
+  $("#lexAbgl") && ($("#lexAbgl").onclick=async()=>{ const b=$("#lexAbgl"); b.disabled=true;
+    try{ const r=await S.sync.run({lexAbgleich:id}); toast(r?.fehler?r.fehler:r?.status==="draft"?"Noch ein Entwurf – in Lexware fertigstellen":r?.rechnungsNr?`Rechnung ${r.rechnungsNr} übernommen ✓`:"Stand übernommen ✓",5000); }
+    catch(e){ toast("Lexware: "+(e.message||e),7000); } b.disabled=false; });
   $("#rgCopy") && ($("#rgCopy").onclick=async()=>{ const t=rechnungsText(o,S.fin[id]); try{ await navigator.clipboard.writeText(t); toast("Kopiert – jetzt in Lexware einfügen"); }catch(e){ modal(`<h2>Rechnungsdaten</h2><textarea class="i" style="min-height:260px">${esc(t)}</textarea><button class="btn block" data-close style="margin-top:10px">Schließen</button>`); } });
   $("#rgErstellt") && ($("#rgErstellt").onclick=()=>upd(FP,{rechnungStatus:"erstellt",rechnungsNr:($("#rgNr").value||"").trim(),erstelltAm:Date.now()}));
   $("#rgSend") && ($("#rgSend").onclick=async()=>{ if(await confirmBox("Rechnung abschicken?",`Hast du die Rechnung ${esc(S.fin[id].rechnungsNr||"")} aus Lexware an den Kunden geschickt?`,"Ja, ist versendet","ok")) upd(FP,{rechnungStatus:"versendet",versendetAm:Date.now()}); });
@@ -4868,7 +4886,21 @@ async function savePreise(patch){
   if(String(cur.subSicht||[])!==String([...mitListe])){ next.subSicht=[...mitListe]; S.preise=next; await setDoc("lohn/preise",next); }
   for(const id of alt) if(!chefs.includes(id)&&!mitListe.has(id)){ try{ await S.db.doc("lohnsicht/"+id).delete(); }catch(e){} }
 }
+function lexwareCard(){ const x=S.lexStatus;
+  const zeile=(k)=>{ const c=x?.[k], [flag,txt]=KUNDEN[k];
+    return `<div class="person"><span style="font-size:20px">${flag}</span><div style="flex:1;min-width:0"><b>${txt}</b><div class="small mute">${c?esc(c.name)+(c.nr!==""&&c.nr!=null?` · Kd.-Nr. ${esc(c.nr)}`:""):x?.ok?"nicht eindeutig gefunden – bitte wählen":"noch nicht geprüft"}</div></div>
+    ${x?.ok&&x.alle?.length?`<select class="i" style="width:auto;max-width:46%;min-height:36px;padding:5px 8px" data-lexk="${k}"><option value="">automatisch</option>${x.alle.map(a=>`<option value="${esc(a.id)}" ${S.lexFest?.[k]===a.id?"selected":""}>${esc(a.name)} (${esc(a.land||"?")})</option>`).join("")}</select>`:""}</div>`; };
+  return `<div class="card"><h3>Lexware Office</h3>
+   <div class="small mute" style="margin-bottom:8px">Kommt eine Montageabrechnung von meta, fragt die App per Push, ob die Rechnung geschrieben werden soll. Nach „Freigeben“ liegt sie als Entwurf in Lexware – beim richtigen Kunden: steht „+20 % LUX“ in der Abrechnung, an meta Luxemburg, sonst an meta Deutschland. Steuer und Zahlungsbedingungen kommen von eurer letzten Rechnung an denselben Kunden.</div>
+   ${x&&!x.ok?`<div class="banner ${x.code==="lex_fehlt"?"info":"bad"} small" style="margin-bottom:8px">${esc(x.fehler||"")}</div>`:""}
+   ${zeile("de")}${zeile("lu")}
+   <button class="btn sm" id="lexTest" style="margin-top:8px">🔌 Verbindung prüfen</button></div>`; }
 function bindSetupLohn(){
+  $("#lexTest") && ($("#lexTest").onclick=async()=>{ const b=$("#lexTest"); b.disabled=true; b.textContent="Prüfe …";
+    try{ S.lexStatus=await S.sync.run({lexStatus:1}); }catch(e){ S.lexStatus={ok:false,fehler:e.message||String(e)}; }
+    try{ const d=await S.db.doc("lohn/lexware").get(); S.lexFest=d.exists?d.data():{}; }catch(e){}
+    render(); });
+  document.querySelectorAll("[data-lexk]").forEach(sel=>sel.onchange=async()=>{ S.lexFest={...(S.lexFest||{}),[sel.dataset.lexk]:sel.value}; await setDoc("lohn/lexware",S.lexFest); toast("Kunde gespeichert ✓"); $("#lexTest")?.click(); });
   const lid=S.plSel&&S.preise?.listen?.[S.plSel]?S.plSel:"std";
   const saveL=patch=>{ if(lid==="std") return savePreise(patch); const cur=S.preise.listen[lid]; return savePreise({listen:{...S.preise.listen,[lid]:{...cur,...patch,preise:{...(cur.preise||{}),...(patch.preise||{})}}}}); };
   $("#subPreiseAn") && ($("#subPreiseAn").onchange=()=>setDoc("einstellungen/allgemein",{...S.settings,subPreiseAktiv:$("#subPreiseAn").checked}));
@@ -5290,7 +5322,7 @@ async function pushAusschalten(){
 /* ---------- Setup → Konto: Rolle, Benachrichtigungen, Mails, App installieren, Abmelden ---------- */
 // Setup: jeder Bereich ist ein kleiner Knopf, der beim Antippen aufgeht (immer nur einer offen)
 const SETUP_KN=[[/Mein Konto/,"Mein Konto","user"],[/Betrieb/,"Betrieb","settings"],[/Fahrtkosten/,"Fahrtkosten","car"],[/Erinnerung/,"Erinnerung","bell"],
-  [/Anmeldungen/,"Neue Anmeldungen","inbox"],[/Team/,"Team","user"],[/Zugänge/,"Zugänge","mail"],[/Preisliste/,"Preislisten","euro"],[/Hinweise/,"Hinweise","file"]];
+  [/Anmeldungen/,"Neue Anmeldungen","inbox"],[/Team/,"Team","user"],[/Zugänge/,"Zugänge","mail"],[/Preisliste/,"Preislisten","euro"],[/Lexware/,"Lexware Office","euro"],[/Hinweise/,"Hinweise","file"]];
 function setupKnoepfe(app){
   const grid=app.querySelector(".setup-grid"); if(!grid) return;
   [...grid.children].forEach(card=>{
