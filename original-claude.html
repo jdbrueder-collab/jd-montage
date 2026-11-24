@@ -533,6 +533,8 @@ body.nav-weg nav.bottom{transform:translateY(calc(100% + 20px));opacity:0;pointe
 .serie-k b{display:block;font-size:15px}.serie-k span{display:block;font-size:12px;color:var(--mute);margin-top:2px}
 .serie-k.on{border-color:var(--brand2);background:var(--infobg);box-shadow:inset 0 0 0 1px var(--brand2)}
 .serie-k:disabled{opacity:.6;cursor:default}
+.sub-box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px;background:var(--greybg)}
+.serie-fest{margin:6px 0 4px;padding:8px 12px;border-radius:10px;background:var(--infobg)}
 
 .pl-kopf{font-size:12px;font-weight:750;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin:12px 4px 2px}
 .pl-kopf:first-child{margin-top:2px}
@@ -1232,7 +1234,8 @@ async function boot(){
   db.collection("fahrten").onSnapshot(snap=>{ const a={}; snap.docs.forEach(d=>a[d.id]={id:d.id,...d.data()}); S.fahrten=a; loadProfiles(Object.values(a).map(x=>x.fahrer)); scheduleRender(); },()=>{});
   db.doc("einstellungen/lohnpositionen").onSnapshot(d=>{ S.lohnPos=(d.exists?d.data().items:null)||[]; scheduleRender(); },()=>{});
   db.collection("lohnberichte").onSnapshot(snap=>{ const l={}; snap.docs.forEach(d=>l[d.id]={id:d.id,...d.data()}); S.lohn=l; loadProfiles(Object.values(l).map(x=>x.uid)); scheduleRender(); },()=>{});
-  if(S.isOwner) db.doc("lohn/preise").onSnapshot(d=>{ S.preise=d.exists?d.data():null; scheduleRender(); },()=>{});
+  if(S.isOwner) db.doc("lohn/preise").onSnapshot(d=>{ S.preise=d.exists?d.data():null; scheduleRender();
+    if(S.preise && (S.preise.subStand||0)<2 && !S._subNeu){ S._subNeu=1; setTimeout(()=>savePreise({subStand:2}).catch(e=>console.error(e)),2500); } },()=>{});
   else if(myId()) db.doc("lohnsicht/"+myId()).onSnapshot(d=>{ S.preise=d.exists?d.data():null; scheduleRender(); },()=>{});
   if(S.isOwner){
     db.collection("finanzen").onSnapshot(snap=>{ const f={}; snap.docs.forEach(d=>f[d.id]={id:d.id,...d.data()}); S.fin=f; scheduleRender(); }, ()=>{});
@@ -1350,6 +1353,7 @@ function orderChips(o){
   if(o.storniert){ if(landOf(o)==="lu") c.push(`<span class="chip info">🇱🇺 Luxemburg</span>`); c.push(`<span class="chip bad">❌ Storniert${o.storniert.am?" am "+new Date(o.storniert.am).toLocaleDateString("de-DE"):""}</span>`); if(o.monteure?.length) c.push(`<span class="chip">👷 ${o.monteure.map(nameOf).map(esc).join(", ")}</span>`); return c.join(""); }
   if(landOf(o)==="lu") c.push(`<span class="chip info">🇱🇺 Luxemburg</span>`);
   if(o.erstelltAm && Date.now()-o.erstelltAm<3*86400000 && !istFertig(o) && phase(o)!=="erledigt") c.push(`<span class="chip gold">NEU</span>`);
+  if(can.planen() && SERIEN().length && !serieId(o) && !istReklaAuftrag(o) && phase(o)!=="erledigt") c.push(`<span class="chip warn">Serie fehlt</span>`);
   if(o.abschluss){
     const t=o.abschluss.typ;
     c.push(t==="ok"?`<span class="chip ok">✓ Montiert</span>`:`<span class="chip warn">✓ Montiert mit Reklamation</span>`);
@@ -1718,7 +1722,7 @@ function terminAnfrageDialog(id){
 /* ---------- Gemeinsamer Auftrag: Anteil des Subunternehmers ---------- */
 function anteilKarte(o){
   const me=myId(), a=o.subAnteil?.[me]||{}, zu=!!a.abgegebenAm||!!a.bestaetigtAm;
-  const d=S.lohn[lohnDocId(o.id,me)]||{}, P=S.preise&&(!istSubUid(me)||subPreiseAn())?preisFuer(me,S.preise,o.serie):null, pr=P?.preise||{};
+  const d=S.lohn[lohnDocId(o.id,me)]||{}, P=S.preise&&(!istSubUid(me)||subPreiseAn())?preisFuer(me,S.preise,serieId(o)):null, pr=P?.preise||{};
   const c=calcLohn({...d,uid:me},P)||{lines:[],total:0};
   const inp=(attr,k,v)=>`<input class="i pl-q" ${attr}="${esc(k)}" inputmode="decimal" value="${esc(v??"")}" placeholder="0" ${zu?"disabled":""}>`;
   const zeile=(label,einheit,ep,attr,k,v)=>`<div class="pl-z ${nn(v)?"voll":""}" data-ep="${ep}"><div class="pl-l">${esc(label)}<span>${esc(einheit||"")}${ep!==""?" · "+fmtEUR(ep):""}</span></div>${inp(attr,k,v)}<div class="pl-gp">${nn(v)&&ep!==""?fmtEUR(r2(nn(v)*ep)):""}</div></div>`;
@@ -1750,7 +1754,7 @@ function anteilChefKarte(o){
   const subs=[...new Set([...(o.gemeinsam?(o.monteure||[]).filter(m=>S.roles[m]==="sub"):[]),...Object.keys(o.nachgetragen||{}),...Object.keys(o.subAnteil||{})])]; if(!subs.length) return "";
   return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Anteile der Mitmonteure</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)];
     return `<div class="anteil"><div class="row between" style="flex-wrap:nowrap;gap:8px;margin-bottom:6px"><b>${esc(nameOf(u))}</b>${a.bestaetigtAm?`<span class="chip ok">✓ bestätigt</span>`:a.abgegebenAm?`<span class="chip warn">📥 zu prüfen</span>`:`<span class="chip">noch nicht abgegeben</span>`}</div>
-      ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,o.serie):null):`<div class="small mute">${esc(nameOf(u))} trägt die Positionen gerade ein.</div>`}
+      ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,serieId(o)):null):`<div class="small mute">${esc(nameOf(u))} trägt die Positionen gerade ein.</div>`}
       ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Abrechnung bestätigen</button>`:""}
       ${o.aenderung?.status==="angefragt"&&o.aenderung.von===u?`<div class="banner warn small" style="margin:8px 0 0">✏️ Änderungswunsch: „${esc(o.aenderung.grund||"")}“<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div></div>`:""}</div>`; }).join("")}
     <div class="small mute" style="margin-top:6px">Nur für die interne Abrechnung – geht nicht an meta.</div></div>`;
@@ -1771,7 +1775,7 @@ function bindAnteil(id){
     render(); });
   $("#kalBtn") && ($("#kalBtn").onclick=async()=>{ const b=$("#kalBtn"); b.disabled=true;
     try{ const r=await S.sync?.run({kalender:id}); toast(r?.gesendet?`Kalendereinladung an ${r.an} gesendet ✓`:`Nicht gesendet: ${r?.grund||"unbekannt"}`,4000); }catch(e){ toast("Kalender fehlgeschlagen: "+(e.message||e)); } b.disabled=false; });
-  document.querySelectorAll("[data-serie]").forEach(b=>b.onclick=async()=>{ const v=b.dataset.serie; if(o.serie===v) return;
+  document.querySelectorAll("[data-serie]").forEach(b=>b.onclick=async()=>{ const v=b.dataset.serie; if(!can.planen()||o.serie===v) return; // nur der Chef legt die Serie fest
     await upd(P,{serie:v}); S.orders[id]={...S.orders[id],serie:v}; render(); toast(`${serieName(S.orders[id])} gewählt`,2200); });
   $("#gemeinsam") && ($("#gemeinsam").onchange=async()=>{ const v=$("#gemeinsam").checked; await upd(P,{gemeinsam:v}); S.orders[id]={...S.orders[id],gemeinsam:v}; render(); toast(v?"🤝 Gemeinsamer Auftrag – der Sub trägt nur seinen Anteil ein":"Normaler Auftrag",3000); });
   // Preisliste: Betrag je Zeile sofort mitrechnen (gespeichert wird beim Verlassen des Feldes)
@@ -1780,7 +1784,7 @@ function bindAnteil(id){
   $("#anteilAb") && ($("#anteilAb").onclick=async()=>{
     if(document.activeElement?.closest?.("#preisliste")){ document.activeElement.dispatchEvent(new Event("change")); document.activeElement.blur(); await new Promise(r=>setTimeout(r,300)); }
     const mitPreis=!!S.preise&&(!istSubUid(myId())||subPreiseAn());
-    const l=S.lohn[lohnDocId(id,myId())], c=l?calcLohn({...l,uid:myId()},mitPreis?preisFuer(myId(),S.preise,o.serie):{preise:Object.fromEntries(S.lohnPos.map(x=>[x.k,0]))}):null;
+    const l=S.lohn[lohnDocId(id,myId())], c=l?calcLohn({...l,uid:myId()},mitPreis?preisFuer(myId(),S.preise,serieId(o)):{preise:Object.fromEntries(S.lohnPos.map(x=>[x.k,0]))}):null;
     if(!l||!Object.values(l.mengen||{}).some(v=>nn(v))) return toast("Bitte mindestens eine Position mit Menge eintragen",3000);
     if(!await confirmBox("Abrechnung abgeben?",`${c.lines.length} Position${c.lines.length>1?"en":""}${mitPreis?` · <b>${fmtEUR(c.total)}</b>`:""}<br>JD Brüder prüft und bestätigt sie – danach kannst du deine Rechnung schreiben. Ändern geht nach dem Abgeben nicht mehr.`,"Abgeben","ok")) return;
     const a={...(o.subAnteil?.[myId()]||{}),summe:c.total};
@@ -1979,14 +1983,17 @@ async function terminDialog(id){
   await loadProfiles(cands);
   modal(`<h2>Auftrag ${esc(o.nr)} terminieren</h2>
    <label class="f">Datum der Montage *</label><input type="date" class="i" id="td" value="${o.termin?new Date(o.termin).toISOString().slice(0,10):""}">
+   ${SERIEN().length&&!istReklaAuftrag(o)?`<label class="f">Serie (Anlagentyp) *</label><select class="i" id="tser"><option value="">– bitte wählen –</option>${SERIEN().map(x=>`<option value="${esc(x.id)}" ${serieId(o)===x.id?"selected":""}>${esc(x.name)}${x.typen?` (${esc(x.typen)})`:""}</option>`).join("")}</select>
+   ${!o.serie&&serieErkannt(o)?`<div class="small mute" style="margin-top:4px">✨ Aus den Unterlagen erkannt – bitte prüfen.</div>`:""}`:""}
    <label class="f">Auftrag zuteilen</label>
    ${cands.length?cands.map(c=>`<label class="person" style="cursor:pointer"><input type="checkbox" value="${esc(c)}" ${(o.monteure||[]).includes(c)?"checked":""} style="width:20px;height:20px"><span class="av">${esc(initials(c))}</span><b>${esc(nameOf(c))}</b></label>`).join(""):`<div class="small mute">Noch keine Leute angelegt – unter Setup → Team.</div>`}
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Terminieren</button></div>
    ${!o.storniert?`<button class="btn sm ghost block" id="st" style="margin-top:12px;color:var(--bad)">❌ Auftrag als storniert markieren</button>`:""}`,(m,close)=>{
     m.querySelector("#ok").onclick=async()=>{
       const d=m.querySelector("#td").value; if(!d) return toast("Bitte ein Datum wählen");
+      const ts=m.querySelector("#tser"); if(ts&&!ts.value) return toast("Bitte die Serie wählen – danach richten sich die Preise");
       const mon=[...m.querySelectorAll("input[type=checkbox]:checked")].map(i=>i.value);
-      await upd(orderPath(id),{termin:new Date(d+"T08:00:00").getTime(),terminStatus:"fest",monteure:mon});
+      await upd(orderPath(id),{termin:new Date(d+"T08:00:00").getTime(),terminStatus:"fest",monteure:mon,...(ts?{serie:ts.value}:{})});
       S.sync?.run({termin:id}).catch(()=>{}); // Eingeteilte bekommen eine Nachricht
       close(); toast(`Terminiert für ${new Date(d).toLocaleDateString("de-DE")} ✓`);
     };
@@ -2784,7 +2791,7 @@ function fehlendeAngaben(o,fk){
     if(leer(b.taetigkeit)) r.push({t:"Reklamationsbericht: Was wurde gemacht?"});
     if(!(arbeitszeitMin(o)>0)) r.push({t:"Arbeitszeit fehlt"});
   } else {
-    if(SERIEN().length && !o.serie) r.push({t:"Serie fehlt (im Montagebericht wählen)"});
+    if(SERIEN().length && !serieId(o)) r.push(can.planen()?{t:"Serie fehlt (oben im Montagebericht wählen)"}:{t:"Serie fehlt – JD Brüder legt sie noch fest",soft:true});
     if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Keine Positionen im Montagebericht eingetragen"});
   }
   if(fk && !fk("vorher").length) r.push({t:"Vorher-Fotos fehlen",soft:true});
@@ -3076,20 +3083,39 @@ function lohnDocId(oid,uid){ return oid+"__"+uid; }
 const posFuer=(P)=>!can.planen() && can.sub() && P && Object.keys(P.preise||{}).length ? S.lohnPos.filter(x=>nn(P.preise[x.k])>0) : S.lohnPos;
 // Serien (Anlagentypen) mit eigener Preisliste: einstellungen/allgemein.serien = [{id,name,typen,pos:[…]}]; Preise: „std“ = lohn/preise, sonst lohn/preise.listen[id]
 const SERIEN=()=>Array.isArray(S.settings?.serien)&&S.settings.serien.length?S.settings.serien:[];
-const serieVon=o=>SERIEN().find(x=>x.id===o?.serie)||null;
+// Serie aus den Unterlagen erkennen (Modell der Anlagen: „30 RW Standard“ → Serie 30, „13 RP“ → Serie 13, „30 KG-LF“ → KIGA, „40 FB“ → Design 40)
+const SERIE_RX=/\b(?:serie|design)?\s*(13|30|40)\s*-?\s*(KG|RP|RS|RF|BS|RW|NR|FT|FN|FB)\b|\b(?:serie|design)\s*(13|30|40)\b|\b(kiga|kita)\b/i;
+const istKitaSerie=x=>/kiga|kita/i.test(x?.name||"");
+function serieAusText(t){ const L=SERIEN(); if(!L.length||!t) return null; const m=String(t).match(SERIE_RX); if(!m) return null;
+  const nr=m[1]||m[3], code=(m[2]||"").toUpperCase();
+  if(m[4]||code==="KG") return L.find(istKitaSerie)?.id||null;
+  const kand=L.filter(x=>!istKitaSerie(x) && new RegExp("\\b"+nr+"\\b").test(x.name||"")); if(!kand.length) return null;
+  return (code&&kand.find(x=>new RegExp("\\b"+code+"\\b","i").test(x.typen||""))||kand[0]).id; }
+function serieErkannt(o){ const st={}; for(const a of (Array.isArray(o?.dokInfo?.anlagen)?o.dokInfo.anlagen:[])){ const id=serieAusText(a.modell)||serieAusText(a.besonderes); if(id) st[id]=(st[id]||0)+(parseInt(a.kabinen)||1); }
+  const best=Object.entries(st).sort((a,b)=>b[1]-a[1])[0]; return best?best[0]:null; }
+// Gilt: vom Chef festgelegt, sonst aus den Unterlagen erkannt
+const serieId=o=>o?.serie||serieErkannt(o)||null;
+const serieVon=o=>{ const id=serieId(o); return id?SERIEN().find(x=>x.id===id)||null:null; };
 const serieName=o=>{ const x=serieVon(o); return x?`${x.name}${x.typen?` (${x.typen})`:""}`:""; };
 // Sub-Preise erst anzeigen, wenn JD Brüder sie freigibt (Setup → Preislisten)
 const subPreiseAn=()=>!!S.settings?.subPreiseAktiv;
 const istSubUid=u=>S.roles?.[u]==="sub";
-function preisFuer(uid,P=S.preise,serie){ if(!P) return null; const lid=P.zuordnung?.[uid];
-  if(lid&&P.listen?.[lid]&&!P.listen[lid].serie) return P.listen[lid];
-  if(serie&&serie!=="std"&&P.listen?.[serie]) return P.listen[serie];
-  return P; }
+// Preisliste je Serie. Subunternehmer: Chef-Preis der Serie minus Abschlag (Standard 30 %) je Position
+function preisFuer(uid,P=S.preise,serie){ if(!P) return null;
+  const L=serie&&serie!=="std"&&P.listen?.[serie]?P.listen[serie]:P;
+  if(P.fuerSub || !istSubUid(uid)) return L; // fuerSub: Kopie auf dem Handy des Subs ist schon umgerechnet
+  return subListe(P,L); }
+// Sub-Einstellungen: Abschlag %, km und Etagengeld (früher eigene Liste „Subunternehmer“ – deren km-Sätze gelten weiter)
+function subEinst(P=S.preise){ const alt=P?.listen?.sub&&!P.listen.sub.serie?P.listen.sub:{}, sb=P?.sub||{};
+  const w=(k,d)=>sb[k]!=null&&sb[k]!==""?nn(sb[k]):alt[k]!=null&&alt[k]!==""?nn(alt[k]):d;
+  return {abschlag:w("abschlag",30),stockSatz:w("stockSatz",nn(P?.stockSatz)),kmSelbst:w("kmSelbst",nn(P?.kmSelbst)),kmMit:w("kmMit",nn(P?.kmMit))}; }
+function subListe(P,L){ const e=subEinst(P), f=1-e.abschlag/100;
+  return {name:L?.name||"",preise:Object.fromEntries(Object.entries(L?.preise||{}).map(([k,v])=>[k,r2(nn(v)*f)])),stockSatz:e.stockSatz,kmSelbst:e.kmSelbst,kmMit:e.kmMit}; }
 // Positionen, die im Auftrag stehen: die der gewählten Serie (alle, solange keine gewählt ist)
 const posListe=o=>{ const x=serieVon(o); return x?.pos?.length?S.lohnPos.filter(p=>x.pos.includes(p.k)):S.lohnPos.filter(p=>!SERIEN().length||SERIEN().some(z=>(z.pos||[]).includes(p.k))); };
 function calcLohn(d,P){
   if(!P||!d) return null;
-  if(P===S.preise) P=preisFuer(d.uid,P,S.orders[d.auftragId]?.serie);
+  if(P===S.preise) P=preisFuer(d.uid,P,serieId(S.orders[d.auftragId]));
   const lines=[]; const pr=P.preise||{};
   S.lohnPos.forEach(p=>{ const q=nn(d.mengen?.[p.k]); if(q) lines.push({label:p.label,menge:q,ep:nn(pr[p.k]),gp:r2(q*nn(pr[p.k]))}); });
   const pers=nn(d.personen)||1;
@@ -3123,16 +3149,22 @@ function lohnPersonen(o){
 }
 function serieWahl(o,editable=true){
   const L=SERIEN(); if(!L.length) return "";
-  return `<label class="f" style="margin-top:6px">Welche Serie wurde montiert?</label>
-   <div class="serie-w">${L.map(x=>`<button class="serie-k ${o.serie===x.id?"on":""}" data-serie="${esc(x.id)}" ${editable?"":"disabled"}><b>${esc(x.name)}</b>${x.typen?`<span>${esc(x.typen)}</span>`:""}</button>`).join("")}</div>
-   ${o.serie?"":`<div class="small" style="color:var(--warn);margin-top:4px">Bitte zuerst die Serie wählen – danach stehen die passenden Positionen und Preise da.</div>`}`;
+  const id=serieId(o), erk=serieErkannt(o), auto=!o.serie&&!!id;
+  // Subunternehmer/Mitarbeiter: Serie nur ansehen – festgelegt von JD Brüder
+  if(!can.planen()) return id?`<div class="serie-fest"><span class="mute">Anlagentyp</span> <b>${esc(serieName(o))}</b><span class="small mute"> · festgelegt von JD Brüder</span></div>`
+    :`<div class="banner info small" style="margin:6px 0">Die Serie legt JD Brüder noch fest. Die Mengen kannst du schon eintragen.</div>`;
+  return `<label class="f" style="margin-top:6px">Serie (Anlagentyp) *</label>
+   <div class="serie-w">${L.map(x=>`<button class="serie-k ${id===x.id?"on":""}" data-serie="${esc(x.id)}" ${editable?"":"disabled"}><b>${esc(x.name)}</b>${x.typen?`<span>${esc(x.typen)}</span>`:""}</button>`).join("")}</div>
+   ${!id?`<div class="small" style="color:var(--bad);margin-top:4px">Bitte die Serie wählen – danach stehen die passenden Positionen und Preise da (auch beim Sub).</div>`
+    :auto?`<div class="small mute" style="margin-top:4px">✨ Aus den Unterlagen erkannt – antippen zum Bestätigen oder Ändern.</div>`
+    :erk&&erk!==o.serie?`<div class="small" style="color:var(--warn);margin-top:4px">Laut Unterlagen eher ${esc(SERIEN().find(x=>x.id===erk)?.name||erk)} – bitte prüfen.</div>`:""}`;
 }
 function lohnCard(o,opts={}){
   const pers=lohnPersonen(o);
   const darfAndere=can.planen();
   let uid=S.lohnFor[o.id]; if(!uid || (!darfAndere && uid!==myId())) uid=myId();
   const d=S.lohn[lohnDocId(o.id,uid)]||{};
-  let P=can.preise()?preisFuer(uid,S.preise,o.serie):(uid===myId()&&S.preise?preisFuer(uid,S.preise,o.serie):null);
+  let P=can.preise()?preisFuer(uid,S.preise,serieId(o)):(uid===myId()&&S.preise?preisFuer(uid,S.preise,serieId(o)):null);
   if(istSubUid(uid) && !subPreiseAn()) P=null; // Sub-Preise in Bearbeitung
   const pr=P?.preise||{};
   const anU=o.gemeinsam?o.subAnteil?.[uid]:null;
@@ -4544,17 +4576,20 @@ function viewSetup(){
     ${S.settings.ownerId?`<div class="person"><span class="av">${esc(initials(S.settings.ownerId))}</span><div style="flex:1"><b>${esc(nameOf(S.settings.ownerId))}</b><div class="small mute">Inhaber · sieht alles</div></div></div>`:""}
     ${ids.map(id=>`<div class="person"><span class="av">${esc(initials(id))}</span><div style="flex:1"><b>${esc(nameOf(id))}</b></div>
       <select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-role="${esc(id)}" ${S.isOwner?"":"disabled"}>${Object.entries(ROLLEN).map(([k,l])=>`<option value="${k}" ${S.roles[id]===k?"selected":""}>${l}</option>`).join("")}</select>
-      ${S.isOwner&&S.roles[id]==="sub"?`<select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-plz="${esc(id)}" title="Preisliste">${[["std",S.preise?.name||"Standard"],...Object.entries(S.preise?.listen||{}).map(([k,v])=>[k,v.name||k])].map(([k,n])=>`<option value="${esc(k)}" ${(S.preise?.zuordnung?.[id]||"std")===k?"selected":""}>💶 ${esc(n)}</option>`).join("")}</select>`:""}
+      ${S.isOwner&&S.roles[id]==="sub"?`<select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-plz="${esc(id)}" title="Preise">${[["","Keine Preise"],["sub",`💶 Sub-Preise (−${subEinst().abschlag} %)`]].map(([k,n])=>`<option value="${k}" ${(S.preise?.zuordnung?.[id]?"sub":"")===k?"selected":""}>${esc(n)}</option>`).join("")}</select>`:""}
       ${S.isOwner?`<button class="btn sm ghost" data-unrole="${esc(id)}">✕</button>`:""}</div>`).join("")}
     ${S.isOwner&&S.user?`<label class="f">Person hinzufügen</label><input class="i" id="pSearch" placeholder="Name oder E-Mail suchen …"><div id="pHits"></div>`:""}
   </div>
-  ${S.isOwner?(()=>{ const lid=S.plSel&&S.preise?.listen?.[S.plSel]?S.plSel:"std"; const L=lid==="std"?S.preise:S.preise.listen[lid]; return `<div class="card"><h3>Akkord-Preislisten (Subunternehmer / Mitarbeiter)</h3>
-    <div class="small mute" style="margin-bottom:8px">Preise je Serie (Anlagentyp) – im Auftrag wird die Serie gewählt. Sehen nur die Chefs.</div>
+  ${S.isOwner?(()=>{ const lid=S.plSel&&S.preise?.listen?.[S.plSel]?S.plSel:"std"; const L=lid==="std"?S.preise:S.preise.listen[lid]; const SE=SERIEN().find(x=>x.id===lid); const sub=subEinst(); const lName=(k,v)=>SERIEN().find(x=>x.id===k)?.name||v?.name||k;
+   return `<div class="card"><h3>Preislisten je Serie</h3>
+    <div class="small mute" style="margin-bottom:8px">Eure Preise je Serie (Anlagentyp). Die Serie wird aus den Unterlagen erkannt, der Chef bestätigt sie beim Terminieren. Sehen nur die Chefs.</div>
+    <div class="sub-box"><b>Subunternehmer</b><div class="small mute" style="margin:2px 0 6px">Bekommen je Position euren Preis der Serie minus Abschlag. Sie sehen nur ihre eigenen Preise.</div>
+     <div class="grid2"><div><div class="small mute">Abschlag je Position %</div><input class="i" data-sb="abschlag" inputmode="decimal" value="${esc(sub.abschlag)}"></div><div><div class="small mute">Etagengeld je Stock €</div><input class="i" data-sb="stockSatz" inputmode="decimal" value="${esc(sub.stockSatz)}"></div><div><div class="small mute">€/km selbst</div><input class="i" data-sb="kmSelbst" inputmode="decimal" value="${esc(sub.kmSelbst)}"></div><div><div class="small mute">€/km mit</div><input class="i" data-sb="kmMit" inputmode="decimal" value="${esc(sub.kmMit)}"></div></div></div>
     <label class="row" style="gap:8px;flex-wrap:nowrap;margin-bottom:10px;cursor:pointer"><input type="checkbox" id="subPreiseAn" ${subPreiseAn()?"checked":""} style="width:20px;height:20px;flex:none"><span class="small">Subunternehmern ihre Preise anzeigen <span class="mute">(sonst steht dort „Preise in Bearbeitung“)</span></span></label>
-    <div class="row" style="flex-wrap:nowrap"><select class="i" id="plSel" style="flex:1">${[["std",S.preise?.name||"Standard"],...Object.entries(S.preise?.listen||{}).map(([k,v])=>[k,v.name||k])].map(([k,n])=>`<option value="${esc(k)}" ${k===lid?"selected":""}>${esc(n)}</option>`).join("")}</select><button class="btn sm" id="plNew">＋ Neue Liste</button>${lid!=="std"?`<button class="btn sm ghost" id="plDel">✕</button>`:""}</div>
-    ${lid!=="std"?`<label class="f">Name der Liste</label><input class="i" id="plName" value="${esc(L?.name||"")}">`:""}
+    <label class="f">Serie</label><div class="row" style="flex-wrap:nowrap"><select class="i" id="plSel" style="flex:1">${[["std",S.preise],...Object.entries(S.preise?.listen||{})].map(([k,v])=>`<option value="${esc(k)}" ${k===lid?"selected":""}>${esc(lName(k,v))}${k!=="std"&&!v?.serie?" (alt, nicht mehr benutzt)":""}</option>`).join("")}</select><button class="btn sm" id="plNew">＋ Neue Serie</button>${lid!=="std"?`<button class="btn sm ghost" id="plDel">✕</button>`:""}</div>
+    ${SE?`<div class="grid2"><div><label class="f">Name</label><input class="i" id="seName" value="${esc(SE.name||"")}"></div><div><label class="f">Kürzel (zum Erkennen)</label><input class="i" id="seTypen" value="${esc(SE.typen||"")}" placeholder="z. B. RW, FT, FN"></div></div>`:lid!=="std"?`<label class="f">Name der Liste</label><input class="i" id="plName" value="${esc(L?.name||"")}">`:""}
     <div class="grid3" style="margin-top:8px"><div><div class="small mute">Etagengeld je Stock €</div><input class="i" data-pg="stockSatz" inputmode="decimal" value="${esc(L?.stockSatz??"")}"></div><div><div class="small mute">€/km selbst</div><input class="i" data-pg="kmSelbst" inputmode="decimal" value="${esc(L?.kmSelbst??"")}"></div><div><div class="small mute">€/km mit</div><input class="i" data-pg="kmMit" inputmode="decimal" value="${esc(L?.kmMit??"")}"></div></div>
-    <div style="margin-top:8px">${S.lohnPos.map(p=>`<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap"><input type="checkbox" title="Immer anzeigen" data-ph="${esc(p.k)}" ${p.haeufig?"checked":""} style="width:18px;height:18px"><div style="flex:1;min-width:0">${esc(p.label)}<div class="small mute">${esc(p.einheit||"")}</div></div><input class="i" style="width:86px;min-height:36px;text-align:right" inputmode="decimal" data-pp="${esc(p.k)}" value="${esc(L?.preise?.[p.k]??"")}"><button class="btn sm ghost" data-pdel="${esc(p.k)}">✕</button></div>`).join("")}</div>
+    <div style="margin-top:8px">${S.lohnPos.map(p=>`<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap"><input type="checkbox" title="Immer anzeigen" data-ph="${esc(p.k)}" ${p.haeufig?"checked":""} style="width:18px;height:18px"><div style="flex:1;min-width:0">${esc(p.label)}<div class="small mute">${esc(p.einheit||"")}</div></div><div style="text-align:right"><input class="i" style="width:86px;min-height:36px;text-align:right" inputmode="decimal" data-pp="${esc(p.k)}" value="${esc(L?.preise?.[p.k]??"")}">${nn(L?.preise?.[p.k])?`<div class="small mute">Sub ${fmtEUR(r2(nn(L.preise[p.k])*(1-sub.abschlag/100)))}</div>`:""}</div><button class="btn sm ghost" data-pdel="${esc(p.k)}">✕</button></div>`).join("")}</div>
     <div class="small mute" style="margin-top:4px">Haken links = Position steht im Bericht immer oben.</div>
     <div class="grid2" style="margin-top:8px"><input class="i" id="npL" placeholder="Neue Position"><input class="i" id="npE" placeholder="Einheit (Stück, Kab. …)"></div>
     <div class="grid2" style="margin-top:6px"><input class="i" id="npP" placeholder="Preis €" inputmode="decimal"><button class="btn" id="npAdd">＋ Hinzufügen</button></div>
@@ -4804,13 +4839,14 @@ async function savePreise(patch){
   S.preise=next;
   await setDoc("lohn/preise",next);
   // freigegebene Mitarbeiter bekommen eine Kopie
-  const copy={preise:next.preise,stockSatz:next.stockSatz,kmSelbst:next.kmSelbst,kmMit:next.kmMit,listen:next.listen||{},zuordnung:next.zuordnung||{}};
+  const copy={preise:next.preise,stockSatz:next.stockSatz,kmSelbst:next.kmSelbst,kmMit:next.kmMit,listen:next.listen||{},zuordnung:next.zuordnung||{},sub:subEinst(next)};
   for(const id of (next.sichtbarFuer||[])) await setDoc("lohnsicht/"+id,copy);
-  // Subunternehmer mit eigener Preisliste (z. B. Zeltwald) sehen nur ihre eigene Liste – keine anderen Preise
+  // Subunternehmer (in Setup → Team freigegeben) bekommen nur IHRE Preise: je Serie Chef-Preis minus Abschlag – nie die Chef-Preise
   const subs=Object.keys(S.roles).filter(k=>S.roles[k]==="sub");
   const mitListe=new Set();
-  for(const id of subs){ const L=next.listen?.[next.zuordnung?.[id]]; if(!L) continue; mitListe.add(id);
-    await setDoc("lohnsicht/"+id,{name:L.name||"",preise:L.preise||{},stockSatz:L.stockSatz,kmSelbst:L.kmSelbst,kmMit:L.kmMit}); }
+  const serieListen=Object.entries(next.listen||{}).filter(([k,v])=>v.serie);
+  for(const id of subs){ if(!next.zuordnung?.[id]) continue; mitListe.add(id);
+    await setDoc("lohnsicht/"+id,{...subListe(next,next),name:"Subunternehmer",fuerSub:true,listen:Object.fromEntries(serieListen.map(([k,v])=>[k,{...subListe(next,v),serie:true}]))}); }
   for(const id of (cur.subSicht||[])) if(!mitListe.has(id) && !chefs.includes(id)){ try{ await S.db.doc("lohnsicht/"+id).delete(); }catch(e){} }
   if(String(cur.subSicht||[])!==String([...mitListe])){ next.subSicht=[...mitListe]; S.preise=next; await setDoc("lohn/preise",next); }
   for(const id of alt) if(!chefs.includes(id)&&!mitListe.has(id)){ try{ await S.db.doc("lohnsicht/"+id).delete(); }catch(e){} }
@@ -4820,12 +4856,24 @@ function bindSetupLohn(){
   const saveL=patch=>{ if(lid==="std") return savePreise(patch); const cur=S.preise.listen[lid]; return savePreise({listen:{...S.preise.listen,[lid]:{...cur,...patch,preise:{...(cur.preise||{}),...(patch.preise||{})}}}}); };
   $("#subPreiseAn") && ($("#subPreiseAn").onchange=()=>setDoc("einstellungen/allgemein",{...S.settings,subPreiseAktiv:$("#subPreiseAn").checked}));
   $("#plSel") && ($("#plSel").onchange=()=>{ S.plSel=$("#plSel").value; render(); });
-  $("#plNew") && ($("#plNew").onclick=async()=>{ const id="l"+Date.now().toString(36); const P=S.preise||{}; await savePreise({listen:{...(P.listen||{}),[id]:{name:"Neue Liste",preise:{...(P.preise||{})},stockSatz:P.stockSatz,kmSelbst:P.kmSelbst,kmMit:P.kmMit}}}); S.plSel=id; render(); toast("Kopie der Standard-Liste angelegt – Name und Preise anpassen"); });
-  $("#plDel") && ($("#plDel").onclick=async()=>{ if(!await confirmBox("Preisliste löschen?","Zugeordnete Subunternehmer bekommen wieder die Standard-Liste.","Löschen","bad")) return; const L={...S.preise.listen}; delete L[lid]; const z={...(S.preise.zuordnung||{})}; Object.keys(z).forEach(k=>{ if(z[k]===lid) delete z[k]; }); S.plSel=null; await savePreise({listen:L,zuordnung:z}); });
+  $("#plNew") && ($("#plNew").onclick=()=>modal(`<h2>Neue Serie</h2><label class="f">Name *</label><input class="i" id="nsN" placeholder="z. B. Design 40">
+     <label class="f">Kürzel aus den Unterlagen</label><input class="i" id="nsT" placeholder="z. B. FB"><div class="small mute" style="margin-top:4px">Die Nummer im Namen (13, 30, 40) und die Kürzel erkennen die Serie in den Unterlagen.</div>
+     <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="nsOk">Anlegen</button></div>`,(m,close)=>{
+     m.querySelector("#nsOk").onclick=async()=>{ const name=m.querySelector("#nsN").value.trim(); if(!name) return toast("Name fehlt");
+       const id="s"+Date.now().toString(36), P=S.preise||{}, vorlage=SERIEN().find(x=>x.id==="std")||SERIEN()[0];
+       await setDoc("einstellungen/allgemein",{...S.settings,serien:[...SERIEN(),{id,name,typen:m.querySelector("#nsT").value.trim(),pos:[...(vorlage?.pos||S.lohnPos.map(x=>x.k))]}]});
+       await savePreise({listen:{...(P.listen||{}),[id]:{name,serie:true,preise:{...(P.preise||{})},stockSatz:P.stockSatz,kmSelbst:P.kmSelbst,kmMit:P.kmMit}}});
+       S.plSel=id; close(); render(); toast("Serie angelegt – Preise sind von Serie 13 kopiert, bitte anpassen",4000); }; }));
+  const seSave=patch=>setDoc("einstellungen/allgemein",{...S.settings,serien:SERIEN().map(x=>x.id===lid?{...x,...patch}:x)});
+  $("#seName") && ($("#seName").onchange=async()=>{ const n=$("#seName").value.trim()||"Serie"; await seSave({name:n}); if(lid!=="std") await saveL({name:n}); });
+  $("#seTypen") && ($("#seTypen").onchange=()=>seSave({typen:$("#seTypen").value.trim()}));
+  document.querySelectorAll("[data-sb]").forEach(i=>i.onchange=()=>savePreise({sub:{...subEinst(),[i.dataset.sb]:nn(i.value)}}));
+  $("#plDel") && ($("#plDel").onclick=async()=>{ const istS=SERIEN().some(x=>x.id===lid); if(!await confirmBox(istS?"Serie löschen?":"Preisliste löschen?",istS?"Aufträge dieser Serie rechnen dann mit Serie 13.":"Sie wird nicht mehr benutzt.","Löschen","bad")) return; const L={...S.preise.listen}; delete L[lid];
+    if(istS) await setDoc("einstellungen/allgemein",{...S.settings,serien:SERIEN().filter(x=>x.id!==lid)}); const z={...(S.preise.zuordnung||{})}; Object.keys(z).forEach(k=>{ if(z[k]===lid) delete z[k]; }); S.plSel=null; await savePreise({listen:L,zuordnung:z}); });
   $("#plName") && ($("#plName").onchange=()=>saveL({name:$("#plName").value.trim()||"Liste"}));
   document.querySelectorAll("[data-pg]").forEach(i=>i.onchange=()=>saveL({[i.dataset.pg]:nn(i.value)}));
   document.querySelectorAll("[data-pp]").forEach(i=>i.onchange=()=>saveL({preise:{[i.dataset.pp]:nn(i.value)}}));
-  document.querySelectorAll("[data-plz]").forEach(sel=>sel.onchange=()=>{ const z={...(S.preise?.zuordnung||{})}; if(sel.value==="std") delete z[sel.dataset.plz]; else z[sel.dataset.plz]=sel.value; savePreise({zuordnung:z}); });
+  document.querySelectorAll("[data-plz]").forEach(sel=>sel.onchange=()=>{ const z={...(S.preise?.zuordnung||{})}; if(!sel.value) delete z[sel.dataset.plz]; else z[sel.dataset.plz]="sub"; savePreise({zuordnung:z}); });
   document.querySelectorAll("[data-ph]").forEach(i=>i.onchange=()=>setDoc("einstellungen/lohnpositionen",{items:S.lohnPos.map(p=>p.k===i.dataset.ph?{...p,haeufig:i.checked}:p)}));
   document.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Position entfernen?","Bereits eingetragene Mengen bleiben gespeichert, werden aber nicht mehr berechnet.","Entfernen","bad")) return; setDoc("einstellungen/lohnpositionen",{items:S.lohnPos.filter(p=>p.k!==b.dataset.pdel)}); });
   const add=$("#npAdd"); if(add) add.onclick=async()=>{ const l=$("#npL").value.trim(); if(!l) return toast("Name fehlt"); const k=l.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,30)+"_"+Date.now().toString(36).slice(-3);
