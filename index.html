@@ -219,7 +219,7 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .dvinhalt img{display:block;user-select:none;-webkit-user-drag:none;max-width:none}
 .dvseite{position:absolute;left:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.4)}
 .dvrot{position:absolute;left:0;top:0;transform-origin:0 0}
-.dvrot.scan{filter:grayscale(1) contrast(1.8) brightness(1.08)}
+.dvb.dvs.on{background:#fff;color:#111}
 .dvb.on{background:#fff;color:#111}
 @media(max-width:480px){.dvb{min-width:36px;height:38px;font-size:17px}.dvp{display:none}}
 .ab-liste{display:grid;gap:2px}
@@ -552,7 +552,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="4aab95bee896";</script>
+<script>window.JD_BUILD="fdf96226bc75";</script>
 </head>
 <body>
 <header class="top">
@@ -705,6 +705,65 @@ function confirmBox(title, text, okLabel="Ja", cls="pri"){
   });
 }
 function lightbox(src){ dokViewer(src,"bild"); }
+/* ---------- Scans sauber machen: gleichmäßig weißes Papier, klare schwarze Schrift, Raster geglättet, gerade gerichtet ----------
+   Läuft komplett auf dem Gerät. Farbige Markierungen (rot, blau) bleiben farbig. */
+function maxFilter(a,w,h,r){
+  const t=new Uint8ClampedArray(w*h), o=new Uint8ClampedArray(w*h);
+  for(let y=0;y<h;y++){ const row=y*w; for(let x=0;x<w;x++){ let m=0; const x1=Math.min(w-1,x+r); for(let q=Math.max(0,x-r);q<=x1;q++){ const v=a[row+q]; if(v>m) m=v; } t[row+x]=m; } }
+  for(let x=0;x<w;x++){ for(let y=0;y<h;y++){ let m=0; const y1=Math.min(h-1,y+r); for(let q=Math.max(0,y-r);q<=y1;q++){ const v=t[q*w+x]; if(v>m) m=v; } o[y*w+x]=m; } }
+  return o;
+}
+const leinwand=(w,h)=>{ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; };
+const ctx2=c=>c.getContext("2d",{willReadFrequently:true});
+function scanSauber(src,max=2400){
+  const w0=src.naturalWidth||src.width, h0=src.naturalHeight||src.height, k=Math.min(1,max/Math.max(w0,h0)), W=Math.max(1,Math.round(w0*k)), H=Math.max(1,Math.round(h0*k));
+  const c=leinwand(W,H), x=ctx2(c); x.fillStyle="#fff"; x.fillRect(0,0,W,H); x.drawImage(src,0,0,W,H);
+  // 1) Licht ausgleichen: Papierfarbe je Stelle schätzen (Schrift „weggewachsen“) und herausrechnen
+  const bw=Math.ceil(W/8), bh=Math.ceil(H/8), b=leinwand(bw,bh), bx=ctx2(b); bx.drawImage(c,0,0,bw,bh);
+  const bd=bx.getImageData(0,0,bw,bh), ba=bd.data;
+  for(let ch=0;ch<3;ch++){ const k1=new Uint8ClampedArray(bw*bh); for(let i=0;i<bw*bh;i++) k1[i]=ba[i*4+ch]; const m=maxFilter(k1,bw,bh,3); for(let i=0;i<bw*bh;i++) ba[i*4+ch]=m[i]; }
+  bx.putImageData(bd,0,0); const g=leinwand(W,H), gx=ctx2(g); gx.filter="blur(6px)"; gx.drawImage(b,0,0,W,H);
+  const B=gx.getImageData(0,0,W,H).data, im=x.getImageData(0,0,W,H), P=im.data, lut=new Uint8ClampedArray(256);
+  for(let v=0;v<256;v++) lut[v]=v<=70?0:v>=228?255:Math.round(255*Math.pow((v-70)/158,1.15));
+  for(let i=0;i<P.length;i+=4) for(let ch=0;ch<3;ch++) P[i+ch]=lut[Math.min(255,Math.round(P[i+ch]*255/Math.max(B[i+ch],40)))];
+  x.putImageData(im,0,0);
+  // 2) Schrift vom Untergrund trennen: Untergrund wird glatt (weiß oder gleichmäßig hellgrau), Schrift satt schwarz
+  const a=leinwand(W,H), ax=ctx2(a); ax.filter="blur(1.8px)"; ax.drawImage(c,0,0);
+  const hw=Math.ceil(W/2), hh=Math.ceil(H/2), hc=leinwand(hw,hh), hx=ctx2(hc); hx.drawImage(a,0,0,hw,hh);
+  const hd=hx.getImageData(0,0,hw,hh), HD=hd.data, L=new Uint8ClampedArray(hw*hh);
+  for(let i=0;i<hw*hh;i++) L[i]=(HD[i*4]+HD[i*4+1]+HD[i*4+2])/3;
+  const Mx=maxFilter(L,hw,hh,3);
+  for(let i=0;i<hw*hh;i++){ const v=Mx[i]>226?255:Math.round(Mx[i]/8)*8; HD[i*4]=HD[i*4+1]=HD[i*4+2]=v; }
+  hx.putImageData(hd,0,0); const tc=leinwand(W,H), tx=ctx2(tc); tx.filter="blur(1.2px)"; tx.drawImage(hc,0,0,W,H);
+  const T=tx.getImageData(0,0,W,H).data, Bl=ax.getImageData(0,0,W,H).data, S2=x.getImageData(0,0,W,H), Q=S2.data;
+  for(let i=0;i<Q.length;i+=4){
+    const lb=(Bl[i]+Bl[i+1]+Bl[i+2])/3, ls=(Q[i]+Q[i+1]+Q[i+2])/3, t=T[i];
+    const al=Math.max(0,Math.min(1,(t-Math.min(lb,ls*.6+lb*.4)-40)/55)), sat=Math.max(Q[i],Q[i+1],Q[i+2])-Math.min(Q[i],Q[i+1],Q[i+2]);
+    const tf=t>=236?255:t>=140?232:t; /* helle Flächen einheitlich hellgrau wie gedruckt */
+    for(let ch=0;ch<3;ch++){ const v=Q[i+ch], n=v<=40?0:v>=200?255:255*(v-40)/160; Q[i+ch]=tf*(1-al)+(sat>45?v*.85:n*.55)*al; }
+  }
+  x.putImageData(S2,0,0);
+  // 3) Gerade richten (schief eingescannte Seiten, bis ±3°)
+  const wnk=schraeglage(c); if(Math.abs(wnk)>=.3){ const r=leinwand(W,H), rx=r.getContext("2d"); rx.fillStyle="#fff"; rx.fillRect(0,0,W,H); rx.translate(W/2,H/2); rx.rotate(-wnk*Math.PI/180); rx.drawImage(c,-W/2,-H/2); return r; }
+  return c;
+}
+function schraeglage(c){
+  const k=Math.min(1,800/Math.max(c.width,c.height)), w=Math.round(c.width*k), h=Math.round(c.height*k), t=leinwand(w,h), tx=ctx2(t); tx.drawImage(c,0,0,w,h);
+  const d=tx.getImageData(0,0,w,h).data, px=[], py=[];
+  for(let y=0;y<h;y++) for(let i=0;i<w;i++){ const q=(y*w+i)*4; if(d[q]+d[q+1]+d[q+2]<330){ px.push(i-w/2); py.push(y-h/2); } }
+  if(px.length<300) return 0;
+  const guete=a=>{ const r=a*Math.PI/180, sn=Math.sin(r), co=Math.cos(r), hist=new Float64Array(h*2+4); for(let j=0;j<px.length;j++){ const yy=Math.round(py[j]*co-px[j]*sn+h); if(yy>=0&&yy<hist.length) hist[yy]++; } let s=0; for(const v of hist) s+=v*v; return s; };
+  let best=0, bv=guete(0);
+  for(let a=-3;a<=3.001;a+=.5){ const v=guete(a); if(v>bv){ bv=v; best=a; } }
+  for(let a=best-.4;a<=best+.401;a+=.1){ const v=guete(a); if(v>bv){ bv=v; best=a; } }
+  return Math.round(best*10)/10;
+}
+// Datei speichern / teilen (Handy: Teilen-Menü, PC: Download)
+async function dateiSpeichern(blob,name){
+  const dl=await window.claude?.use?.("downloads").catch(()=>null); if(dl){ await dl.save({filename:name,data:blob}); return; }
+  try{ const f=new File([blob],name,{type:blob.type}); if(navigator.canShare?.({files:[f]})){ await navigator.share({files:[f],title:name}); return; } }catch(e){ if(e?.name==="AbortError") return; }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+}
 // Vorschau Montagebericht / Sichtabnahme: alle Seiten untereinander im Zoom-Betrachter
 function vorschauZeigen(cs,titel){
   const g=28, W=Math.max(...cs.map(c=>c.width)), H=cs.reduce((a,c)=>a+c.height,0)+g*(cs.length-1);
@@ -716,19 +775,21 @@ function vorschauZeigen(cs,titel){
    Zwei Finger = zoomen, ein Finger = verschieben, doppelt tippen = näher/zurück, Mausrad/Trackpad am PC. */
 let pdfjsP=null;
 function loadPdfJs(){ if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib); if(!pdfjsP) pdfjsP=new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"; sc.onload=()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); }; sc.onerror=()=>{ pdfjsP=null; rej(new Error("PDF-Anzeige konnte nicht geladen werden")); }; document.head.appendChild(sc); }); return pdfjsP; }
-function dokViewer(src, art="bild", titel=""){
+function dokViewer(src, art="bild", titel="", opt={}){
   const d=document.createElement("div"); d.className="dv";
+  const sauberMgl=art==="scan"||(art==="pdf"&&opt.sauber!==false);
   d.innerHTML=`<div class="dvbar"><button class="dvb" data-dv="zu" title="Schließen">✕</button><span class="dvt">${esc(titel||(art==="pdf"?"PDF":"Foto"))}</span>
-    <button class="dvb" data-dv="minus" title="Kleiner">−</button><span class="dvp">100 %</span><button class="dvb" data-dv="plus" title="Größer">＋</button><button class="dvb" data-dv="fit" title="Einpassen">⤢</button><button class="dvb" data-dv="dreh" title="Drehen">⟳</button><button class="dvb" data-dv="scan" title="Kontrast verbessern (schlechte Scans)">◐</button>
-    ${art==="pdf"?`<a class="dvb" href="${esc(src)}" target="_blank" rel="noopener" title="Im Browser öffnen">↗</a>`:""}</div>
+    <button class="dvb" data-dv="minus" title="Kleiner">−</button><span class="dvp">100 %</span><button class="dvb" data-dv="plus" title="Größer">＋</button><button class="dvb" data-dv="fit" title="Einpassen">⤢</button><button class="dvb" data-dv="dreh" title="Drehen">⟳</button>${sauberMgl?`<button class="dvb dvs" data-dv="scan" title="Sauber (aufbereitet) / Original">✨</button>`:""}
+    ${opt.datei?`<button class="dvb" data-dv="laden" title="Speichern / Teilen">⬇</button>`:art==="pdf"?`<a class="dvb" href="${esc(src)}" target="_blank" rel="noopener" title="Im Browser öffnen">↗</a>`:""}</div>
     <div class="dvstage"><div class="dvinhalt"><div class="dvlade"><span class="spin"></span> wird geladen …</div></div></div>
-    <div class="dvhint">Mit zwei Fingern zoomen · doppelt tippen · ⟳ drehen · ◐ schwache Scans deutlicher</div>`;
+    <div class="dvhint">Mit zwei Fingern zoomen · doppelt tippen · ⟳ drehen${sauberMgl?" · ✨ aufbereitet / Original":""}</div>`;
   document.body.appendChild(d); document.body.style.overflow="hidden";
   const stage=d.querySelector(".dvstage"), inh=d.querySelector(".dvinhalt"), pct=d.querySelector(".dvp");
   let W=0,H=0,s=1,x=0,y=0,fit=1,einpassenGanz=true,OW=0,OH=0,dreh=0;
   const rot=document.createElement("div"); rot.className="dvrot";
-  let scanAn=false; try{ scanAn=localStorage.getItem("jdScan")==="1"; }catch(e){}
-  const scanZeigen=()=>{ rot.classList.toggle("scan",scanAn); d.querySelector("[data-dv=scan]")?.classList.toggle("on",scanAn); };
+  let scanAn=sauberMgl; try{ if(localStorage.getItem("jdSauber")==="0") scanAn=false; }catch(e){}
+  let neuMalen=()=>{};
+  const scanZeigen=()=>{ d.querySelector("[data-dv=scan]")?.classList.toggle("on",scanAn); };
   const zeigen=()=>{ inh.style.transform=`translate(${x}px,${y}px) scale(${s})`; pct.textContent=Math.round(s/fit*100)+" %"; };
   const begrenzen=()=>{ const vw=stage.clientWidth, vh=stage.clientHeight, cw=W*s, ch=H*s;
     x = cw<=vw ? (vw-cw)/2 : Math.min(0,Math.max(vw-cw,x));
@@ -750,7 +811,8 @@ function dokViewer(src, art="bild", titel=""){
   d.querySelector("[data-dv=minus]").onclick=()=>zoomUm(s/1.5,stage.clientWidth/2,stage.clientHeight/2);
   d.querySelector("[data-dv=fit]").onclick=einpassen;
   d.querySelector("[data-dv=dreh]").onclick=()=>{ if(!OW) return; dreh=(dreh+90)%360; drehen(); };
-  d.querySelector("[data-dv=scan]").onclick=()=>{ scanAn=!scanAn; try{ localStorage.setItem("jdScan",scanAn?"1":"0"); }catch(e){} scanZeigen(); };
+  d.querySelector("[data-dv=scan]") && (d.querySelector("[data-dv=scan]").onclick=()=>{ scanAn=!scanAn; try{ localStorage.setItem("jdSauber",scanAn?"1":"0"); }catch(e){} scanZeigen(); neuMalen(); });
+  d.querySelector("[data-dv=laden]") && (d.querySelector("[data-dv=laden]").onclick=()=>dateiSpeichern(opt.datei.blob,opt.datei.name).catch(e=>toast("Speichern fehlgeschlagen: "+(e.message||e))));
   // Finger und Maus
   const pts=new Map(); let start=null, tapZeit=0, tapX=0, tapY=0, bewegt=false;
   const pos=e=>{ const r=stage.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
@@ -770,7 +832,14 @@ function dokViewer(src, art="bild", titel=""){
   const fehler=t=>{ inh.innerHTML=`<div class="dvlade">${esc(t)}${art==="pdf"?`<br><a href="${esc(src)}" target="_blank" rel="noopener" style="color:#fff">Im Browser öffnen</a>`:""}</div>`; };
   if(art!=="pdf"){
     const img=new Image(); img.alt=""; img.draggable=false;
-    img.onload=()=>{ inh.innerHTML=""; inh.appendChild(rot); rot.appendChild(img); img.style.width=img.naturalWidth+"px"; img.style.height=img.naturalHeight+"px"; bereit(img.naturalWidth,img.naturalHeight,art!=="seiten"); };
+    img.onload=()=>{ const w=img.naturalWidth, h=img.naturalHeight; let sauberC=null;
+      // aufbereitete Fassung wird einmal berechnet und dann nur umgeschaltet – gleiche Größe, Zoom bleibt
+      neuMalen=()=>{ const el0=rot.firstChild; let el=img;
+        if(art==="scan"&&scanAn){ if(!sauberC){ try{ sauberC=scanSauber(img); }catch(e){ console.error(e); } } if(sauberC) el=sauberC; }
+        el.style.width=w+"px"; el.style.height=h+"px"; if(el0!==el){ rot.innerHTML=""; rot.appendChild(el); } };
+      inh.innerHTML=""; inh.appendChild(rot);
+      if(art==="scan"&&scanAn){ inh.insertAdjacentHTML("beforeend",`<div class="dvlade" style="position:absolute;inset:0">✨ wird aufbereitet …</div>`); setTimeout(()=>{ inh.querySelector(".dvlade")?.remove(); neuMalen(); bereit(w,h,true); },30); }
+      else { neuMalen(); bereit(w,h,art!=="seiten"); } };
     img.onerror=()=>fehler("Bild konnte nicht geladen werden."); img.src=src;
   } else {
     (async()=>{ try{
@@ -784,10 +853,14 @@ function dokViewer(src, art="bild", titel=""){
         const c=document.createElement("canvas"); c.className="dvseite"; c.style.top=h+"px"; c.style.width=breite+"px"; c.style.height=cssH+"px"; rot.appendChild(c); h+=cssH+GAP; c._pg=pg; c._k=k; }
       bereit(breite,h-GAP,n===1);
       // scharf zeichnen: Auflösung so wählen, dass auch starkes Hineinzoomen lesbar bleibt (begrenzt wegen Speicher)
-      const malen=async(stufe)=>{ for(const c of inh.querySelectorAll("canvas")){ const v=c._pg.getViewport({scale:c._k*stufe}); if(c.width>=Math.floor(v.width)) continue;
+      const malen=async(stufe)=>{ for(const c of inh.querySelectorAll("canvas")){ const v=c._pg.getViewport({scale:c._k*stufe}); if(c.width>=Math.floor(v.width)&&c._sauber===scanAn) continue;
         const tmp=document.createElement("canvas"); tmp.width=Math.floor(v.width); tmp.height=Math.floor(v.height);
-        await c._pg.render({canvasContext:tmp.getContext("2d"),viewport:v}).promise; c.width=tmp.width; c.height=tmp.height; c.getContext("2d").drawImage(tmp,0,0); } };
-      const maxPx=n>6?2600:4200;
+        const tc=tmp.getContext("2d"); tc.fillStyle="#fff"; tc.fillRect(0,0,tmp.width,tmp.height);
+        await c._pg.render({canvasContext:tc,viewport:v}).promise; let fertig=tmp;
+        if(scanAn){ try{ fertig=scanSauber(tmp,1e9); }catch(e){ console.error(e); } }
+        c.width=fertig.width; c.height=fertig.height; c.getContext("2d").drawImage(fertig,0,0); c._sauber=scanAn; } };
+      const maxPx=sauberMgl?(n>6?2000:2600):(n>6?2600:4200);
+      neuMalen=()=>{ malen(Math.min(Math.max(s,fit)*dpr, maxPx/breite)).catch(()=>{}); };
       await malen(Math.min(fit*dpr*1.2, maxPx/breite));
       let t=null; const nachschaerfen=()=>{ clearTimeout(t); t=setTimeout(()=>{ if(d.isConnected) malen(Math.min(s*dpr, maxPx/breite)).catch(()=>{}); },250); };
       stage.addEventListener("pointerup",nachschaerfen); stage.addEventListener("wheel",nachschaerfen); d.querySelector(".dvbar").addEventListener("click",nachschaerfen);
@@ -796,7 +869,7 @@ function dokViewer(src, art="bild", titel=""){
   }
 }
 // PDFs (Unterlagen, Zeichnungen) im Betrachter statt in einem neuen Tab öffnen
-document.addEventListener("click",e=>{ const a=e.target.closest("a[data-pdf]"); if(!a || e.target.closest("button")) return; e.preventDefault(); dokViewer(a.dataset.pdf,"pdf",a.title); });
+document.addEventListener("click",e=>{ const a=e.target.closest("a[data-pdf]"); if(!a || e.target.closest("button")) return; e.preventDefault(); dokViewer(a.dataset.pdf,"pdf",a.title,{sauber:!!a.dataset.scan}); });
 
 // Einheitliches Abzeichen (rote Zahl) – Leiste, „Zu tun“, Nachrichten, Setup
 const badge=n=>`<span class="badge">${n>99?"99+":n}</span>`;
@@ -942,6 +1015,16 @@ function vorleistungZeilen(o){
 // Angaben, die beim Auslesen unsicher waren oder fehlen → „bitte im Dokument nachsehen“
 const unsicher=(o,k)=>(o.deckUnsicher||[]).includes(k);
 // Ganz oben in „Baustelle“: Adresse und alle Ansprechpartner
+function kontakteVon(o){
+  const gleich=(a,b)=>!!a&&!!b&&String(a).toLowerCase().replace(/\W/g,"").includes(String(b).toLowerCase().replace(/^(herrn?|frau)\s+/,"").replace(/\W/g,""));
+  const ko=(o.dokInfo?.kontakte||[]).filter(k=>k.name||k.tel||k.mail||k.firma).map(k=>({...k}));
+  if(o.bauleiterName||o.bauleiterTel||o.bauleiterMail){
+    const i=ko.findIndex(k=>/bauleit/i.test(k.rolle||"")&&(gleich(k.name,o.bauleiterName)||gleich(o.bauleiterName,k.name)||!o.bauleiterName));
+    const bl={rolle:"Bauleiter",firma:i>=0?ko[i].firma:"",name:o.bauleiterName||(i>=0?ko[i].name:""),tel:o.bauleiterTel||(i>=0?ko[i].tel:""),mail:o.bauleiterMail||(i>=0?ko[i].mail:""),eigen:true};
+    if(i>=0) ko.splice(i,1); ko.unshift(bl);
+  }
+  return ko;
+}
 function adresseKontakte(o){
   const addr=adresseOf(o), tel=t=>t?`<a href="tel:${esc(String(t).replace(/[^\d+]/g,""))}">📞 ${esc(t)}</a>`:"";
   const gleich=(a,b)=>!!a&&!!b&&String(a).toLowerCase().replace(/\W/g,"").includes(String(b).toLowerCase().replace(/^(herrn?|frau)\s+/,"").replace(/\W/g,""));
@@ -985,6 +1068,76 @@ function dokInfoTeil(o){
 }
 const dokListe=o=>(o.dokInfo?.liste||[]).filter(x=>x.art||x.inhalt).map(x=>`<div class="dok-d">📄 <b>${esc(x.art||"Datei")}</b>${x.seiten?` · ${esc(x.seiten)} S.`:""}${x.inhalt?` – ${esc(x.inhalt)}`:""}${x.name?` <span class="mute small">(${esc(x.name)})</span>`:""}</div>`).join("");
 const DOK_HINWEIS=`<span class="dokhinweis">⚠️ bitte im Dokument prüfen</span>`;
+// Text für die PDF-Standardschrift (nur westeuropäische Zeichen)
+const pdfTxt=t=>String(t??"").replace(/[–—]/g,"-").replace(/[„“”«»]/g,'"').replace(/[‚‘’]/g,"'").replace(/…/g,"...").replace(/€/g,"EUR").replace(/[•▪●]/g,"-").replace(/\u00a0/g," ").replace(/[^\x09\x0a\x0d\x20-\x7e\xa0-\xff]/g,"").replace(/[ \t]+/g," ").trim();
+// Seite 1: alles Wichtige aus den Unterlagen sauber gesetzt – wie ein fertig geschriebenes Auftragsblatt
+function reinschrift(pdf,o){
+  const d=o.dokInfo||{}, X=16, BR=178, BLAU=[20,70,140], ROT=[190,30,30]; let y=16;
+  const neueSeite=()=>{ pdf.addPage("a4","p"); y=18; };
+  const platz=h=>{ if(y+h>280) neueSeite(); };
+  pdf.setFont("helvetica","normal"); pdf.setFontSize(9); pdf.setTextColor(120); pdf.text(pdfTxt(S.settings?.monteurName||"JD Brüder GbR"),X,y); pdf.text("Auftragsblatt · Reinschrift der Unterlagen",X+BR,y,{align:"right"});
+  y+=3; pdf.setDrawColor(...BLAU); pdf.setLineWidth(.6); pdf.line(X,y,X+BR,y); y+=10;
+  pdf.setTextColor(20); pdf.setFont("helvetica","bold"); pdf.setFontSize(19); pdf.text(pdfTxt(`Auftrag ${o.nr||o.id}`),X,y);
+  if(o.termin||o.kw){ pdf.setFont("helvetica","normal"); pdf.setFontSize(10); pdf.setTextColor(90); pdf.text(pdfTxt(o.termin?"Termin "+new Date(o.termin).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"}):"KW "+o.kw),X+BR,y,{align:"right"}); }
+  y+=7; if(o.bauvorhabenName){ pdf.setFont("helvetica","normal"); pdf.setFontSize(12.5); pdf.setTextColor(50); const l=pdf.splitTextToSize(pdfTxt(o.bauvorhabenName),BR); pdf.text(l,X,y); y+=l.length*5.6; }
+  y+=3;
+  const abschnitt=t=>{ platz(16); y+=4; pdf.setFont("helvetica","bold"); pdf.setFontSize(11); pdf.setTextColor(...BLAU); pdf.text(pdfTxt(t).toUpperCase(),X,y); y+=1.8; pdf.setDrawColor(200,210,225); pdf.setLineWidth(.3); pdf.line(X,y,X+BR,y); y+=5.2; pdf.setTextColor(25); };
+  const zeile=(k,v,farbe)=>{ v=pdfTxt(v); if(!v) return; pdf.setFontSize(10); const l=pdf.splitTextToSize(v,BR-42); platz(l.length*4.6+1.5);
+    pdf.setFont("helvetica","normal"); pdf.setTextColor(110); pdf.setFontSize(8.8); pdf.text(pdfTxt(k),X,y); pdf.setFontSize(10); pdf.setTextColor(...(farbe||[25,25,25])); pdf.text(l,X+42,y); y+=l.length*4.6+1.6; };
+  const absatz=(t,{fett=false,farbe=null,einzug=0}={})=>{ t=pdfTxt(t); if(!t) return; pdf.setFont("helvetica",fett?"bold":"normal"); pdf.setFontSize(10); pdf.setTextColor(...(farbe||[25,25,25])); const l=pdf.splitTextToSize(t,BR-einzug); for(const z of l){ platz(5); pdf.text(z,X+einzug,y); y+=4.6; } y+=1.2; };
+  abschnitt("Baustelle");
+  zeile("Adresse",adresseOf(o)); zeile("Geschosse",o.geschosse); zeile("Öffnungszeiten",o.oeffnungszeiten); zeile("Aufzug",o.aufzug);
+  const ko=kontakteVon(o);
+  if(ko.length){ abschnitt("Ansprechpartner"); ko.forEach(k=>zeile([k.rolle||"Kontakt",k.firma].filter(Boolean).join(" · "),[k.name,k.tel&&"Tel. "+k.tel,k.mail].filter(Boolean).join("  ·  "))); }
+  const ach=achtungListe(o);
+  if(ach.length){ platz(14); y+=3; const ls=ach.map(t=>pdf.splitTextToSize(pdfTxt(t),BR-12)); const hh=ls.reduce((a,l)=>a+l.length*4.6+1.5,0)+9;
+    if(y+hh>280) neueSeite(); pdf.setFillColor(253,238,236); pdf.setDrawColor(...ROT); pdf.setLineWidth(.4); pdf.roundedRect(X,y-4,BR,hh,2,2,"FD");
+    pdf.setFont("helvetica","bold"); pdf.setFontSize(10); pdf.setTextColor(...ROT); pdf.text("BITTE UNBEDINGT BEACHTEN",X+4,y+1); y+=7;
+    pdf.setFont("helvetica","normal"); ls.forEach(l=>{ pdf.text("!",X+4,y); pdf.text(l,X+9,y); y+=l.length*4.6+1.5; }); y+=4; pdf.setTextColor(25); }
+  if(o.aufbau||o.technHinweise||o.montageHinweise){ abschnitt("Montage"); zeile("Was aufbauen",o.aufbau); zeile("Technisch",o.technHinweise); zeile("Montagehinweise",o.montageHinweise); }
+  const an=(d.anlagen||[]).filter(a=>a.raum||a.kabinen||a.modell);
+  if(an.length){ abschnitt(`Anlagen (${an.length})`);
+    const sp=[["Raum / Geschoss",48],["Kab.",12],["Modell",40],["Höhe",20],["Farbe",28],["Besonderes",30]];
+    const kopf=()=>{ pdf.setFont("helvetica","bold"); pdf.setFontSize(8.5); pdf.setTextColor(90); let xx=X; sp.forEach(([t,w])=>{ pdf.text(t,xx,y); xx+=w; }); y+=1.5; pdf.setDrawColor(210); pdf.line(X,y,X+BR,y); y+=4; };
+    kopf(); an.forEach((a,i)=>{ const zellen=[[a.raum,a.geschoss].filter(Boolean).join(" · "),a.kabinen,a.modell,a.hoehe,a.farbe,a.besonderes].map((v,j)=>pdf.splitTextToSize(pdfTxt(v),sp[j][1]-2));
+      pdf.setFont("helvetica","normal"); pdf.setFontSize(9); const hh=Math.max(1,...zellen.map(z=>z.length))*4.1; if(y+hh>280){ neueSeite(); kopf(); }
+      if(i%2){ pdf.setFillColor(244,246,250); pdf.rect(X,y-3.4,BR,hh+.8,"F"); } pdf.setTextColor(25); let xx=X; zellen.forEach((z,j)=>{ pdf.text(z,xx,y); xx+=sp[j][1]; }); y+=hh+1.2; }); }
+  const hi=(d.hinweise||[]).filter(h=>h.text);
+  if(hi.length){ abschnitt("Hinweise aus den Unterlagen"); hi.forEach(h=>{ const rot=h.wichtig||(!/arbeitsschutz|gbu/i.test(h.titel||"")&&WICHTIG_RX.test((h.titel||"")+" "+h.text)); if(h.titel) absatz(h.titel,{fett:true}); absatz(h.text,{farbe:rot?ROT:null}); y+=1; }); }
+  const li=(d.liste||[]).filter(x=>x.art||x.inhalt);
+  if(li.length){ abschnitt("Enthaltene Unterlagen"); li.forEach(x=>absatz(`- ${x.art||"Datei"}${x.seiten?` (${x.seiten} S.)`:""}${x.inhalt?": "+x.inhalt:""}`,{einzug:2})); }
+  platz(14); y+=4; pdf.setFont("helvetica","italic"); pdf.setFontSize(8); pdf.setTextColor(130);
+  pdf.text(pdf.splitTextToSize(pdfTxt(`Automatisch aus den Unterlagen gelesen${d.am?" am "+fmtDT(d.am):""}. Maßgeblich sind die Originalseiten, die im Anschluss aufbereitet folgen.`),BR),X,y);
+}
+// Bild oder PDF-Seite laden → Canvas
+const bildLaden=src=>new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error("Bild konnte nicht geladen werden")); im.src=src; });
+async function unterlagenPdf(id){
+  const o=S.orders[id]; if(!o) return;
+  const files=Object.values(S.fotos).filter(f=>f.auftragId===id&&f.kat==="unterlagen").sort((a,b)=>(a.am||0)-(b.am||0)||String(a.name||"").localeCompare(String(b.name||""),"de",{numeric:true}));
+  const key=files.map(f=>f.id).join()+"|"+(o.dokInfo?.am||"")+"|"+(o.geaendertAm||"");
+  S._pdfCache=S._pdfCache||{};
+  const fort=document.createElement("div"); fort.className="toast"; fort.textContent="✨ Unterlagen werden aufbereitet …"; document.body.appendChild(fort);
+  try{ if(S._pdfCache[id]?.key!==key){
+    const jsPDF=await loadJsPDF(); const pdf=new jsPDF({unit:"mm",format:"a4",compress:true});
+    reinschrift(pdf,o);
+    let n=0; const ges=files.length;
+    const seite=c=>{ const quer=c.width>c.height, pw=quer?297:210, ph=quer?210:297, m=7, k=Math.min((pw-2*m)/c.width,(ph-2*m-4)/c.height), w=c.width*k, h=c.height*k;
+      pdf.addPage("a4",quer?"l":"p"); pdf.addImage(c.toDataURL("image/jpeg",.8),"JPEG",(pw-w)/2,m,w,h,undefined,"FAST"); };
+    for(const f of files){ n++; fort.textContent=`✨ Unterlagen werden aufbereitet … ${n} von ${ges}`;
+      await new Promise(r=>setTimeout(r,20));
+      try{
+        if(/pdf/i.test(f.typ||"")){ const lib=await loadPdfJs(); const doc=await lib.getDocument({data:await (await fetch("_blob/"+f.assetId)).arrayBuffer()}).promise;
+          for(let i=1;i<=Math.min(doc.numPages,40);i++){ const pg=await doc.getPage(i), v1=pg.getViewport({scale:1}), v=pg.getViewport({scale:2000/Math.max(v1.width,v1.height)});
+            const c=leinwand(Math.floor(v.width),Math.floor(v.height)), cx=c.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,c.width,c.height); await pg.render({canvasContext:cx,viewport:v}).promise; seite(scanSauber(c,2000)); } }
+        else seite(scanSauber(await bildLaden("_blob/"+f.assetId),2000));
+      }catch(e){ console.error(e); }
+    }
+    const N=pdf.getNumberOfPages(); for(let i=1;i<=N;i++){ pdf.setPage(i); const ps=pdf.internal.pageSize, pw=ps.getWidth(), ph=ps.getHeight(); pdf.setFont("helvetica","normal"); pdf.setFontSize(7.5); pdf.setTextColor(140); pdf.text(pdfTxt(`Auftrag ${o.nr||o.id}`),8,ph-4); pdf.text(`Seite ${i} von ${N}`,pw-8,ph-4,{align:"right"}); }
+    S._pdfCache[id]={key,blob:pdf.output("blob")};
+  } } finally{ fort.remove(); }
+  const blob=S._pdfCache[id].blob, name=`Unterlagen_${idOf(o.nr||o.id)}.pdf`;
+  dokViewer(URL.createObjectURL(blob),"pdf",`Unterlagen ${o.nr||o.id}`,{sauber:false,datei:{blob,name}});
+}
 // Terminiert: fester Termin eingetragen oder Einsatz schon begonnen
 const terminiert=o=>o.terminStatus==="fest" || !!o.einsatz || (o.zeiten||[]).length>0;
 // Abholbereit, außer der Chef hat ihn von Hand zurück nach „Nicht verplant“ geschoben
@@ -1470,7 +1623,7 @@ function metaAbholbereitDialog(id){
 /* ---------- Nachrichten im Auftrag ---------- */
 function nachrichtenKarte(o){
   const ns=nachrichtenVon(o.id), me=myId();
-  const an=can.planen()?((o.monteure||[]).length?(o.monteure||[]).map(nameOf).join(", "):"noch niemand eingeteilt – nur Chefs"):"JD Brüder";
+  const an=can.planen()?((o.monteure||[]).length?(o.monteure||[]).map(nameOf).join(", "):"die Chefs (noch niemand eingeteilt)"):"JD Brüder";
   const schnell=can.planen()?["Bitte kurz melden","Termin hat sich geändert – bitte prüfen","Danke 👍"]:["Bin unterwegs 🚐","Bin vor Ort","Komme später","Material fehlt","Bitte zurückrufen"];
   const offen=S.msgOffen?.[o.id] ?? (ns.length>0);
   return `<div class="card msgkarte" id="msgKarte"><div class="row between" style="flex-wrap:nowrap"><h3 style="margin:0">💬 Nachrichten${ns.length?` <span class="small mute" style="font-weight:600">${ns.length}</span>`:""}</h3>
@@ -1677,7 +1830,7 @@ function viewDetail(id){
   const kompakt=(phase(o)==="fertig"||phase(o)==="erledigt") && !S.bearbeiten[id] && !(o.gemeinsam&&can.sub()) && !o.storniert;
   // Klappbare Karte: zu, bis man draufdrückt (Zustand bleibt beim Neuzeichnen erhalten)
   const fold=(key,titel,info,inhalt,offen=false)=>`<details class="card fold" data-fold="${id}:${key}" ${(S.fold[id+":"+key]??offen)?"open":""}><summary><b>${titel}</b><span class="small mute">${info||""}</span></summary><div class="foldin">${inhalt}</div></details>`;
-  let h=`<button class="back" data-back>‹ Alle Aufträge</button>${kompakt||schritt(o)==="ankunft"&&S.fahrten[o.einsatz?.fahrtId]?.offen?"":fahrtLeiste()}`;
+  let h=`<button class="back" data-back>‹ ${can.mitarbeiter()?"Zurück":"Alle Aufträge"}</button>${kompakt||schritt(o)==="ankunft"&&S.fahrten[o.einsatz?.fahrtId]?.offen?"":fahrtLeiste()}`;
   if(S.bearbeiten[id]) h+=`<div class="banner warn" style="display:flex;align-items:center;gap:10px"><span style="flex:1">✏️ Bericht bearbeiten${o.aenderung?.status==="frei"&&o.aenderung.grund?`<br><span class="small">Änderung: ${esc(o.aenderung.grund)}</span>`:""}</span><button class="btn sm ok" id="bearbFertig">✓ ${o.aenderung?.status==="frei"&&!can.planen()?"Änderung abgeben":"Fertig"}</button></div>`;
   if(o.storniert) h+=`<div class="banner bad"><b>❌ Auftrag storniert</b>${o.storniert.am?" am "+fmtDT(o.storniert.am):""}${o.storniert.quelle==="mail"?" (laut Mail von meta)":o.storniert.von?" von "+esc(nameOf(o.storniert.von)):""}.${o.storniert.grund?`<div class="small" style="margin-top:4px;white-space:pre-wrap">${esc(o.storniert.grund)}</div>`:""}${can.planen()?`<div style="margin-top:8px"><button class="btn sm" id="stornoAuf">Storno aufheben</button></div>`:""}</div>`;
 
@@ -1753,7 +1906,8 @@ function viewDetail(id){
   if(!kompakt && !montageLaeuft) knoepfe.push(sk("bau","🏗","Baustelle",esc(o.plzOrt||(addr||"").split(",").pop()||""),bauInhalt));
 
   // Unterlagen
-  const unterInhalt=`${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
+  const unterInhalt=`${fk("unterlagen").length?`<button class="btn ok block" id="unterPdf" style="margin-bottom:10px">📑 Unterlagen lesen <span style="font-weight:500;opacity:.85">– sauber aufbereitet als PDF</span></button>`:""}
+   ${thumbs(fk("unterlagen"),"unterlagen",can.planen())}
    ${dokListe(o)?`<div style="margin-top:8px">${dokListe(o)}</div>`:""}
    <div class="row" style="margin-top:10px">
    ${can.planen()&&(S.isOwner&&S.sync||S.sample)&&fk("unterlagen").length?`<button class="btn sm ghost" id="readDeck">🔎 ${o.dokInfo?"Unterlagen neu auslesen":"Alle Unterlagen auslesen"}</button>`:""}
@@ -1904,7 +2058,7 @@ function berichtAnsicht(id){
    <dl class="kv">
     ${z("Tätigkeit",esc(b.taetigkeit||"").replace(/\n/g,"<br>"))}
     ${z("Positionen",pos.join(", "))}
-    ${z(rek?"Zusatzarbeiten":"Sonderarbeiten",sonderFertig(b).map(x=>esc(sonderZeile(x))).join("<br>"))}
+    ${z("Mehraufwand",sonderFertig(b).map(x=>esc(sonderZeile(x))).join("<br>"))}
     ${z("Vorleistung",vorleistungZeilen(o).map(esc).join("<br>"))}
     ${z("Reklamationen",rk.map(r=>`${r.offen?"● ":"✓ "}${esc(URSACHEN[r.ursache]||r.ursache||"")}: ${esc(r.text||"")}`).join("<br>"))}
     ${z("Sichtabnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
@@ -1928,7 +2082,8 @@ function berichtAnsicht(id){
   });
 }
 function thumbs(list, kat, canAdd){
-  return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" data-pdf="_blob/${esc(f.assetId)}" target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>${/^(montage$|nachweis:|sonder:)/.test(f.kat||"")?`<button class="x u" data-umfoto="${esc(f.id)}" title="Umstellen">↔</button>`:""}`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
+  const sc=kat==="unterlagen"?' data-scan="1"':"";
+  return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" data-pdf="_blob/${esc(f.assetId)}"${sc} target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"${sc}><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>${/^(montage$|nachweis:|sonder:)/.test(f.kat||"")?`<button class="x u" data-umfoto="${esc(f.id)}" title="Umstellen">↔</button>`:""}`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
   ${canAdd&&S.assets?`<label class="add"><span>＋</span>Foto<input type="file" accept="image/*,application/pdf" multiple hidden data-upload="${kat}"></label>`:""}</div>
   ${canAdd&&!S.assets?`<div class="small mute">Fotos hochladen ist für dich gerade nicht freigeschaltet (Zugriff als „Bearbeiter“ nötig).</div>`:""}`;
 }
@@ -2286,7 +2441,7 @@ function nachweiseTeil(o,fk,imBericht=false){
   const nw=o.nachweise||[], so=sonderFertig(o.bericht||{});
   const fz=k=>fk(k).length;
   return `<div class="nw-k" id="nachweise">
-   <div style="font-weight:700;margin-bottom:6px">📋 Nachweise – mit Foto</div>
+   <div style="font-weight:700;margin-bottom:6px">✂️ Nachweise & Mehraufwand</div>
    <div class="ziel-w">${NACHWEISE.map(([k,l])=>`<button class="fp" data-nw="${k}">${l}</button>`).join("")}<button class="fp" data-nw="andere">＋ andere Position</button></div>
    <button class="btn block" id="mehrAufw" style="margin-top:8px;min-height:46px">⏱ Mehraufwand / Sonderbemerkung</button>
    ${nw.length||so.length?`<div class="nw-l">${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b> · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${fz("nachweis:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("nachweis:"+x.id)} Foto${fz("nachweis:"+x.id)>1?"s":""}</summary>${thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false)}</details>`:""}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}
@@ -2571,16 +2726,16 @@ function reklaBerichtCard(o,fk){
    </div>
    <label class="f">Was wurde gemacht?</label>
    <textarea class="i" data-b="taetigkeit" id="fTaet" placeholder="z. B. Tür Kabine 3 neu eingestellt, Scharnier getauscht, Abdeckkappen ersetzt">${esc(b.taetigkeit??"")}</textarea>
-   <div style="margin-top:14px">${klapp(o.id,"sonder","➕ Zusatzarbeiten",sonderFertig(b).length?`${sonderFertig(b).length} eingetragen`:"keine – antippen zum Ergänzen",`
-   <div class="small mute">Was wurde zusätzlich gemacht? Pro Punkt: Arbeit, Personen, Dauer, Bemerkung und ein Foto.</div>
+   <div style="margin-top:14px">${klapp(o.id,"sonder","⏱ Mehraufwand",sonderFertig(b).length?`${sonderFertig(b).length} eingetragen${sonderFertig(b).some(x=>!x.min)?" · ⚠ Stunden fehlen":""}`:"keiner – antippen zum Ergänzen",`
+   <div class="small mute">Was kam zusätzlich dazu? Pro Punkt: was, Personen, Stunden, Bemerkung und ein Foto.</div>
    ${sonderListe(b).map((x,i)=>`<div style="margin-top:8px;background:var(--card,#fff);border:1px solid var(--line);border-radius:10px;padding:10px">
-     <div class="row between" style="margin-bottom:6px"><b>Zusatzarbeit ${i+1}</b><button class="btn sm ghost" data-sdel="${i}" title="Entfernen">✕</button></div>
+     <div class="row between" style="margin-bottom:6px"><b>Mehraufwand ${i+1}</b><button class="btn sm ghost" data-sdel="${i}" title="Entfernen">✕</button></div>
      <input class="i" data-sf="arbeit" data-si="${i}" value="${esc(x.arbeit||"")}" placeholder="Was wurde gemacht? z. B. Füße geklebt und gebohrt">
      <div class="grid2" style="margin-top:6px"><input class="i" data-sf="personen" data-si="${i}" inputmode="numeric" value="${esc(x.personen??"")}" placeholder="Personen"><input class="i" data-sf="dauer" data-si="${i}" value="${x.min?fmtHMin(x.min):""}" placeholder="Dauer, z. B. 1:30"></div>
      <textarea class="i" data-sf="bemerkung" data-si="${i}" placeholder="Bemerkung (optional)" style="margin-top:6px;min-height:54px">${esc(x.bemerkung||"")}</textarea>
      <div class="small mute" style="margin-top:6px">Foto</div>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,true)}
    </div>`).join("")}
-   <button class="btn block" id="sAdd" style="margin-top:8px">＋ ${(b.sonder||[]).length?"Weitere Zusatzarbeit":"Zusatzarbeit hinzufügen"}</button>
+   <button class="btn block" id="sAdd" style="margin-top:8px">＋ ${(b.sonder||[]).length?"Weiterer Mehraufwand":"Mehraufwand hinzufügen"}</button>
 `,{card:false})}</div>
    <label class="f">Weitere Bemerkungen</label>
    <textarea class="i" data-b="bemerkung" placeholder="optional">${esc(b.bemerkung??"")}</textarea>
@@ -2635,7 +2790,7 @@ function fehlendeAngaben(o,fk){
   if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen",soft:true});
   if(leer(b.istKm)) r.push({t:"Kilometer fehlen",soft:true});
   if(leer(b.geschosse) && !istReklaAuftrag(o)) r.push({t:"Geschosse fehlen"});
-  if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Sonderarbeit: Personen und Dauer angeben"});
+  if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Mehraufwand: Personen und Stunden angeben"});
   if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true});
   else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben"});
   if(istReklaAuftrag(o)){
@@ -2715,6 +2870,7 @@ function bindEinsatz(o){
   $("#montageFertig") && ($("#montageFertig").onclick=()=>montageFertigDialog(id));
   $("#pvAend") && ($("#pvAend").onclick=ev=>{ ev.preventDefault(); $("#pvW").style.display=""; $("#pvInfo").remove(); });
   $("#mFotoBtn") && ($("#mFotoBtn").onclick=()=>montageFotoDialog(id));
+  $("#unterPdf") && ($("#unterPdf").onclick=async()=>{ const b=$("#unterPdf"); b.disabled=true; try{ await unterlagenPdf(id); }catch(e){ console.error(e); toast("PDF konnte nicht erstellt werden: "+(e.message||e)); } finally{ b.disabled=false; } });
   document.querySelectorAll("[data-nw]").forEach(b=>b.onclick=()=>nachweisDialog(id,b.dataset.nw));
   $("#mehrAufw") && ($("#mehrAufw").onclick=()=>mehrAufwandDialog(id));
   $("#erfNw") && ($("#erfNw").onclick=()=>nachweisDialog(id,""));
@@ -2808,7 +2964,7 @@ function bindEinsatz(o){
     else l[i][f]=v;
     sSave(l); };
     inp.onchange=save; if(inp.tagName==="TEXTAREA") inp.onblur=save; });
-  document.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Sonderarbeit entfernen?","","Entfernen","bad")) return; sSave(sonderListe(cur().bericht).filter((_,i)=>i!==Number(b.dataset.sdel))); });
+  document.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=async()=>{ if(!await confirmBox("Mehraufwand entfernen?","","Entfernen","bad")) return; sSave(sonderListe(cur().bericht).filter((_,i)=>i!==Number(b.dataset.sdel))); });
   // Sichtabnahme
   document.querySelectorAll("#abnArt [data-aa]").forEach(b=>b.onclick=()=>upd(P,{bericht:{abnahmeArt:b.dataset.aa}}));
   $("#abnPapier") && ($("#abnPapier").onchange=()=>upd(P,{abnahmePapier:$("#abnPapier").checked?{am:Date.now(),von:myId()}:null}));
@@ -3938,7 +4094,9 @@ function azIst(uid,tag){
   return {ist:azRechnen(t).netto,soll};
 }
 const azStart=uid=>{ const s0=(S.settings.zeitSoll||{})[uid]?.ab; if(s0) return s0; const t=Object.values(S.az).filter(x=>x.uid===uid&&x.tag&&x.art!=="urlaub").map(x=>x.tag).sort()[0]; return t||tagKey(new Date()); };
-function azSumme(uid,von,bis){ let soll=0,ist=0; for(let t=von;t<=bis;t=tagPlus(t,1)){ const x=azIst(uid,t); soll+=x.soll; ist+=x.ist; } return {soll,ist,saldo:ist-soll}; }
+function azSumme(uid,von,bis){ let soll=0,ist=0; const heute=tagKey(new Date());
+  for(let t=von;t<=bis;t=tagPlus(t,1)){ const x=azIst(uid,t), tg=azTag(uid,t); let so=x.soll; if(t===heute && !(tg?.feierabend||tg?.abw)) so=Math.min(so,x.ist); soll+=so; ist+=x.ist; }
+  return {soll,ist,saldo:ist-soll}; }
 function azMonat(uid,monat){
   const [j,m]=monat.split("-").map(Number), n=new Date(j,m,0).getDate(), heute=tagKey(new Date());
   const tage=Array.from({length:n},(_,i)=>`${monat}-${String(i+1).padStart(2,"0")}`);
@@ -4438,8 +4596,8 @@ function bindNachrichten(id){
 }
 function bind(r){
   const app=$("#app");
-  app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go("auftraege"));
-  app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; lightbox(t.dataset.zoom); });
+  app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go(can.mitarbeiter()?"zeit":"auftraege"));
+  app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; t.dataset.scan?dokViewer(t.dataset.zoom,"scan","Unterlage"):lightbox(t.dataset.zoom); });
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); },250); }; }
   app.querySelectorAll("#flt [data-f], .fzeile [data-f], .tun [data-f], .spez-kopf [data-f]").forEach(b=>b.onclick=()=>{
     const f=b.dataset.f, normal=HAUPT_PHASEN.some(([k])=>k===f);
