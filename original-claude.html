@@ -4973,14 +4973,15 @@ function lexwareCard(){ const x=S.lexStatus;
    <div class="small mute" style="margin-bottom:8px">Kommt eine Montageabrechnung von meta, fragt die App per Push, ob die Rechnung geschrieben werden soll. Nach „Freigeben“ liegt sie als Entwurf in Lexware – beim richtigen Kunden: steht „+20 % LUX“ in der Abrechnung, an meta Luxemburg, sonst an meta Deutschland. Eine Position „Bauleistung Meta“ über die Summe, darunter „Über die erfolgte Montage von Auftrag …, Ort“ bzw. „Reklamation …, Ort“. Steuer und Zahlungsbedingungen kommen von eurer letzten Rechnung an denselben Kunden.</div>
    ${x&&!x.ok?`<div class="banner ${x.code==="lex_fehlt"?"info":"bad"} small" style="margin-bottom:8px">${esc(x.fehler||"")}</div>`:""}
    ${zeile("de")}${zeile("lu")}
-   ${x?.ok?`<div class="person"><span style="font-size:20px">🧾</span><div style="flex:1;min-width:0"><b>Bauleistung Meta</b><div class="small mute">${x.artikel?`✓ in Lexware gefunden (Dienstleistung${x.artikel.einheit?" · "+esc(x.artikel.einheit):""})`:"nicht unter den Dienstleistungen gefunden – die Position wird trotzdem so benannt"}</div></div></div>`:""}
+   ${x?.ok?`<div class="person" style="flex-wrap:wrap"><span style="font-size:20px">🧾</span><div style="flex:1;min-width:0"><b>Bauleistung Meta</b><div class="small mute">${x.artikel?`✓ ${esc(x.artikel.name)}${x.artikel.ausRechnung?" – aus eurer letzten Rechnung übernommen":" – in Lexware gefunden"}${x.artikel.einheit?" · "+esc(x.artikel.einheit):""}`:x.artikelFehler?`Artikel nicht lesbar: ${esc(x.artikelFehler)}`:"nicht gefunden – bitte rechts wählen"}</div></div>
+    ${x.artikelAlle?.length?`<select class="i" style="width:auto;max-width:46%;min-height:36px;padding:5px 8px" data-lexk="artikel"><option value="">automatisch</option>${x.artikelAlle.map(a=>`<option value="${esc(a.id)}" ${S.lexFest?.artikel===a.id?"selected":""}>${esc(a.name)}</option>`).join("")}</select>`:""}</div>`:""}
    <button class="btn sm" id="lexTest" style="margin-top:8px">🔌 Verbindung prüfen</button></div>`; }
 function bindSetupLohn(){
   $("#lexTest") && ($("#lexTest").onclick=async()=>{ const b=$("#lexTest"); b.disabled=true; b.textContent="Prüfe …";
     try{ S.lexStatus=await S.sync.run({lexStatus:1}); }catch(e){ S.lexStatus={ok:false,fehler:e.message||String(e)}; }
     try{ const d=await S.db.doc("lohn/lexware").get(); S.lexFest=d.exists?d.data():{}; }catch(e){}
     render(); });
-  document.querySelectorAll("[data-lexk]").forEach(sel=>sel.onchange=async()=>{ S.lexFest={...(S.lexFest||{}),[sel.dataset.lexk]:sel.value}; await setDoc("lohn/lexware",S.lexFest); toast("Kunde gespeichert ✓"); $("#lexTest")?.click(); });
+  document.querySelectorAll("[data-lexk]").forEach(sel=>sel.onchange=async()=>{ S.lexFest={...(S.lexFest||{}),[sel.dataset.lexk]:sel.value}; await setDoc("lohn/lexware",S.lexFest); toast(sel.dataset.lexk==="artikel"?"Artikel gespeichert ✓":"Kunde gespeichert ✓"); $("#lexTest")?.click(); });
   const lid=S.plSel&&S.preise?.listen?.[S.plSel]?S.plSel:"std";
   const saveL=patch=>{ if(lid==="std") return savePreise(patch); const cur=S.preise.listen[lid]; return savePreise({listen:{...S.preise.listen,[lid]:{...cur,...patch,preise:{...(cur.preise||{}),...(patch.preise||{})}}}}); };
   $("#subPreiseAn") && ($("#subPreiseAn").onchange=()=>setDoc("einstellungen/allgemein",{...S.settings,subPreiseAktiv:$("#subPreiseAn").checked}));

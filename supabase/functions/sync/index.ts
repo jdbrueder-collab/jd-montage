@@ -892,18 +892,30 @@ async function lexKunden(db: any) {
   return { de: wahl("de", "DE"), lu: wahl("lu", "LU"), alle };
 }
 // Dienstleistung „Bauleistung Meta“ aus Lexware (Artikel → Dienstleistungen) – steht auf jeder Rechnung an meta
-async function lexArtikel() {
+// Alle Artikel (Dienstleistungen und Produkte); fest gewählter Artikel steht in lohn/lexware.artikel
+async function lexArtikelListe() {
+  const alle: any[] = [];
   for (let seite = 0; seite < 8; seite++) {
-    const r = await lex(`/articles?type=SERVICE&size=250&page=${seite}`);
-    const a = (r.content || []).find((x: any) => /bauleistung\s*meta/i.test(x.title || ""));
-    if (a) return { id: a.id, name: a.title, einheit: a.unitName || "" };
+    const r = await lex(`/articles?size=250&page=${seite}`);
+    for (const a of r.content || []) if (!a.archived) alle.push({ id: a.id, name: a.title || "", typ: a.type || "", einheit: a.unitName || "" });
     if (r.last !== false) break;
   }
-  return null;
+  return alle;
 }
+const istBauleistung = (t: string) => /bau\s*-?\s*leistung/i.test(t || "");
+async function lexArtikel(db: any) {
+  const fest = ((await getDoc(db, "lohn", "lexware")) || {}).artikel;
+  const alle = await lexArtikelListe();
+  const gef = alle.find((a) => a.id === fest) || alle.find((a) => istBauleistung(a.name) && /meta/i.test(a.name)) || (alle.filter((a) => istBauleistung(a.name)).length === 1 ? alle.find((a) => istBauleistung(a.name)) : null);
+  return { artikel: gef || null, artikelAlle: alle.slice(0, 300) };
+}
+// Notlösung: Position „Bauleistung …“ aus der letzten Rechnung an denselben Kunden übernehmen (mit Artikel-Verknüpfung, falls vorhanden)
+const ausVorlage = (v: any) => { const x = (v?.lineItems || []).find((l: any) => istBauleistung(l.name)); return x ? { id: x.id || null, name: x.name, einheit: x.unitName || "" } : null; };
 async function lexStatus(db: any) {
-  try { const k = await lexKunden(db); let artikel = null; try { artikel = await lexArtikel(); } catch (_) { /* ohne Artikel-Recht: Position ohne Verknüpfung */ }
-    return { ok: true, ...k, artikel }; }
+  try { const k = await lexKunden(db); let a: any = { artikel: null, artikelAlle: [] }, artikelFehler = "";
+    try { a = await lexArtikel(db); } catch (e: any) { artikelFehler = e.message || String(e); }
+    if (!a.artikel) { for (const c of [k.de, k.lu]) { if (!c || a.artikel) continue; try { const v = ausVorlage(await lexVorlage(c.id)); if (v) a.artikel = { ...v, ausRechnung: true }; } catch (_) { /* weiter */ } } }
+    return { ok: true, ...k, ...a, artikelFehler }; }
   catch (e: any) { return { ok: false, code: e.code || "", fehler: e.message || String(e) }; }
 }
 async function lexVorlage(kontaktId: string) {
@@ -927,11 +939,11 @@ async function lexRechnung(db: any, fid: string) {
     const satz = vorlage.lineItems?.find((x: any) => x.unitPrice)?.unitPrice?.taxRatePercentage ?? 19;
     const o = (await getDoc(db, "auftraege", f.auftragId || fid)) || {};
     // Eine Position „Bauleistung Meta“ (Dienstleistung aus Lexware) über die ganze Summe, darunter Auftrag bzw. Reklamation und Ort
-    const art = await lexArtikel().catch(() => null);
+    const art: any = (await lexArtikel(db).then((x) => x.artikel).catch(() => null)) || ausVorlage(vorlage);
     const text = rechnungsZeile(f, o);
     const zeile = (mitArtikel: boolean) => [{ type: mitArtikel ? "service" : "custom", ...(mitArtikel ? { id: art!.id } : {}), name: art?.name || "Bauleistung Meta", description: text.slice(0, 2000),
       quantity: 1, unitName: art?.einheit || "pauschal", unitPrice: { currency: "EUR", netAmount: Math.round(Number(f.summe) * 100) / 100, taxRatePercentage: satz } }];
-    let zeilen = zeile(!!art);
+    let zeilen = zeile(!!art?.id);
     const tag = (t: number) => new Date(t).toISOString().replace("Z", "+00:00");
     const body: any = {
       voucherDate: tag(Date.now()),
@@ -947,7 +959,7 @@ async function lexRechnung(db: any, fid: string) {
     if (vorlage.remark) body.remark = vorlage.remark;
     let r: any;
     try { r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) }); }
-    catch (e: any) { if (!art || e.code !== "lex_fehler") throw e; body.lineItems = zeilen = zeile(false); r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) }); } // Verknüpfung mit dem Artikel abgelehnt → gleiche Position ohne Verknüpfung
+    catch (e: any) { if (!art?.id || e.code !== "lex_fehler") throw e; body.lineItems = zeilen = zeile(false); r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) }); } // Verknüpfung mit dem Artikel abgelehnt → gleiche Position ohne Verknüpfung
     await updDoc(db, "finanzen", fid, { lexId: r.id, lexAm: Date.now(), lexKunde: kontakt.name, kunde, rechnungStatus: f.rechnungStatus === "offen" ? "freigegeben" : f.rechnungStatus });
     return { ok: true, id: r.id, link: LEX_LINK + r.id, kunde: kontakt.name, positionen: zeilen.length, text };
   } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
