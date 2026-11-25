@@ -530,6 +530,41 @@ table.abr tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var(--in
 nav.bottom{transition:transform .28s ease,opacity .28s ease}
 body.nav-weg nav.bottom{transform:translateY(calc(100% + 20px));opacity:0;pointer-events:none}
 
+
+/* ===== Aufgeräumt: Menü-Knopf statt Fußleiste, „Zu tun“ als Reiter rechts ===== */
+nav.bottom{left:auto!important;right:0!important;padding:0 16px calc(16px + env(safe-area-inset-bottom))!important}
+.dock-fab{pointer-events:auto;position:relative;width:58px;height:58px;border-radius:50%;border:1px solid rgba(16,24,40,.06);background:rgba(255,255,255,.92);-webkit-backdrop-filter:saturate(180%) blur(18px);backdrop-filter:saturate(180%) blur(18px);box-shadow:0 10px 30px rgba(16,24,40,.18),0 2px 6px rgba(16,24,40,.08);color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s}
+.dock-fab:active{transform:scale(.93)}
+.dock-fab .ic{width:24px;height:24px;margin:0;stroke-width:2.1}
+.dock-fab .badge{position:absolute;top:2px;right:2px;box-shadow:0 0 0 2px #fff}
+body.menu-auf .dock-fab{background:var(--ink);color:#fff}
+.dock-menu{pointer-events:auto;position:absolute;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));min-width:230px;background:var(--card,#fff);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 44px rgba(16,24,40,.22);padding:6px;display:flex;flex-direction:column;gap:2px;opacity:0;transform:translateY(10px) scale(.97);transform-origin:bottom right;visibility:hidden;transition:opacity .16s,transform .16s,visibility .16s}
+body.menu-auf .dock-menu{opacity:1;transform:none;visibility:visible}
+nav.bottom .dock-menu a{flex:none;flex-direction:row;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;color:var(--ink);text-decoration:none;font-weight:650;font-size:15px;max-width:none}
+nav.bottom .dock-menu a:active{background:var(--greybg);transform:none}
+nav.bottom .dock-menu a.on{background:var(--infobg);color:var(--brand)}
+nav.bottom .dock-menu .badge{position:static;box-shadow:none}
+.dm-ic{display:flex;width:24px;justify-content:center}.dm-ic .ic{width:21px;height:21px;margin:0}
+.dm-l{flex:1;text-align:left}
+.dock-schleier,.tun-schleier{position:fixed;inset:0;z-index:-1;display:none;background:rgba(16,24,40,.18)}
+body.menu-auf .dock-schleier{display:block;pointer-events:auto}
+body.menu-auf nav.bottom{z-index:70}
+main{padding-bottom:calc(92px + env(safe-area-inset-bottom))!important}
+.toast{bottom:calc(92px + env(safe-area-inset-bottom))!important}
+.tun-dock{position:fixed;right:0;top:calc(50% - 30px);z-index:45;width:42px;height:60px;border:1px solid var(--line);border-right:0;border-radius:14px 0 0 14px;background:var(--card,#fff);box-shadow:-4px 6px 18px rgba(16,24,40,.14);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--ink);padding:0;-webkit-tap-highlight-color:transparent}
+.tun-dock .ic{width:19px;height:19px;margin:0}
+.tun-dock.bad{border-left:4px solid var(--bad)}.tun-dock.warn{border-left:4px solid var(--accent)}.tun-dock.info,.tun-dock.msg{border-left:4px solid var(--info)}.tun-dock.ok{border-left:4px solid var(--ok)}
+.tun-dock.aktiv{background:var(--ink);color:#fff}
+.tun-schleier{z-index:46}
+body.tun-auf .tun-schleier{display:block}
+.tun-panel{position:fixed;right:10px;top:calc(50% - 30px);transform:translateY(-30%);z-index:47;width:min(320px,calc(100vw - 20px));max-height:70vh;overflow:auto;background:var(--card,#fff);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 44px rgba(16,24,40,.24);padding:8px;display:none}
+body.tun-auf .tun-panel{display:block}
+body.tun-auf .tun-dock{display:none}
+.tun-kopf{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 6px 8px}
+.tun-panel .tun{flex-direction:column;flex-wrap:nowrap;overflow:visible;margin:0;padding:0;gap:4px}
+.tun-panel .tun-p{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:10px 10px 10px 12px;border-radius:12px;font-size:14px;white-space:normal}
+.tp-t{flex:1;min-width:0;display:flex;flex-direction:column}.tp-t small{font-weight:500;color:var(--mute);font-size:12px;margin-top:1px}
+body.nav-aus .tun-dock{display:none}
 /* ===== Serie wählen ===== */
 .serie-w{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
 .serie-k{border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:10px 12px;text-align:left;cursor:pointer;color:var(--ink)}
@@ -567,7 +602,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="614635a9992e";</script>
+<script>window.JD_BUILD="e9ffbb1a0fad";</script>
 </head>
 <body>
 <header class="top">
@@ -587,6 +622,8 @@ const ICONS={
   check:'<path d="M20 6 9 17l-5-5"/>',
   mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
   x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  menu:'<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
+  pin:'<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
   xcircle:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
   alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
@@ -1330,7 +1367,13 @@ function renderNav(){
   { const oE=r==="detail"?S.orders[route().id]:null;
     const imEinsatz=!!oE && !istFertig(oE) && phase(oE)==="arbeit" && !!(oE.einsatz?.abfahrtAm||(oE.zeiten||[]).length) && can.einsatz();
     document.body.classList.toggle("nav-aus",imEinsatz); }
-  $("#nav").innerHTML=`<div class="nav-in">${iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}" aria-label="${esc(l)}${n?`, ${n} offen`:""}"><span class="nav-ic">${ic}${n?badge(n):""}</span><span class="nav-l">${l}</span></a>`).join(""))}</div>`;
+  // Menü-Knopf unten rechts: zeigt das aktuelle Symbol und die Summe offener Punkte; antippen klappt alle Bereiche auf
+  const akt=items.find(([h])=>r===h||(r==="detail"&&h==="auftraege"))||items[0], summe=items.reduce((a,x)=>a+(x[3]||0),0);
+  $("#nav").innerHTML=iconize(`<div class="dock-schleier" data-dock-zu></div>
+   <div class="dock-menu" role="menu">${items.map(([h,ic,l,n])=>`<a href="#${h}" role="menuitem" class="${akt[0]===h?"on":""}"><span class="dm-ic">${ic}</span><span class="dm-l">${l==="Reklam."?"Reklamationen":esc(l)}</span>${n?badge(n):""}</a>`).join("")}</div>
+   <button type="button" class="dock-fab" id="dockFab" aria-label="Menü öffnen${summe?`, ${summe} offen`:""}"><span class="df-ic">${ic("menu")}</span>${summe?badge(summe):""}</button>`);
+  $("#dockFab").onclick=()=>document.body.classList.toggle("menu-auf");
+  $("#nav").querySelectorAll("[data-dock-zu], .dock-menu a").forEach(x=>x.addEventListener("click",()=>document.body.classList.remove("menu-auf")));
 }
 
 function render(scrollTop){
@@ -1550,6 +1593,15 @@ function kalender(list){
   if(!list.length) h+=`<div class="empty">Keine terminierten Aufträge.</div>`;
   return h;
 }
+// „Zu tun“ als kleiner Reiter am rechten Rand: antippen klappt die Liste auf (Prüfen, Überfällig, Ohne Team …)
+function tunDock(tun){
+  if(!tun.length) return "";
+  const summe=tun.reduce((a,[,n])=>a+n,0), farbe=["bad","warn","msg","info","ok"].find(c=>tun.some(([k])=>SPEZIAL[k].cls===c))||"info";
+  return `<button type="button" class="tun-dock ${farbe} ${SPEZIAL[S.filter]?"aktiv":""}" id="tunDock" aria-label="Zu tun, ${summe} offen">${ic("pin")}${badge(summe)}</button>
+   <div class="tun-schleier" data-tun-zu></div>
+   <div class="tun-panel" aria-label="Zu tun"><div class="tun-kopf"><b>Zu tun</b><button type="button" class="btn sm ghost" data-tun-zu>✕</button></div>
+    <div class="tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}"><span class="tp-t"><b>${SPEZIAL[k].p(n)}</b>${SPEZIAL[k].t!==SPEZIAL[k].p(n)?`<small>${esc(SPEZIAL[k].t)}</small>`:""}</span>${badge(n)}</button>`).join("")}</div></div>`;
+}
 function viewListe(){
   const erlaubt=meinePhasen().map(([k])=>k), spez=SPEZIAL[S.filter];
   if(!spez && S.filter!=="storniert" && !erlaubt.includes(S.filter)) S.filter=erlaubt.includes("arbeit")&&!can.planen()?"arbeit":erlaubt[0];
@@ -1567,7 +1619,7 @@ function viewListe(){
   list=list.filter(imBereich);
   const tun=zuTun();
   let h=`${fahrtLeiste()}<div class="toolbar">${suchFeld("Suchen: Nummer, Bauvorhaben, Ort")}${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>${umsatzStreifen()}
-  ${tun.length?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}${badge(n)}</button>`).join("")}</div>`:""}
+  ${tunDock(tun)}
   <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
     ${can.sub()?"":`<button class="fp ${S.nurMeine?"on":""}" id="nurMeine">👷 Meine</button>`}
@@ -4759,6 +4811,8 @@ function bind(r){
     qt.onclick=()=>{ const text=suchTasten()!=="text"; try{ localStorage.setItem("jdSucheTasten",text?"text":"zahl"); }catch(e){}
       q.setAttribute("inputmode",text?"search":"numeric"); text?q.removeAttribute("pattern"):q.setAttribute("pattern","[0-9]*"); qt.textContent=text?"123":"ABC";
       q.blur(); q.focus(); }; }
+  $("#tunDock") && ($("#tunDock").onclick=()=>document.body.classList.toggle("tun-auf"));
+  app.querySelectorAll("[data-tun-zu], .tun-panel [data-f]").forEach(x=>x.addEventListener("click",()=>document.body.classList.remove("tun-auf")));
   app.querySelectorAll("#flt [data-f], .fzeile [data-f], .tun [data-f], .spez-kopf [data-f]").forEach(b=>b.onclick=()=>{
     const f=b.dataset.f, normal=HAUPT_PHASEN.some(([k])=>k===f);
     if(f==="zurueck" || (S.filter===f && !normal)) S.filter=S.letzterBereich||meinePhasen()[0][0];
@@ -5610,7 +5664,7 @@ $("#aktualisieren").onclick=jetztAktualisieren;
     if(y<40 || window.innerHeight+y>=document.body.scrollHeight-4) setze(false); },{passive:true});
   document.addEventListener("focusin",e=>{ if(e.target.matches?.("input,textarea,select")) setze(true); });
   document.addEventListener("focusout",()=>setTimeout(()=>{ if(!document.activeElement?.matches?.("input,textarea,select")) setze(false); },120));
-  window.addEventListener("hashchange",()=>setze(false)); }
+  window.addEventListener("hashchange",()=>{ setze(false); document.body.classList.remove("menu-auf","tun-auf"); }); }
 setTimeout(versionPruefen,8000); setInterval(versionPruefen,10*60000);
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ versionPruefen(); setTimeout(ankunftPruefen,800); } });
 setInterval(()=>{ if(S.user&&document.visibilityState==="visible") ankunftPruefen(); },45000);
