@@ -616,7 +616,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="5b9722d6b8f8";</script>
+<script>window.JD_BUILD="580cc55959cc";</script>
 </head>
 <body>
 <header class="top">
@@ -5729,35 +5729,13 @@ function pushDialog(){
 }
 
 /* ============ Bericht senden ============ */
+// Mail an meta: kurz – Gruß, Auftragsnummer, Anschrift, ein Satz. Alles Weitere steht im Montagebericht im Anhang.
 function berichtText(o){
-  const b=o.bericht||{}; const typ=o.berichtTyp||o.abschluss?.typ||"ok";
-  const lf=(o.leerfahrten||[]).slice(-1)[0];
-  const rk=Object.values(S.reklas).filter(r=>r.auftragId===o.id).sort((a,c)=>c.am-a.am)[0];
-  const tage=[...new Set((o.zeiten||[]).map(z=>new Date(z.s).toLocaleDateString("de-DE")))].join(", ");
-  const L=[];
-  L.push("Guten Tag,","");
-  if(typ==="leerfahrt") L.push(`Auftrag ${o.nr} (${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}): Leerfahrt – die Baustelle war nicht montagefertig, eine Montage war nicht möglich.`);
-  else if(typ==="rekla") L.push(`Auftrag ${o.nr} (${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}): Montage abgeschlossen, es gibt eine Reklamation (siehe unten).`);
-  else L.push(`Auftrag ${o.nr} (${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}): Baustelle erfolgreich abgeschlossen.`);
-  L.push("","Montagebericht:");
-  if(typ==="leerfahrt"&&lf){ L.push(`- Status: ${lf.status||"Leerfahrt"}`,`- Datum: ${new Date(lf.am).toLocaleDateString("de-DE")}`,lf.fahrzeug?`- Fahrzeug: ${fahrzeugText(lf)}${mitAnhaenger(lf)?" – Bitte beachten: Anhängerfahrt":""}`:null,`- Selbst gefahrene km: ${lf.km||"-"}`,`- Personen vor Ort: ${lf.personen||"-"}`,lf.personenMit?`- Mitgefahren: ${lf.personenMit}`:null,`- Zeit: ${Math.floor(lf.minuten/60)} Std ${lf.minuten%60} Min`,`- Grund: ${lf.grund}`,lf.schreibenAm?`- Schreiben an den Kunden gesendet am ${new Date(lf.schreibenAm).toLocaleDateString("de-DE")}${lf.schreibenAn?" an "+lf.schreibenAn:""}`:null); }
-  else {
-    const uebern=naechteText(b)||"-";
-    if(istReklaAuftrag(o) && arbeitszeitMin(o)>0) L.push(`- Reklamation – Arbeitszeit: ${fmtHMin(arbeitszeitMin(o))} Std.${b.personen?` × ${b.personen} Personen`:""}`);
-    L.push(`- Montagetag(e): ${tage||"-"}`,`- Personen vor Ort: ${b.personen||"-"}`,`- Selbst gefahrene km: ${leer(b.istKm)?"-":b.istKm}`,hotelKm(o)?`- Hotelfahrten (Baustelle ↔ Hotel): ${hotelText(o)}`:null,o.einsatz?.fahrzeug?`- Fahrzeug: ${fahrzeugText(o.einsatz)}${mitAnhaenger(o.einsatz)?" – Bitte beachten: Anhängerfahrt":""}`:null,(istReklaAuftrag(o)&&!b.geschosse?null:`- Geschosse (Material getragen): ${b.geschosse||"-"}`),`- Übernachtungen: ${uebern}`);
-    const tot=summeMengen(o); const pos=Object.entries(tot).filter(([k])=>k!=="stunden").map(([k,v])=>`${fmtZahl(v)}× ${(S.lohnPos.find(p=>p.k===k)||{}).label||k}`);
-    if(pos.length) L.push(`- Positionen:`,...pos.map(x=>`   • ${x.replace("× "," × ")}`));
-    if(b.taetigkeit) L.push(`- Ausgeführt: ${b.taetigkeit}`);
-    sonderFertig(b).forEach(s=>L.push(`- ${istReklaAuftrag(o)?"Zusatzarbeit":"Sonderarbeit"}: ${sonderZeile(s)}`));
-    if(b.bemerkung) L.push(`- Bemerkungen: ${b.bemerkung}`);
-    vorleistungZeilen(o).forEach(z=>L.push(`- ${z}`));
-    if(o.unterschrift) L.push(`- Sichtabnahme unterschrieben von: ${o.unterschrift.name||vd(o).abnahmeName||"-"}${vd(o).firma?` (${vd(o).firma})`:""} am ${new Date(o.unterschrift.am).toLocaleDateString("de-DE")}`);
-    else if(o.abnahmePapier) L.push(`- Sichtabnahme: auf Papier unterschrieben`);
-    else L.push(`- Sichtabnahme: steht noch aus`);
-  }
-  if((typ==="rekla"||typ==="leerfahrt") && rk){ L.push("","Reklamation:",`- Ursache: ${URSACHEN[rk.ursache]||rk.ursache}`,`- Beschreibung: ${rk.text}`); }
-  L.push("",typ==="leerfahrt"?"Montagebericht im Anhang.":abnahmeOk(o)?"Montagebericht und Sichtabnahmebescheinigung im Anhang.":"Montagebericht im Anhang. Die Sichtabnahme reichen wir nach.","","Mit freundlichen Grüßen","JD Brüder");
-  return L.filter(x=>x!==null).join("\n");
+  const typ=o.berichtTyp||o.abschluss?.typ||"ok";
+  const anschrift=o.adresse||[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ");
+  const satz=typ==="leerfahrt"?"Die Baustelle war nicht montagefertig, es war eine Leerfahrt – siehe Anhänge."
+    :istReklaAuftrag(o)?"Die Reklamation ist erledigt, siehe Anhänge.":"Die Montage ist erfolgt, siehe Anhänge.";
+  return ["Guten Tag,","",`Auftrag ${o.nr}`,anschrift||null,"",satz,"","Mit freundlichen Grüßen","JD Brüder"].filter(x=>x!==null).join(String.fromCharCode(10));
 }
 async function blobToB64(blob){ return await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
 // Gemeinsamer Auftrag: Anteile der Subs, die noch nicht kontrolliert sind
