@@ -2224,9 +2224,9 @@ function abschlussStand(o,f,reklas){
   else if(o.bestaetigtAm) z+=zeile(chef?"warn":"ok",chef?`${titel} bestätigt – noch an meta senden`:`${titel} bestätigt`,fmtDT(o.bestaetigtAm));
   else if(o.berichtStatus) z+=zeile("warn",chef?`${titel} noch an meta senden`:`${titel} fertig – wartet auf Versand`);
   if(o.abschluss && o.berichtTyp!=="leerfahrt"){ const ab=abnahmeStatus(o);
-    z+=ab==="ok"?zeile("ok","Sichtabnahme unterschrieben",o.unterschrift?`${esc(o.unterschrift.name||"")} · ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?"hochgeladen":"auf Papier")
+    z+=ab==="ok"?zeile("ok",o.abnahmeDatei?.art==="foto"&&!o.unterschrift?"Sichtabnahme erfolgt (Foto)":"Sichtabnahme unterschrieben",o.unterschrift?`${esc(o.unterschrift.name||"")} · ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?`${o.abnahmeDatei.art==="foto"?"":abnFotoText(o)+" · "}${fmtDT(o.abnahmeDatei.am)}${o.abnahmeDatei.von?" · "+esc(nameOf(o.abnahmeDatei.von)):""}`:"auf Papier")
       :ab==="versendet"?zeile("warn","Sichtabnahme beim Kunden – wartet",`Frist bis ${new Date(o.abnahmeAnfrage.frist).toLocaleDateString("de-DE")}`)
-      :ab==="verzicht"?zeile("ok","Sichtabnahme nicht angefordert"):`<button type="button" class="ab-z ab-btn ${abnahmeFaellig(o)?"bad":"warn"}" data-zur-abnahme><span class="ab-i">${abnahmeFaellig(o)?"!":"•"}</span><div style="flex:1;min-width:0;text-align:left"><b>Sichtabnahme fehlt</b><div class="small mute">antippen: unterschreiben, anfordern oder Foto hochladen</div></div><span class="ab-pfeil">›</span></button>`; }
+      :ab==="verzicht"?zeile("ok","Sichtabnahme nicht angefordert"):`<button type="button" class="ab-z ab-btn ${abnahmeFaellig(o)?"bad":"warn"}" data-zur-abnahme><span class="ab-i">${abnahmeFaellig(o)?"!":"•"}</span><div style="flex:1;min-width:0;text-align:left"><b>Sichtabnahme fehlt</b><div class="small mute">antippen: Foto machen, unterschreiben oder anfordern</div></div><span class="ab-pfeil">›</span></button>`; }
   const off=reklas.filter(r=>r.offen).length; if(reklas.length) z+=zeile(off?"warn":"ok",off?`${off} Reklamation${off>1?"en":""} offen`:"Reklamationen erledigt");
   z+=abgerechnet(o)?zeile("ok","Vergütung von meta erhalten",[o.abgerechnetMit?"Abrechnung "+esc(o.abgerechnetMit):"",can.finanzen()&&f?fmtEUR(f.summe):""].filter(Boolean).join(" · ")):zeile("warn","Vergütung von meta steht noch aus");
   const ae=o.aenderung;
@@ -2556,14 +2556,17 @@ function einsatzCard(o,fk){
     const af=b.abnahmeFrage, ok=abnahmeOk(o);
     h+=`<div class="q">Sichtabnahme erfolgt?</div>
      <div class="grid2"><button class="btn ${af==="ja"?"ok":""}" data-abf="ja" style="min-height:56px;font-size:16px">✓ Ja</button><button class="btn ${af==="nein"?"on":""}" data-abf="nein" style="min-height:56px;font-size:16px">✕ Nein</button></div>
-     ${af?`${ok?`<div class="banner ok small" style="margin:12px 0 0">✓ Sichtabnahme liegt vor${o.unterschrift?` – unterschrieben von <b>${esc(o.unterschrift.name||"")}</b>, ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?" – auf Papier":""}</div>`:""}
+     ${af?`${ok?`<div class="banner ok small" style="margin:12px 0 0">✓ Sichtabnahme liegt vor${o.unterschrift?` – unterschrieben von <b>${esc(o.unterschrift.name||"")}</b>, ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?` – ${abnFotoText(o)}`:o.abnahmePapier?" – auf Papier":""}</div>${o.abnahmeDatei&&!o.unterschrift?abnFotoVorschau(o):""}`:""}
+      ${af==="ja"&&!ok?`<div class="grid2" style="margin-top:12px">
+       <button class="btn pri" id="abfSign" style="min-height:66px;flex-direction:column;gap:2px">✍️ Unterschreiben<span class="small" style="font-weight:500;opacity:.85">vor Ort am Handy</span></button>
+       ${S.assets?`<label class="btn pri" style="min-height:66px;flex-direction:column;gap:2px;cursor:pointer">📷 Foto machen<span class="small" style="font-weight:500;opacity:.85">statt Unterschrift</span><input type="file" accept="image/*" capture="environment" hidden data-abn-foto></label>`:""}</div>`:""}
       <div class="grid2" style="margin-top:12px">
-       <button class="btn ${af==="ja"&&!ok?"pri":""}" id="abfSign" style="min-height:66px;flex-direction:column;gap:2px">✍️ Unterschreiben<span class="small" style="font-weight:500;opacity:.85">${ok&&o.unterschrift?"neu unterschreiben":"vor Ort am Handy"}</span></button>
-       <button class="btn ${af==="nein"||ok?"ok":""}" id="abfSend" style="min-height:66px;flex-direction:column;gap:2px">${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?"✓ Mein Bericht fertig":"✉️ Versenden"}<span class="small" style="font-weight:500;opacity:.85">${ok?"Bericht + Sichtabnahme":"Bericht ohne Sichtabnahme"}</span></button></div>
+       ${af==="ja"&&!ok?"":`<button class="btn" id="abfSign" style="min-height:66px;flex-direction:column;gap:2px">✍️ Unterschreiben<span class="small" style="font-weight:500;opacity:.85">${ok&&o.unterschrift?"neu unterschreiben":"vor Ort am Handy"}</span></button>`}
+       <button class="btn ${af==="nein"||ok?"ok":""}" id="abfSend" style="min-height:66px;flex-direction:column;gap:2px;${af==="ja"&&!ok?"grid-column:1/-1":""}">${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?"✓ Mein Bericht fertig":"✉️ Versenden"}<span class="small" style="font-weight:500;opacity:.85">${ok?"Bericht + Sichtabnahme":"Bericht ohne Sichtabnahme"}</span></button></div>
       ${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?`<div class="small mute" style="margin-top:6px">🔗 Danach oben im Auftrag: Bericht von ${subsVon(o).filter(u=>subNurAnteil(o,u)).map(u=>esc(nameOf(u))).join(", ")} und deinen prüfen, beide „korrekt“ – dann geht der zusammengefügte Bericht an meta.${offeneKontrollen(o).length?` <b style="color:var(--warn)">Noch nicht kontrolliert: ${offeneKontrollen(o).map(u=>esc(nameOf(u))).join(", ")}.</b>`:""}</div>`:""}
-      <div class="small mute" style="margin-top:8px">${ok?"Der Montagebericht geht mit der Sichtabnahme per Mail raus.":"Der Montagebericht geht ohne Sichtabnahme per Mail raus. Wird die Sichtabnahme später unterschrieben, kommt sie dazu."}${can.planen()?"":" Vorher prüft JD Brüder den Bericht."}</div>
+      <div class="small mute" style="margin-top:8px">${ok?"Der Montagebericht geht mit der Sichtabnahme per Mail raus.":"Ohne Unterschrift oder Foto geht der Montagebericht ohne Sichtabnahme raus. Kommt sie später, wird sie nachgereicht."}${can.planen()?"":" Vorher prüft JD Brüder den Bericht."}</div>
       ${af==="nein"&&can.planen()&&can.mails()&&!ok&&!o.abnahmeAnfrage?`<button class="btn ghost block sm" id="reqAbn" style="margin-top:8px">👁 Sichtabnahme per Mail an den Kunden senden</button>`:""}
-      ${af==="ja"&&!ok?`<details class="fold" style="margin-top:10px"><summary><span class="small">📄 Auf Papier unterschrieben? Foto hochladen</span></summary><div class="foldin">${abnahmeTeil(o,fk)}</div></details>`:""}`:""}`;
+`:""}`;
   } else {
     h+=`${istFertig(o)?`<div class="banner ${o.abschluss.typ==="ok"?"ok":"warn"}">Abgeschlossen am ${fmtDT(o.abschluss.am)} von ${esc(nameOf(o.abschluss.by))}${o.abschluss.typ==="rekla"?" – mit Reklamation":""}. ${can.planen()&&!berichtGesperrt(o)?`<button class="btn sm ghost" id="reopen" style="margin-left:6px">Wieder öffnen</button>`:""}</div>`:`<div class="banner ok">✓ Montage beendet${e.fertigAm?" am "+fmtDT(e.fertigAm):""}. Jetzt den Montagebericht ausfüllen.</div>`}
      <div class="row between"><div><div class="small mute">Arbeitszeit <span class="small">(nur intern, nicht im Bericht)</span></div><div class="timer" style="font-size:26px">${fmtDur(totalMs(o))}</div></div>${istFertig(o)?"":`<button class="btn pri" id="toBericht">📝 Montagebericht</button>`}</div>
@@ -2981,9 +2984,11 @@ function uebernachtungTeil(o,schritt){
    </div>`:""}`;
 }
 function abnahmeTeil(o,fk){
-  const art=o.bericht?.abnahmeArt||(o.unterschrift?"handy":o.abnahmePapier?"papier":"");
+  const art=o.bericht?.abnahmeArt||(o.unterschrift?"handy":o.abnahmeDatei?.art==="foto"?"foto":o.abnahmePapier?"papier":"");
   let h=`<div class="card" id="abnahmeTeil"><h3>Sichtabnahme</h3>
-   <div class="seg" id="abnArt"><button data-aa="papier" class="${art==="papier"?"on":""}">📄 Papierbericht</button><button data-aa="handy" class="${art==="handy"?"on":""}">✍️ Unterschrift am Handy</button></div>`;
+   <div class="seg" id="abnArt"><button data-aa="papier" class="${art==="papier"?"on":""}">📄 Papierbericht</button><button data-aa="handy" class="${art==="handy"?"on":""}">✍️ Unterschrift am Handy</button><button data-aa="foto" class="${art==="foto"?"on":""}">📷 Foto</button></div>`;
+  if(art==="foto") h+=o.abnahmeDatei?`<div class="small" style="margin-top:10px">✓ Sichtabnahme ${abnFotoText(o)} · ${fmtDT(o.abnahmeDatei.am)}</div>${abnFotoVorschau(o)}<div style="margin-top:8px">${abnFotoKnopf("sm ghost","📷 Neues Foto")}</div>`
+    :`<div style="margin-top:10px">${abnFotoKnopf("pri block","📷 Foto der Sichtabnahme machen")}</div><div class="small mute" style="margin-top:6px">Ein Foto genügt – keine Unterschrift nötig.</div>`;
   if(art==="papier") h+=`<label class="f">Foto vom unterschriebenen Papierbericht</label>${thumbs(fk("vordruck"),"vordruck",true)}
     <label class="row" style="flex-wrap:nowrap;gap:10px;padding:10px 0 0;cursor:pointer"><input type="checkbox" id="abnPapier" ${o.abnahmePapier?"checked":""} style="width:24px;height:24px"><span>Der Papierbericht ist unterschrieben</span></label>`;
   if(art==="handy"){
@@ -3578,6 +3583,10 @@ function zeigeVorschlag(m,o,r,text,close){
 
 /* ---------- Sichtabnahme-Pflicht ---------- */
 function abnahmeOk(o){ return !!(o.unterschrift||o.abnahmeDatei||o.abnahmePapier); }
+// Sichtabnahme per Foto: ein Foto genügt, keine Unterschrift nötig
+const abnFotoKnopf=(cls="",text="📷 Foto der Sichtabnahme")=>S.assets?`<label class="btn ${cls}" style="cursor:pointer">${text}<input type="file" accept="image/*" capture="environment" hidden data-abn-foto></label>`:"";
+const abnFotoText=o=>o.abnahmeDatei?.art==="foto"?"per Foto":"hochgeladen";
+const abnFotoVorschau=o=>o.abnahmeDatei&&/^image/.test(o.abnahmeDatei.typ||"")?`<div class="thumbs" style="margin-top:8px"><div class="t" data-zoom="/_blob/${esc(o.abnahmeDatei.assetId)}"><img src="/_blob/${esc(o.abnahmeDatei.assetId)}" alt="Sichtabnahme"></div></div>`:"";
 const TAG=86400000;
 function abnahmeStatus(o){
   if(abnahmeOk(o)) return "ok";
@@ -3601,14 +3610,14 @@ function abnahmeCard(o){
   const tage=o.abschluss?Math.floor((Date.now()-o.abschluss.am)/TAG):0;
   let h=`<div class="card" style="border-left:5px solid var(--${c==="ok"?"ok":c==="warn"?"accent":c==="bad"?"bad":"line"})"><h3>Sichtabnahme</h3>
    <div class="row between"><b style="font-size:16px">${ic} ${l}</b></div>`;
-  if(st==="ok") h+=`<div class="small mute" style="margin-top:4px">${o.unterschrift?`Unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?`Unterschriebene Sichtabnahme hochgeladen am ${fmtDT(o.abnahmeDatei.am)} – <a href="/_blob/${esc(o.abnahmeDatei.assetId)}" target="_blank" rel="noopener">ansehen</a>`:"Auf Papier erledigt"}</div>`;
+  if(st==="ok") h+=`<div class="small mute" style="margin-top:4px">${o.unterschrift?`Unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?`Sichtabnahme ${abnFotoText(o)} am ${fmtDT(o.abnahmeDatei.am)}${o.abnahmeDatei.von?" von "+esc(nameOf(o.abnahmeDatei.von)):""}${abnFotoVorschau(o)}`:"Auf Papier erledigt"}</div>`;
   if(st==="versendet") h+=`<div class="small" style="margin-top:4px">Gesendet am ${fmtDT(a.am)} an ${esc(a.an)} · Frist bis <b>${new Date(a.frist).toLocaleDateString("de-DE")}</b></div>`;
   if(st==="verzicht") h+=`<div class="small mute" style="margin-top:4px">Ihr habt entschieden, die Sichtabnahme nicht an den Kunden zu schicken.</div>`;
   if(abnahmeFaellig(o) && o.berichtGesendetAm && st!=="versendet") h+=`<div class="banner bad" style="margin:10px 0 0">⏰ Der Bericht ging am ${fmtDT(o.berichtGesendetAm)} raus – seitdem liegt keine Sichtabnahme vor. Bitte beim Kunden nachhaken oder die Sichtabnahme anfordern.</div>`;
   else if(abnahmeFaellig(o)) h+=`<div class="banner bad" style="margin:10px 0 0">⏰ ${st==="offen"?`Seit ${tage} Tagen keine Sichtabnahme. Bitte den Kunden informieren: Sichtabnahme prüfen und entscheiden, ob sie an das Bauvorhaben geschickt wird.`:"Frist abgelaufen – beim Kunden nachhaken oder erneut senden."}</div>`;
   if(st!=="ok"){
     h+=`<div style="display:grid;gap:8px;margin-top:12px">
-     ${can.einsatz()?`<button class="btn block" id="signNow">✍️ Jetzt am Handy unterschreiben lassen</button>`:""}
+     ${can.einsatz()?`<div class="grid2"><button class="btn" id="signNow">✍️ Unterschreiben lassen</button>${abnFotoKnopf("","📷 Foto machen")}</div><div class="small mute">Ein Foto genügt – dann ist die Sichtabnahme erfolgt, ohne Unterschrift.</div>`:""}
      ${can.planen()&&can.mails()?`<button class="btn ${abnahmeFaellig(o)?"warn":"ghost"} block" id="reqAbn">👁 Sichtabnahme prüfen &amp; an Kunden senden</button>`:""}
      ${can.planen()&&st==="offen"?`<button class="btn ghost block" id="noAbn">Nicht an Kunden senden</button>`:""}
      ${can.planen()&&S.assets?`<label class="btn ghost block">📎 Unterschriebene Sichtabnahme hochladen<input type="file" accept="image/*,application/pdf" hidden id="abnUp"></label>`:""}
@@ -3784,7 +3793,7 @@ function vordruckCard(o){
    <label class="f">Mängel festgestellt?</label><select class="i" data-vd="maengelJa" ${ed?"":"disabled"}><option value="nein" ${v.maengelJa!=="ja"?"selected":""}>Nein, keine Mängel</option><option value="ja" ${v.maengelJa==="ja"?"selected":""}>Ja</option></select>
    ${v.maengelJa==="ja"?`<label class="f">Welche Mängel?</label>${ta("maengel","Mängel beschreiben …")}`:""}
    <div class="grid2"><div><label class="f">Sichtabnahme durch (Firma)</label>${inp("firma")}</div><div><label class="f">Name in Druckbuchstaben</label>${inp("abnahmeName")}</div></div>
-   <div class="small ${o.unterschrift?"":"mute"}" style="margin-top:8px">${o.unterschrift?"✓ Unterschrift vorhanden – wird eingesetzt":o.abnahmeDatei?"✓ Unterschriebene Sichtabnahme vom Bauleiter liegt vor":"Unterschrift fehlt noch – am Handy unterschreiben lassen oder unten bei „Bericht an meta“ per Mail anfordern."}</div>
+   <div class="small ${o.unterschrift?"":"mute"}" style="margin-top:8px">${o.unterschrift?"✓ Unterschrift vorhanden – wird eingesetzt":o.abnahmeDatei?(o.abnahmeDatei.art==="foto"?"✓ Sichtabnahme per Foto – das Foto kommt mit in den Bericht":"✓ Unterschriebene Sichtabnahme vom Bauleiter liegt vor"):"Unterschrift fehlt noch – am Handy unterschreiben lassen oder unten bei „Bericht an meta“ per Mail anfordern."}</div>
    ${o.vordruck?`<button class="btn sm ghost" id="vdReset" style="margin-top:8px">Auf automatische Werte zurücksetzen</button>`:""}`);
 }
 function bindVordruck(o){
@@ -5086,6 +5095,11 @@ function bindDetail(id){
   $("#signNow") && ($("#signNow").onclick=()=>signDialog(id));
   $("#reqAbn") && ($("#reqAbn").onclick=()=>abnahmeDialog(id));
   $("#noAbn") && ($("#noAbn").onclick=async()=>{ if(await confirmBox("Nicht an Kunden senden?","Die Sichtabnahme wird nicht an das Bauvorhaben geschickt. Du kannst das später noch ändern.","Ja, nicht senden")) upd(P,{abnahmeKeinVersand:true}); });
+  document.querySelectorAll("[data-abn-foto]").forEach(inp=>inp.onchange=async()=>{ const f=inp.files[0]; if(!f) return;
+    toast("Foto wird gespeichert …");
+    try{ const b=await shrink(f,1600,.7); const a=await S.assets.upload(b); const d={assetId:a.id,typ:b.type,name:f.name||"sichtabnahme.jpg",am:Date.now(),art:"foto",von:myId()};
+      await upd(P,{abnahmeDatei:d,bericht:{abnahmeFrage:"ja",abnahmeArt:"foto"}}); S.orders[id]={...S.orders[id],abnahmeDatei:d}; handySichern(b,id,"sichtabnahme");
+      toast("✓ Sichtabnahme per Foto erfolgt",3000); render(); }catch(e){ toast("Foto konnte nicht gespeichert werden"); } });
   const au=$("#abnUp"); if(au) au.onchange=async()=>{ const f=au.files[0]; if(!f) return; try{ const b=await shrink(f,2000,.85); const a=await S.assets.upload(b); await upd(P,{abnahmeDatei:{assetId:a.id,typ:b.type,name:f.name,am:Date.now()}}); toast("Unterschriebene Sichtabnahme gespeichert ✓"); }catch(e){ toast("Upload fehlgeschlagen"); } };
   $("#readDeck") && ($("#readDeck").onclick=async()=>{
     if(!(S.isOwner&&S.sync)) return deckblattDialog(id);
