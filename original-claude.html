@@ -258,7 +258,7 @@ details.erf-sum[open]{padding-bottom:8px}
 .card.ek{padding:12px 14px}
 .ek-t{font-size:17px;line-height:1.3}.ek-t b{font-size:19px;margin-right:4px}.ek-t span{font-weight:600;color:var(--grey)}
 .card.ek .kopf-akt{margin-top:8px}
-body.nav-aus #nav, body.nav-aus .weiter-k{display:none!important}
+body.nav-aus #nav{display:none!important}
 body.nav-aus main{padding-bottom:calc(24px + env(safe-area-inset-bottom))!important}
 details.mini-f{margin-top:4px}
 details.mini-f>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:650;color:var(--brand2,#2563eb);padding:2px 0}
@@ -271,10 +271,7 @@ details.mini-f .thumbs .t,details.mini-f .thumbs .add{width:64px;height:64px}
 .nw-l{margin-top:10px;display:grid;gap:6px}
 .nw-z{display:flex;gap:8px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:14px}
 .nw-z .thumbs{margin-top:6px}
-.weiter-k{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:var(--ok,#15803d);color:#fff;text-decoration:none;box-shadow:0 0 0 0 rgba(21,128,61,.6),0 8px 24px rgba(0,0,0,.25);animation:weiterGlow 1.8s ease-in-out infinite;max-width:560px;margin:0 auto}
-.weiter-k>span{font-size:22px}.weiter-k>div{flex:1;min-width:0}.weiter-k b{display:block;font-size:15px}.weiter-k small{display:block;font-size:12px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @keyframes weiterGlow{0%,100%{box-shadow:0 0 0 0 rgba(21,128,61,.55),0 8px 24px rgba(0,0,0,.25)}50%{box-shadow:0 0 0 10px rgba(21,128,61,0),0 8px 24px rgba(0,0,0,.25)}}
-body.nav-weg .weiter-k{bottom:calc(16px + env(safe-area-inset-bottom))}
 .bericht-l{background:var(--warnbg);border-radius:12px;padding:8px 12px;margin-bottom:8px;font-size:14px;font-weight:600}
 .bericht-l a{color:var(--ink)}
 .umsatz{display:block;margin:8px 0 2px;text-decoration:none;color:inherit}
@@ -1307,27 +1304,12 @@ function renderNav(){
   if(can.finanzen()) items.push(["geld","💶","Abrechnung", Object.values(S.fin).filter(f=>f.rechnungStatus==="offen").length]);
   items.push(["setup","⚙️","Setup",S.isOwner?Object.keys(S.anfragen).length+Object.values(S.zugang||{}).filter(z=>!z.code).length:0]); // Setup: Konto, Benachrichtigungen, Abmelden (Chef: alle Einstellungen)
   if(can.mitarbeiter()){ const z=items.findIndex(x=>x[0]==="zeit"); if(z>=0){ const zz=items.splice(z,1)[0]; const rest=items.filter(x=>!["auftraege","rekla"].includes(x[0])); items.splice(0,items.length,zz,...rest); } } // Mitarbeiter: Zeit zuerst, ohne Aufträge/Reklamationen
-  setTimeout(weiterKnopf,0);
   { const oE=r==="detail"?S.orders[route().id]:null;
     const imEinsatz=!!oE && !istFertig(oE) && phase(oE)==="arbeit" && !!(oE.einsatz?.abfahrtAm||(oE.zeiten||[]).length) && can.einsatz();
     document.body.classList.toggle("nav-aus",imEinsatz); }
   $("#nav").innerHTML=`<div class="nav-in">${iconize(items.map(([h,ic,l,n])=>`<a href="#${h}" class="${(r===h||(r==="detail"&&h==="auftraege"))?"on":""}" aria-label="${esc(l)}${n?`, ${n} offen`:""}"><span class="nav-ic">${ic}${n?badge(n):""}</span><span class="nav-l">${l}</span></a>`).join(""))}</div>`;
 }
 
-// Weiterfahrt: sobald der Bericht der vorigen Baustelle fertig ist, leuchtet unten „Weiter zu …“
-function weiterZiel(){
-  const r=route();
-  return Object.values(S.orders).find(b=>sichtbar(b)&&!b.storniert&&(b.monteure||[]).includes(myId())&&b.einsatz?.vonAuftrag&&!b.einsatz?.ankunftAm&&schritt(b)==="ankunft"
-    &&istFertig(S.orders[b.einsatz.vonAuftrag]||{})&&!(r.v==="detail"&&r.id===b.id))||null;
-}
-function weiterKnopf(){
-  let el=document.getElementById("weiterK");
-  const b=S.loaded?weiterZiel():null;
-  if(!b){ if(el) el.remove(); return; }
-  if(!el){ el=document.createElement("a"); el.id="weiterK"; document.body.appendChild(el); }
-  el.href="#a-"+b.id; el.className="weiter-k";
-  el.innerHTML=`<span>🚗</span><div><b>Weiter zu ${esc(b.nr)}</b><small>${esc(b.bauvorhaben||adresseOf(b)||"nächste Baustelle")} · Bericht ${esc(S.orders[b.einsatz.vonAuftrag]?.nr||"")} ist fertig ✓</small></div><span>›</span>`;
-}
 function render(scrollTop){
   { const r0=route(); if(r0.v==="detail" && S.orders[r0.id]) alsGelesen(r0.id); }
   renderNav();
