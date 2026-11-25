@@ -3324,7 +3324,7 @@ function nmbDialog(id){
       try{
         const text=brief(); const pdf=await makeBriefPdf(o,sj,text); const b64=await blobToB64(pdf);
         const atts=[{content:b64,filename:`Baustelle_nicht_montagebereit_${idOf(o.nr)}.pdf`,mimeType:"application/pdf"}]; let size=b64.length;
-        if(m.querySelector("#wf").checked) for(const f of vorher.slice(0,6)){ try{ const raw=await (await fetch("/_blob/"+f.assetId)).blob(); const bb=await blobToB64(await shrink(raw,1280,.72)); if(size+bb.length>850000) break; size+=bb.length; atts.push({content:bb,filename:`${idOf(o.nr)}_Vorher_${atts.length}.jpg`,mimeType:"image/jpeg"}); }catch(e){} }
+        if(m.querySelector("#wf").checked) for(const f of vorher.slice(0,6)){ try{ const raw=await (await fetch("/_blob/"+f.assetId)).blob(); const bb=await blobToB64(await mailBild(raw)); if(size+bb.length>850000) break; size+=bb.length; atts.push({content:bb,filename:`${idOf(o.nr)}_Vorher_${atts.length}.jpg`,mimeType:"image/jpeg"}); }catch(e){} }
         st.innerHTML=`<span class="spin"></span> wird gesendet …`;
         await S.mcp.callTool(GM,"send_message",{to:[toV],subject:sj,body:text+"\n\n(Das Schreiben liegt zusätzlich als PDF bei.)",attachments:atts});
         await upd(orderPath(id),{einsatz:{nmb:{schreibenAm:Date.now(),an:toV,grund:gr.value.trim()}}});
@@ -5492,16 +5492,22 @@ function subscribeFotos(id){
   S.fotoFor=id; S.fotos={};
   S.fotoUnsub=S.db.collection("fotos").where("auftragId","==",id).onSnapshot(snap=>{ const f={}; snap.docs.forEach(d=>f[d.id]={id:d.id,...d.data()}); S.fotos=f; scheduleRender(); },()=>{});
 }
-async function shrink(file,max=1600,q=.72){
+// Fotos: so klein wie möglich, aber alles erkennbar – längste Seite 1280 px, JPEG-Qualität 0,6 (meist 50–150 KB statt 2–4 MB)
+async function shrink(file,max=1280,q=.6){
   if(!/^image\//.test(file.type)||/svg/.test(file.type)) return file;
   try{
     const bmp=await createImageBitmap(file);
-    const sc=Math.min(1,max/Math.max(bmp.width,bmp.height));
-    const c=document.createElement("canvas"); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc);
-    c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
-    return await new Promise(r=>c.toBlob(r,"image/jpeg",q));
+    const sc=Math.min(1,max/Math.max(bmp.width,bmp.height)), W=Math.round(bmp.width*sc), H=Math.round(bmp.height*sc);
+    // in Halbschritten verkleinern – bleibt schärfer als ein großer Sprung
+    let src=bmp, w=bmp.width, h=bmp.height;
+    while(w/2>=W*1.4){ const t=document.createElement("canvas"); t.width=Math.round(w/2); t.height=Math.round(h/2); const tx=t.getContext("2d"); tx.imageSmoothingQuality="high"; tx.drawImage(src,0,0,t.width,t.height); src=t; w=t.width; h=t.height; }
+    const c=document.createElement("canvas"); c.width=W; c.height=H; const cx=c.getContext("2d"); cx.imageSmoothingQuality="high"; cx.drawImage(src,0,0,W,H);
+    const out=await new Promise(r=>c.toBlob(r,"image/jpeg",q));
+    return out&&out.size<file.size?out:file;
   }catch(e){ return file; }
 }
+// Für die Mail: schon kleine Fotos nicht noch einmal verschlechtern
+const mailBild=async raw=>raw.size>180000?await shrink(raw):raw;
 // Fotos aufs Handy: Android speichert automatisch (Ordner „Download“, Name „JD-Brueder-Montage_…“), iPhone über „📲 Fotos aufs Handy“
 const fotosHandyAn=()=>{ try{ const v=localStorage.getItem("jdFotosHandy"); return v?v==="an":meinGeraet()==="android"; }catch(e){ return false; } };
 const fotoName=(id,kat,i)=>`JD-Brueder-Montage_${String(S.orders[id]?.nr||id).replace(/[^\w-]+/g,"-")}_${String(kat||"foto").replace(/[^\w-]+/g,"-")}_${(d=>{ const z=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`; })(new Date())}${i?"_"+i:""}.jpg`;
@@ -5687,7 +5693,7 @@ function bindKonto(){
   $("#kAnsicht") && ($("#kAnsicht").onclick=ansichtDialog);
   $("#kMails") && ($("#kMails").onclick=syncMails);
   $("#kInst") && ($("#kInst").onclick=()=>window.jdInstallHilfe(true));
-  $("#kFotos") && ($("#kFotos").onclick=()=>modal(`<h2>📷 Fotos aufs Handy</h2><div class="small" style="line-height:1.5">Jedes Foto wird mail-tauglich verkleinert (ca. 1600 Pixel, meist 200–400 KB) und in der App gespeichert.<br><br>${meinGeraet()==="ios"
+  $("#kFotos") && ($("#kFotos").onclick=()=>modal(`<h2>📷 Fotos aufs Handy</h2><div class="small" style="line-height:1.5">Jedes Foto wird mail-tauglich verkleinert (1280 Pixel, meist 50–150 KB statt mehrerer MB) und in der App gespeichert.<br><br>${meinGeraet()==="ios"
       ?"<b>iPhone:</b> Im Auftrag unter „Fotos nach der Montage“ oder im Bericht auf <b>„📲 Fotos aufs Handy“</b> tippen und dann <b>„Bilder sichern“</b> wählen – sie landen in den Fotos. Automatisch geht das auf dem iPhone nicht."
       :`<b>Android:</b> Jedes neue Foto wird zusätzlich automatisch auf dem Handy gespeichert – im Ordner <b>„Download“</b>, der Name beginnt mit <b>JD-Brueder-Montage_</b> und der Auftragsnummer.`}</div>
     ${meinGeraet()==="ios"?"":`<button class="btn block ${fotosHandyAn()?"":"ok"}" id="fhUm" style="margin-top:14px">${fotosHandyAn()?"Automatisch speichern ausschalten":"Automatisch speichern einschalten"}</button>`}
@@ -5768,7 +5774,7 @@ async function berichtDialog(id,geprueft){
       for(const c of sel){
         try{
           const raw=await (await fetch("/_blob/"+c.assetId)).blob();
-          const b=c.png?raw:await shrink(raw,1280,.72);
+          const b=c.png?raw:await mailBild(raw);
           const b64=await blobToB64(b);
           if(size+b64.length>850000){ skipped++; continue; }
           size+=b64.length; atts.push({content:b64,filename:`${idOf(o.nr)}_${c.label}_${atts.length+1}.${c.png?"png":"jpg"}`,mimeType:c.png?"image/png":"image/jpeg"});
