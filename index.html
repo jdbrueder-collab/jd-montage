@@ -565,6 +565,13 @@ body.tun-auf .tun-dock{display:none}
 .tun-panel .tun-p{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:10px 10px 10px 12px;border-radius:12px;font-size:14px;white-space:normal}
 .tp-t{flex:1;min-width:0;display:flex;flex-direction:column}.tp-t small{font-weight:500;color:var(--mute);font-size:12px;margin-top:1px}
 body.nav-aus .tun-dock{display:none}
+/* ===== Bericht kontrollieren ===== */
+details.kontr{margin:8px 0 4px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--card)}
+details.kontr>summary{cursor:pointer;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px}
+details.kontr>summary::-webkit-details-marker{display:none}
+.kt-z{display:grid;grid-template-columns:1fr 86px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.kt-l{display:flex;flex-direction:column;gap:2px;min-width:0}.kt-l .chip{align-self:flex-start}
+.kt-q{text-align:center;font-weight:700}
 /* ===== Serie wählen ===== */
 .serie-w{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
 .serie-k{border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:10px 12px;text-align:left;cursor:pointer;color:var(--ink)}
@@ -602,7 +609,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="e9ffbb1a0fad";</script>
+<script>window.JD_BUILD="52762078ab77";</script>
 </head>
 <body>
 <header class="top">
@@ -1217,7 +1224,7 @@ function gelesen(){
   return S._gel;
 }
 function alsGelesen(id){ const g=gelesen(); if(!ungelesen(id)) return; g[id]=Date.now(); try{ localStorage.setItem("jdGelesen",JSON.stringify(g)); }catch(e){} }
-const nachrichtenVon=id=>Object.values(S.nachrichten||{}).filter(n=>n.auftragId===id).sort((a,b)=>a.am-b.am);
+const nachrichtenVon=id=>Object.values(S.nachrichten||{}).filter(n=>n.auftragId===id&&(!n.nur||n.nur===myId()||n.von===myId()||can.planen())).sort((a,b)=>a.am-b.am);
 function ungelesen(id){ const g=gelesen(), ab=Math.max(g[id]||0,g.seit||0); return nachrichtenVon(id).filter(n=>n.von!==myId()&&n.am>ab).length; }
 const binBeteiligt=o=>can.planen()||(o.monteure||[]).includes(myId());
 const ungelesenGesamt=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&binBeteiligt(o)).reduce((n,o)=>n+ungelesen(o.id),0);
@@ -1710,10 +1717,10 @@ function nachrichtenKarte(o){
    <div class="row" style="gap:6px;margin-top:8px;flex-wrap:nowrap;align-items:flex-end"><textarea class="i" id="msgText" rows="1" placeholder="Nachricht an ${esc(an)} …" style="min-height:46px;resize:vertical"></textarea><button class="btn pri" id="msgSend">Senden</button></div>`
    :`<div class="small mute" style="margin-top:4px">Frage oder Info an ${esc(an)} – kommt sofort aufs Handy.</div>`}</div>`;
 }
-async function nachrichtSenden(id, text){
+async function nachrichtSenden(id, text, nur){
   text=String(text||"").trim(); if(!text) return false;
   const nid=`${id}~${Date.now()}~${Math.random().toString(36).slice(2,6)}`;
-  const n={auftragId:id,von:myId(),am:Date.now(),text:text.slice(0,2000)};
+  const n={auftragId:id,von:myId(),am:Date.now(),text:text.slice(0,2000),...(nur?{nur}:{})};
   S.nachrichten[nid]={id:nid,...n}; render();
   try{ await setDoc("nachrichten/"+nid,n); S.sync?.run({nachricht:nid}).catch(()=>{}); return true; }
   catch(e){ delete S.nachrichten[nid]; render(); return false; }
@@ -1814,7 +1821,8 @@ function anteilKarte(o){
   const zeile=(label,einheit,ep,attr,k,v)=>`<div class="pl-z ${nn(v)?"voll":""}" data-ep="${ep}"><div class="pl-l">${esc(label)}<span>${esc(einheit||"")}${ep!==""?" · "+fmtEUR(ep):""}</span></div>${inp(attr,k,v)}<div class="pl-gp">${nn(v)&&ep!==""?fmtEUR(r2(nn(v)*ep)):""}</div></div>`;
   let h=`<div class="card"><div class="row between" style="flex-wrap:nowrap;gap:8px"><h3 style="margin:0">🤝 Mein Anteil</h3>${P?.name?`<span class="chip">${esc(P.name)}</span>`:""}</div>
     <div class="small mute" style="margin:4px 0 10px">Trag nur ein, was du selbst montiert hast. Das sieht nur du – JD Brüder zählt am Ende alles zusammen.</div>
-    ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder bestätigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:a.abgegebenAm?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
+    ${Object.keys(d.kuerzung||{}).length?`<div class="banner warn small">📉 <b>JD Brüder hat Mengen angepasst</b> – sie haben nicht gestimmt:<br>${Object.entries(d.kuerzung).map(([k,x])=>`${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}: ${fmtZahl(nn(x.alt))} → <b>${fmtZahl(nn(x.neu))}</b>`).join("<br>")}</div>`:""}
+    ${a.bestaetigtAm?`<div class="banner ok">✓ Von JD Brüder kontrolliert und genehmigt am ${fmtDT(a.bestaetigtAm)} – du kannst deine Rechnung schreiben.</div>`:a.abgegebenAm?`<div class="banner info">✓ Abgegeben am ${fmtDT(a.abgegebenAm)} – wartet auf Bestätigung durch JD Brüder. Ändern geht jetzt nicht mehr.</div>`:""}
     ${zu?(o.aenderung?.status==="angefragt"&&o.aenderung.von===me?`<div class="small mute" style="margin-bottom:8px">✏️ Änderung angefragt – wartet auf Freigabe</div>`:`<button class="btn sm ghost" id="anteilAend" style="margin-bottom:8px">✏️ Änderung anfragen</button>`):""}
     ${!P?`<div class="banner info small">Preise in Bearbeitung – trag einfach die Mengen ein. JD Brüder rechnet ab.</div>`:""}
     ${zu?abrechnungTabelle({...d,uid:me},P):`<div id="preisliste">`}`;
@@ -1844,12 +1852,28 @@ function subBerichtKarte(o){
   return `<div class="card" ${subs.some(u=>subBerichtFehlt(o,u))?'style="border-left:5px solid var(--accent)"':""}><h3>📝 Berichte der Subunternehmer</h3>${zeilen}
    <div class="small mute" style="margin-top:6px">Subunternehmer schreiben ihren Bericht immer selbst. „Anfordern“ schickt ihnen eine Nachricht aufs Handy.</div></div>`;
 }
+// „Bericht kontrollieren“: nur die eingetragenen Positionen; fehlende dazu wählen, Mengen ändern.
+// Mehr/zusätzlich → nur im Bericht an meta (Sub sieht nichts). Weniger → Sub-Abrechnung wird angepasst, Sub bekommt Bescheid.
+function kontrolleTeil(o,u){
+  const l=S.lohn[lohnDocId(o.id,u)]||{mengen:{}}, plus=kontrPlus(o,u), kz=l.kuerzung||{}, extra=S.kontrNeu?.[o.id+u]||[];
+  const keys=S.lohnPos.map(p=>p.k).filter(k=>nn(l.mengen?.[k])||plus[k]!=null||kz[k]||extra.includes(k));
+  const lab=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k, ein=k=>(S.lohnPos.find(p=>p.k===k)||{}).einheit||"";
+  const rest=posListe(o).filter(p=>!keys.includes(p.k));
+  const zeile=k=>{ const sub=kz[k]?nn(kz[k].alt):nn(l.mengen?.[k]), wert=plus[k]!=null?plus[k]:(l.mengen?.[k]??"");
+    const tag=kz[k]?`<span class="chip warn" style="font-size:11px">↓ ${fmtZahl(nn(kz[k].alt))} → ${fmtZahl(nn(kz[k].neu))}</span>`:plus[k]!=null&&nn(plus[k])>sub?`<span class="chip info" style="font-size:11px">＋ nur meta</span>`:"";
+    return `<div class="kt-z"><div class="kt-l"><b>${esc(lab(k))}</b><span class="small mute">${sub?`Sub: ${fmtZahl(sub)} ${esc(ein(k))}`:"vom Sub nicht eingetragen"}</span>${tag}</div>
+      <input class="i kt-q" inputmode="decimal" data-kq="${esc(u)}|${esc(k)}" value="${esc(String(wert).replace(".",","))}" placeholder="0"></div>`; };
+  return `<details class="kontr" data-fold="${esc(o.id)}:kontr:${esc(u)}" ${S.fold[o.id+":kontr:"+u]?"open":""}><summary>🔍 Bericht kontrollieren <span class="small mute">${keys.length} Position${keys.length===1?"":"en"}</span></summary>
+    <div class="small mute" style="margin:6px 0 8px">Mehr oder zusätzliche Positionen zählen nur für den Bericht an meta – ${esc(nameOf(u))} sieht davon nichts. Weniger: seine Abrechnung wird angepasst und er bekommt Bescheid.</div>
+    ${keys.map(zeile).join("")||`<div class="small mute">Nichts eingetragen.</div>`}
+    ${rest.length?`<select class="i" data-kneu="${esc(u)}" style="margin-top:8px"><option value="">＋ Fehlende Position dazu …</option>${rest.map(p=>`<option value="${esc(p.k)}">${esc(p.label)}</option>`).join("")}</select>`:""}</details>`;
+}
 function anteilChefKarte(o){
   const subs=[...new Set([...(o.gemeinsam?(o.monteure||[]).filter(m=>S.roles[m]==="sub"):[]),...Object.keys(o.nachgetragen||{}),...Object.keys(o.subAnteil||{})])].filter(u=>S.roles[u]==="sub"||o.subAnteil?.[u]||spaetDazu(o,u)); if(!subs.length) return "";
   return `<div class="card" ${anteilOffen(o)?'style="border-left:5px solid var(--accent)"':""}><h3>🤝 Anteile der Mitmonteure</h3>${subs.map(u=>{ const a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(o.id,u)];
     return `<div class="anteil"><div class="row between" style="flex-wrap:nowrap;gap:8px;margin-bottom:6px"><b>${esc(nameOf(u))}</b>${a.bestaetigtAm?`<span class="chip ok">✓ bestätigt</span>`:a.abgegebenAm?`<span class="chip warn">📥 zu prüfen</span>`:`<span class="chip">noch nicht abgegeben</span>`}</div>
-      ${a.abgegebenAm||a.bestaetigtAm?abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,serieId(o)):null):`<div class="row between" style="gap:8px;flex-wrap:wrap"><div class="small mute" style="flex:1;min-width:140px">${o.berichtFehlt?.[u]?`📣 angefordert am ${fmtDT(o.berichtFehlt[u].am)}`:`${esc(nameOf(u))} trägt die Positionen gerade ein.`}</div>${!o.storniert&&(o.termin||istFertig(o))?`<button class="btn sm ${subBerichtFehlt(o,u)?"pri":"ghost"}" data-bfehlt="${esc(u)}">📣 ${o.berichtFehlt?.[u]?"Nochmal erinnern":"Anteil anfordern"}</button>`:""}</div>`}
-      ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Abrechnung bestätigen</button>`:""}
+      ${a.abgegebenAm||a.bestaetigtAm?(istSubUid(u)&&!spaetDazu(o,u)&&o.berichtStatus!=="gesendet"?kontrolleTeil(o,u)+`<div class="small mute" style="margin:8px 0 4px">Abrechnung von ${esc(nameOf(u))} – seine Mengen:</div>`:"")+abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,serieId(o)):null):`<div class="row between" style="gap:8px;flex-wrap:wrap"><div class="small mute" style="flex:1;min-width:140px">${o.berichtFehlt?.[u]?`📣 angefordert am ${fmtDT(o.berichtFehlt[u].am)}`:`${esc(nameOf(u))} trägt die Positionen gerade ein.`}</div>${!o.storniert&&(o.termin||istFertig(o))?`<button class="btn sm ${subBerichtFehlt(o,u)?"pri":"ghost"}" data-bfehlt="${esc(u)}">📣 ${o.berichtFehlt?.[u]?"Nochmal erinnern":"Anteil anfordern"}</button>`:""}</div>`}
+      ${a.abgegebenAm&&!a.bestaetigtAm?`<button class="btn ok block" data-anteil-ok="${esc(u)}" style="margin-top:8px">✓ Kontrolliert – genehmigen</button>`:a.bestaetigtAm?`<div class="small" style="color:var(--ok);margin-top:6px">✓ Kontrolliert und genehmigt am ${fmtDT(a.bestaetigtAm)}</div>`:""}
       ${o.aenderung?.status==="angefragt"&&o.aenderung.von===u?`<div class="banner warn small" style="margin:8px 0 0">✏️ Änderungswunsch: „${esc(o.aenderung.grund||"")}“<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div></div>`:""}</div>`; }).join("")}
     <div class="small mute" style="margin-top:6px">${subs.every(u=>spaetDazu(o,u))?"Nachträglich dazugenommen: nur für die interne Abrechnung – geht nicht an meta.":"Die Positionen zählen mit in den Bericht an meta (siehe „Alle Positionen zusammen“)."}</div></div>`;
 }
@@ -1895,8 +1919,26 @@ function bindAnteil(id){
     const neu={...a,abgegebenAm:Date.now()}; await upd(P,{subAnteil:{[myId()]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[myId()]:neu}};
     nachrichtSenden(id,`🤝 Meine Montageabrechnung ist fertig${mitPreis?` (${fmtEUR(a.summe)})`:""} – bitte prüfen und bestätigen.`); toast("Abgegeben ✓ – JD Brüder bekommt Bescheid",3000); render();
   });
+  document.querySelectorAll("[data-kneu]").forEach(sel=>sel.onchange=()=>{ const u=sel.dataset.kneu, k=sel.value; if(!k) return;
+    S.kontrNeu=S.kontrNeu||{}; S.kontrNeu[id+u]=[...(S.kontrNeu[id+u]||[]),k]; S.fold[id+":kontr:"+u]=true; render();
+    setTimeout(()=>{ const i=document.querySelector(`[data-kq="${CSS.escape(u+"|"+k)}"]`); i?.focus(); },60); });
+  document.querySelectorAll("[data-kq]").forEach(i=>i.onchange=async()=>{
+    const [u,k]=i.dataset.kq.split("|"), c=S.orders[id]||o, key=lohnDocId(id,u), l=S.lohn[key]; if(!l) return toast("Kein Bericht von "+nameOf(u));
+    const kz={...(l.kuerzung||{})}, orig=kz[k]?nn(kz[k].alt):nn(l.mengen?.[k]), neu=nn(String(i.value).replace(",","."))||0, lab=(S.lohnPos.find(p=>p.k===k)||{}).label||k;
+    const mengen={...(l.mengen||{})};
+    if(neu<orig){
+      if(!await confirmBox("Menge verringern?",`<b>${esc(lab)}</b>: ${fmtZahl(orig)} → ${fmtZahl(neu)}<br>${esc(nameOf(u))} bekommt Bescheid, seine Abrechnung wird angepasst.`,"Verringern","warn")){ render(); return; }
+      if(neu) mengen[k]=neu; else delete mengen[k];
+      kz[k]={alt:orig,neu,am:Date.now(),von:myId()};
+    } else { if(kz[k]){ mengen[k]=orig; delete kz[k]; } }
+    const next={...l,mengen,kuerzung:kz}; delete next.id; S.lohn[key]={id:key,...next}; await setDoc("lohnberichte/"+key,next);
+    const plus=neu>orig?neu:null; await upd(orderPath(id),{kontrolle:{[u]:{plus:{[k]:plus},am:Date.now(),von:myId()}}});
+    S.orders[id]={...c,kontrolle:{...(c.kontrolle||{}),[u]:{...(c.kontrolle?.[u]||{}),plus:{...(c.kontrolle?.[u]?.plus||{}),[k]:plus}}}};
+    if(neu<orig){ nachrichtSenden(id,`📉 ${nameOf(u)}: In deinem Bericht wurde eine Menge angepasst – ${lab}: ${fmtZahl(orig)} → ${fmtZahl(neu)}. Sie hat nicht gestimmt; deine Abrechnung ist entsprechend geändert.`,u); toast(`Verringert ✓ – ${nameOf(u)} bekommt Bescheid`,3000); }
+    else toast(neu>orig?"Ergänzt ✓ – nur im Bericht an meta":"Gespeichert ✓",2400);
+    render(); });
   document.querySelectorAll("[data-anteil-ok]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.anteilOk;
-    if(!await confirmBox("Abrechnung bestätigen?",`Ist die Montageabrechnung von <b>${esc(nameOf(u))}</b> korrekt? Danach ist sie gesperrt und ${esc(nameOf(u))} kann die Rechnung schreiben.`,"Bestätigen","ok")) return;
+    if(!await confirmBox("Kontrolliert – genehmigen?",`Der Bericht von <b>${esc(nameOf(u))}</b> wird so festgehalten. ${esc(nameOf(u))} kann danach seine Rechnung schreiben. Deine Ergänzungen zählen nur für den Bericht an meta.`,"Genehmigen","ok")) return;
     const neu={...(o.subAnteil?.[u]||{}),bestaetigtAm:Date.now(),bestaetigtVon:myId()}; await upd(P,{subAnteil:{[u]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[u]:neu}};
     nachrichtSenden(id,`✓ Montageabrechnung von ${nameOf(u)} bestätigt – die Rechnung kann geschrieben werden.`); toast("Bestätigt ✓",2500); render(); });
 }
@@ -2171,12 +2213,14 @@ function berichtAnsicht(id){
    ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Fertigstellung · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${(o.nachweise||[]).map(x=>gruppe(`Nachweis · ${esc(x.label)} · ${esc(String(x.menge).replace(".",","))}`,fk("nachweis:"+x.id))).join("")}${sonderFertig(b).map(x=>gruppe(`Mehraufwand · ${esc(x.arbeit)}`,fk("sonder:"+x.id))).join("")}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"_blob/"+a)))}
    <div style="display:grid;gap:8px;margin-top:14px">
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
+    <button class="btn block" id="fotosHandy">📲 Fotos aufs Handy</button>
     ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
       :can.planen()&&can.einsatz()?`<button class="btn ghost block" id="oeffnen">🔓 Bericht wieder öffnen</button>`
       :o.aenderung?.status==="angefragt"?`<div class="small mute" style="text-align:center">✏️ Änderung angefragt – wartet auf Freigabe</div>`
       :(o.abschluss?.by===myId()||o.berichtVonSub===myId()||o.berichtVon===myId())?`<button class="btn ghost block" id="anfrage">✏️ Änderung anfragen</button>`:""}
     <button class="btn block" data-close>Schließen</button></div>`,(m,close)=>{
     m.querySelectorAll("[data-z]").forEach(t=>t.onclick=()=>lightbox(t.dataset.z));
+    m.querySelector("#fotosHandy").onclick=()=>fotosAufsHandy(id);
     m.querySelector("#pdfAns").onclick=async()=>{ const bt=m.querySelector("#pdfAns"); bt.disabled=true; bt.innerHTML=`<span class="spin"></span> wird erstellt …`;
       try{ const cs=await renderVordruck(o); vorschauZeigen(o.unterschrift?cs:cs.slice(0,1),`${titel} ${o.nr}`); }catch(e){ toast("Vorschau nicht möglich"); } bt.disabled=false; bt.textContent="📄 Bericht-PDF ansehen"; };
     m.querySelector("#bearb") && (m.querySelector("#bearb").onclick=()=>{ S.bearbeiten[id]=true; close(); render(); scrollTo(0,0); });
@@ -2456,7 +2500,8 @@ function einsatzCard(o,fk){
      ${af?`${ok?`<div class="banner ok small" style="margin:12px 0 0">✓ Sichtabnahme liegt vor${o.unterschrift?` – unterschrieben von <b>${esc(o.unterschrift.name||"")}</b>, ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?" – auf Papier":""}</div>`:""}
       <div class="grid2" style="margin-top:12px">
        <button class="btn ${af==="ja"&&!ok?"pri":""}" id="abfSign" style="min-height:66px;flex-direction:column;gap:2px">✍️ Unterschreiben<span class="small" style="font-weight:500;opacity:.85">${ok&&o.unterschrift?"neu unterschreiben":"vor Ort am Handy"}</span></button>
-       <button class="btn ${af==="nein"||ok?"ok":""}" id="abfSend" style="min-height:66px;flex-direction:column;gap:2px">✉️ Versenden<span class="small" style="font-weight:500;opacity:.85">${ok?"Bericht + Sichtabnahme":"Bericht ohne Sichtabnahme"}</span></button></div>
+       <button class="btn ${af==="nein"||ok?"ok":""}" id="abfSend" style="min-height:66px;flex-direction:column;gap:2px">${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?"🔗 Zusammenfügen & abschicken":"✉️ Versenden"}<span class="small" style="font-weight:500;opacity:.85">${ok?"Bericht + Sichtabnahme":"Bericht ohne Sichtabnahme"}</span></button></div>
+      ${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?`<div class="small mute" style="margin-top:6px">🔗 Deine Positionen und die kontrollierten Berichte von ${subsVon(o).filter(u=>subNurAnteil(o,u)).map(u=>esc(nameOf(u))).join(", ")} werden zu einem Bericht an meta zusammengefügt.${offeneKontrollen(o).length?` <b style="color:var(--warn)">Noch nicht kontrolliert: ${offeneKontrollen(o).map(u=>esc(nameOf(u))).join(", ")}.</b>`:""}</div>`:""}
       <div class="small mute" style="margin-top:8px">${ok?"Der Montagebericht geht mit der Sichtabnahme per Mail raus.":"Der Montagebericht geht ohne Sichtabnahme per Mail raus. Wird die Sichtabnahme später unterschrieben, kommt sie dazu."}${can.planen()?"":" Vorher prüft JD Brüder den Bericht."}</div>
       ${af==="nein"&&can.planen()&&can.mails()&&!ok&&!o.abnahmeAnfrage?`<button class="btn ghost block sm" id="reqAbn" style="margin-top:8px">👁 Sichtabnahme per Mail an den Kunden senden</button>`:""}
       ${af==="ja"&&!ok?`<details class="fold" style="margin-top:10px"><summary><span class="small">📄 Auf Papier unterschrieben? Foto hochladen</span></summary><div class="foldin">${abnahmeTeil(o,fk)}</div></details>`:""}`:""}`;
@@ -2638,7 +2683,7 @@ function reklaSchnellDialog(id){
       if(!fotos.length) return toast("Bitte ein Foto machen");
       if(!S.assets) return toast("Foto-Upload ist für dich nicht freigeschaltet");
       const bt=m.querySelector("#ok"); bt.disabled=true; bt.textContent="Wird gespeichert …";
-      const ids=[]; for(const f of fotos){ try{ const b2=await shrink(f.file,1600,.82); const a=await S.assets.upload(b2); ids.push(a.id); }catch(e){} }
+      const ids=[]; for(const f of fotos){ try{ const b2=await shrink(f.file); const a=await S.assets.upload(b2); ids.push(a.id); handySichern(b2,id,"nachweis",ids.length); }catch(e){} }
       if(!ids.length){ bt.disabled=false; bt.textContent="Reklamation speichern"; return toast("Foto-Upload fehlgeschlagen – bitte nochmal"); }
       const menge=parseInt(m.querySelector("#rkM").value,10)||1, a=RK_ART.find(x=>x[0]===art), notiz=m.querySelector("#rkN").value.trim();
       const text=`${name}${menge>1?` (${menge}×)`:""} – ${a[1].replace(/^\S+\s/,"")}${notiz?": "+notiz:""}`;
@@ -2875,7 +2920,8 @@ function berichtCard(o,fk){
    ${S.lohnPos.length?lohnCard(o,{montagebericht:true}):""}
    ${uebernachtungFold(o)}
    <div class="card">${erfassenTeil(o,fk,true)}</div>
-   <div class="card"><h3>Geschosse &amp; Fotos</h3>${geschTeil(o)}<label class="f">Fotos nach der Montage</label>${thumbs(fk("nachher"),"nachher",true)}</div>`;
+   <div class="card"><h3>Geschosse &amp; Fotos</h3>${geschTeil(o)}<label class="f">Fotos nach der Montage</label>${thumbs(fk("nachher"),"nachher",true)}
+   <button class="btn sm ghost" data-fotos-handy="${esc(o.id)}" style="margin-top:10px">📲 Alle Fotos aufs Handy</button></div>`;
 }
 function uebernachtungFold(o){
   const b=o.bericht||{}, u=uebernachtet(b), n=b.naechte||[];
@@ -3024,8 +3070,9 @@ function bindEinsatz(o){
   $("#abfSign") && ($("#abfSign").onclick=async()=>{ if(o.bericht?.abnahmeFrage!=="ja") await upd(P,{bericht:{abnahmeFrage:"ja",abnahmeArt:"handy"}}); else if(o.bericht?.abnahmeArt!=="handy") upd(P,{bericht:{abnahmeArt:"handy"}}); signDialog(id); });
   $("#abfSend") && ($("#abfSend").onclick=async()=>{
     const cur=S.orders[id], typ=Object.values(S.reklas).some(r=>r.auftragId===id&&!r.leerfahrt)?"rekla":"ok";
+    if(can.planen() && !await kontrolleVorVersand(cur)) return;
     if(!await abschluss(id,typ)) return;
-    if(can.planen()&&can.senden()) setTimeout(()=>berichtDialog(id),250);
+    if(can.planen()&&can.senden()) setTimeout(()=>berichtDialog(id,true),250);
   });
   $("#stepBack") && ($("#stepBack").onclick=async ev=>{ ev.preventDefault(); const p=stepBackPatch(o); if(!p) return; if(!await confirmBox("Einen Schritt zurück?","Die Angabe aus dem letzten Schritt wird zurückgenommen.","Zurück")) return; delete S.bereitWahl[id]; upd(P,p); });
   // Bericht
@@ -3609,7 +3656,10 @@ const vonTag=x=>can.planen()&&x?.von&&x.von!==myId()?` <span class="chip info" s
 // Positionen für den Bericht an meta: alle Beteiligten zusammengezählt. Ausnahme: nachträglich dazugenommene Leute –
 // ihr Anteil ist nur für die eigene Abrechnung (der Bericht stand da schon). uid: nur die Positionen dieser Person.
 const spaetDazu=(o,u)=>!!o?.nachgetragen?.[u] && !o.nachgetragen[u].imEinsatz; // erst nach dem Bericht dazugenommen
-const lohnFuerBericht=o=>Object.values(S.lohn).filter(l=>l.auftragId===o.id && !spaetDazu(o,l.uid));
+// Chef-Kontrolle eines Sub-Anteils: mehr / zusätzliche Positionen stehen nur im Auftrag (kontrolle.<uid>.plus) und zählen nur für meta
+const kontrPlus=(o,u)=>Object.fromEntries(Object.entries(o?.kontrolle?.[u]?.plus||{}).filter(([,v])=>v!=null&&v!==""));
+const lohnMitKontrolle=(o,l)=>{ const k=kontrPlus(o,l.uid); return Object.keys(k).length?{...l,mengen:{...(l.mengen||{}),...k}}:l; };
+const lohnFuerBericht=o=>Object.values(S.lohn).filter(l=>l.auftragId===o.id && !spaetDazu(o,l.uid)).map(l=>lohnMitKontrolle(o,l));
 function summeMengen(o,uid){
   const tot={};
   (uid?Object.values(S.lohn).filter(l=>l.auftragId===o.id&&l.uid===uid):lohnFuerBericht(o)).forEach(l=>Object.entries(l.mengen||{}).forEach(([k,v])=>{ const q=nn(v); if(q) tot[k]=(tot[k]||0)+q; }));
@@ -3617,7 +3667,8 @@ function summeMengen(o,uid){
 }
 // Chef: alle Positionen aller Monteure auf einer Liste – je Person und zusammen
 function gesamtKarte(o){
-  const ls=Object.values(S.lohn).filter(l=>l.auftragId===o.id && Object.values(l.mengen||{}).some(v=>nn(v)));
+  const roh=Object.values(S.lohn).filter(l=>l.auftragId===o.id), ls=roh.map(l=>lohnMitKontrolle(o,l)).filter(l=>Object.values(l.mengen||{}).some(v=>nn(v)));
+  const korr=(l,k)=>!!kontrPlus(o,l.uid)[k]||!!S.lohn[l.id]?.kuerzung?.[k];
   if(ls.length<2) return "";
   const leute=ls.map(l=>l.uid), tot=summeMengen(o);
   const keys=S.lohnPos.map(p=>p.k).filter(k=>ls.some(l=>nn(l.mengen?.[k])));
@@ -3625,7 +3676,7 @@ function gesamtKarte(o){
   return `<div class="card"><h3>📋 Alle Positionen zusammen</h3>
    <div class="small mute" style="margin-bottom:8px">Was jeder selbst eingetragen hat – die Summe geht in den Montagebericht an meta.${leute.some(u=>spaetDazu(o,u))?" Nachträglich Dazugenommene (kursiv) zählen nur für ihre eigene Abrechnung.":""}</div>
    <div style="overflow-x:auto"><table class="pos"><thead><tr><th>Position</th>${leute.map(u=>`<th style="${spaetDazu(o,u)?"font-style:italic":""}">${kurz(u)}</th>`).join("")}<th>Summe</th></tr></thead>
-   <tbody>${keys.map(k=>`<tr><td>${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}</td>${ls.map(l=>`<td style="${spaetDazu(o,l.uid)?"font-style:italic;color:var(--mute)":""}">${nn(l.mengen?.[k])?fmtZahl(nn(l.mengen[k])):""}</td>`).join("")}<td><b>${tot[k]?fmtZahl(tot[k]):""}</b></td></tr>`).join("")}</tbody></table></div></div>`;
+   <tbody>${keys.map(k=>`<tr><td>${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}</td>${ls.map(l=>`<td style="${spaetDazu(o,l.uid)?"font-style:italic;color:var(--mute)":""}">${nn(l.mengen?.[k])?fmtZahl(nn(l.mengen[k])):""}${korr(l,k)?`<sup title="vom Chef kontrolliert" style="color:var(--accent)">✎</sup>`:""}</td>`).join("")}<td><b>${tot[k]?fmtZahl(tot[k]):""}</b></td></tr>`).join("")}</tbody></table></div></div>`;
 }
 const fmtZahl=v=>String(v).replace(".",",");
 function vdDefaults(o){
@@ -4798,6 +4849,7 @@ function bindNachrichten(id){
 }
 function bind(r){
   const app=$("#app");
+  app.querySelectorAll("[data-fotos-handy]").forEach(b=>b.onclick=()=>fotosAufsHandy(b.dataset.fotosHandy));
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go(can.mitarbeiter()?"zeit":"auftraege"));
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; t.dataset.scan?dokViewer(t.dataset.zoom,"scan","Unterlage"):lightbox(t.dataset.zoom); });
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); if(n&&n!==document.activeElement){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } },250); }; }
@@ -5239,7 +5291,7 @@ function reklaBearbeiten(rid){
     show();
     m.querySelector("#rfi").onchange=async e=>{
       if(!S.assets) return toast("Foto-Upload nicht freigeschaltet");
-      for(const file of e.target.files){ try{ const blob=await shrink(file,1600,.82); const a=await S.assets.upload(blob); fotos.push({id:a.id,url:URL.createObjectURL(blob)}); show(); }catch(err){ toast("Upload fehlgeschlagen"); } }
+      for(const file of e.target.files){ try{ const blob=await shrink(file); const a=await S.assets.upload(blob); fotos.push({id:a.id,url:URL.createObjectURL(blob)}); show(); handySichern(blob,typeof id!=="undefined"?id:r.auftragId,"reklamation",fotos.length); }catch(err){ toast("Upload fehlgeschlagen"); } }
     };
     m.querySelector("#ok").onclick=async()=>{
       const text=m.querySelector("#t").value.trim(); if(!text) return toast("Bitte Beschreibung eintragen");
@@ -5266,7 +5318,7 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
     const show=()=>m.querySelector("#rf").innerHTML=fotos.map(f=>`<div class="t"><img src="${f.url}" alt=""></div>`).join("");
     m.querySelector("#rfi").onchange=async e=>{
       if(!S.assets) return toast("Foto-Upload nicht freigeschaltet");
-      for(const file of e.target.files){ try{ const blob=await shrink(file,1600,.82); const a=await S.assets.upload(blob); fotos.push({id:a.id,url:URL.createObjectURL(blob)}); show(); }catch(err){ toast("Upload fehlgeschlagen"); } }
+      for(const file of e.target.files){ try{ const blob=await shrink(file); const a=await S.assets.upload(blob); fotos.push({id:a.id,url:URL.createObjectURL(blob)}); show(); handySichern(blob,typeof id!=="undefined"?id:r.auftragId,"reklamation",fotos.length); }catch(err){ toast("Upload fehlgeschlagen"); } }
     };
     m.querySelector("#ok").onclick=async()=>{
       const text=m.querySelector("#t").value.trim(); const u=leerfahrt?"baustelle":m.querySelector("#u").value;
@@ -5353,7 +5405,7 @@ function subscribeFotos(id){
   S.fotoFor=id; S.fotos={};
   S.fotoUnsub=S.db.collection("fotos").where("auftragId","==",id).onSnapshot(snap=>{ const f={}; snap.docs.forEach(d=>f[d.id]={id:d.id,...d.data()}); S.fotos=f; scheduleRender(); },()=>{});
 }
-async function shrink(file,max=1600,q=.82){
+async function shrink(file,max=1600,q=.72){
   if(!/^image\//.test(file.type)||/svg/.test(file.type)) return file;
   try{
     const bmp=await createImageBitmap(file);
@@ -5362,6 +5414,20 @@ async function shrink(file,max=1600,q=.82){
     c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
     return await new Promise(r=>c.toBlob(r,"image/jpeg",q));
   }catch(e){ return file; }
+}
+// Fotos aufs Handy: Android speichert automatisch (Ordner „Download“, Name „JD-Brueder-Montage_…“), iPhone über „📲 Fotos aufs Handy“
+const fotosHandyAn=()=>{ try{ const v=localStorage.getItem("jdFotosHandy"); return v?v==="an":meinGeraet()==="android"; }catch(e){ return false; } };
+const fotoName=(id,kat,i)=>`JD-Brueder-Montage_${String(S.orders[id]?.nr||id).replace(/[^\w-]+/g,"-")}_${String(kat||"foto").replace(/[^\w-]+/g,"-")}_${(d=>{ const z=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`; })(new Date())}${i?"_"+i:""}.jpg`;
+function dateiLaden(blob,name){ try{ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.style.display="none"; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },5000); }catch(e){} }
+function handySichern(blob,id,kat,i){ if(!blob||!/^image\//.test(blob.type||"")||meinGeraet()==="ios"||!fotosHandyAn()) return; dateiLaden(blob,fotoName(id,kat,i)); }
+async function fotosAufsHandy(id){
+  const l=Object.values(S.fotos).filter(f=>f.auftragId===id&&f.kat!=="unterlagen"&&/^image/.test(f.typ||"image")&&fotoMeins(f)).sort((a,b)=>(a.am||0)-(b.am||0));
+  if(!l.length) return toast("Noch keine Fotos in diesem Auftrag");
+  toast(`${l.length} Foto${l.length>1?"s":""} werden vorbereitet …`);
+  const files=[]; for(const [i,f] of l.entries()){ try{ const b=await (await fetch("_blob/"+f.assetId)).blob(); files.push(new File([b],fotoName(id,f.kat,i+1),{type:b.type||"image/jpeg"})); }catch(e){} }
+  if(!files.length) return toast("Fotos konnten nicht geladen werden");
+  try{ if(navigator.canShare?.({files})){ await navigator.share({files,title:`JD Brüder Montage ${S.orders[id]?.nr||""}`}); return; } }catch(e){ if(e?.name==="AbortError") return; }
+  files.forEach((f,i)=>setTimeout(()=>dateiLaden(f,f.name),i*350));
 }
 async function uploadFotos(id,kat,files,extra={}){
   if(!S.assets) return toast("Foto-Upload nicht freigeschaltet");
@@ -5372,7 +5438,7 @@ async function uploadFotos(id,kat,files,extra={}){
       const blob=await shrink(file);
       const a=await S.assets.upload(blob);
       await S.db.collection("fotos").doc().set({auftragId:id,kat,assetId:a.id,name:file.name||"",typ:blob.type,am:Date.now(),von:myId(),...extra});
-      n++;
+      n++; handySichern(blob,id,kat,files.length>1?n:0);
     }catch(e){ console.error(e); toast("Upload fehlgeschlagen: "+(e.message||e.code||"")); }
   }
   if(n) toast(`${n} hochgeladen ✓`);
@@ -5523,6 +5589,7 @@ function kontoKarte(){
       ${push?`<button class="btn" id="kPush">🔔 Benachrichtigungen <span class="small ${pushAktiv()?"":"mute"}" style="margin-left:auto;${pushAktiv()?"color:var(--ok)":""}">${pushAktiv()?"an":"aus"}</span></button>`:""}
       ${push&&!pushAktiv()?`<div class="small mute" style="margin:-2px 2px 2px">${meinGeraet()==="ios"&&!istInstalliertApp()?"Auf dem iPhone gehen Benachrichtigungen nur aus der App auf dem Home-Bildschirm – zuerst „App auf den Startbildschirm“ unten.":"Einschalten, damit du Termine, Nachrichten und Bestätigungen sofort aufs Handy bekommst."}</div>`:""}
       ${can.mails()?`<button class="btn" id="kMails">🔄 Mails von meta abrufen</button>`:""}
+      ${can.einsatz()?`<button class="btn" id="kFotos">📷 Fotos aufs Handy speichern <span class="small ${fotosHandyAn()?"":"mute"}" style="margin-left:auto;${fotosHandyAn()?"color:var(--ok)":""}">${meinGeraet()==="ios"?"per Knopf":fotosHandyAn()?"an":"aus"}</span></button>`:""}
       ${window.jdInstallHilfe?`<button class="btn" id="kInst">📲 App auf den Startbildschirm</button>`:""}
       <button class="btn" id="kAus" style="color:var(--bad)">Abmelden</button>
     </div></div>`;
@@ -5533,6 +5600,11 @@ function bindKonto(){
   $("#kAnsicht") && ($("#kAnsicht").onclick=ansichtDialog);
   $("#kMails") && ($("#kMails").onclick=syncMails);
   $("#kInst") && ($("#kInst").onclick=()=>window.jdInstallHilfe(true));
+  $("#kFotos") && ($("#kFotos").onclick=()=>modal(`<h2>📷 Fotos aufs Handy</h2><div class="small" style="line-height:1.5">Jedes Foto wird mail-tauglich verkleinert (ca. 1600 Pixel, meist 200–400 KB) und in der App gespeichert.<br><br>${meinGeraet()==="ios"
+      ?"<b>iPhone:</b> Im Auftrag unter „Fotos nach der Montage“ oder im Bericht auf <b>„📲 Fotos aufs Handy“</b> tippen und dann <b>„Bilder sichern“</b> wählen – sie landen in den Fotos. Automatisch geht das auf dem iPhone nicht."
+      :`<b>Android:</b> Jedes neue Foto wird zusätzlich automatisch auf dem Handy gespeichert – im Ordner <b>„Download“</b>, der Name beginnt mit <b>JD-Brueder-Montage_</b> und der Auftragsnummer.`}</div>
+    ${meinGeraet()==="ios"?"":`<button class="btn block ${fotosHandyAn()?"":"ok"}" id="fhUm" style="margin-top:14px">${fotosHandyAn()?"Automatisch speichern ausschalten":"Automatisch speichern einschalten"}</button>`}
+    <button class="btn block" data-close style="margin-top:8px">Schließen</button>`,(m,close)=>{ m.querySelector("#fhUm") && (m.querySelector("#fhUm").onclick=()=>{ try{ localStorage.setItem("jdFotosHandy",fotosHandyAn()?"aus":"an"); }catch(e){} close(); render(); toast(fotosHandyAn()?"Fotos werden aufs Handy gespeichert ✓":"Automatisch speichern ist aus"); }); }));
   $("#kAus") && ($("#kAus").onclick=async()=>{ if(!await confirmBox("Abmelden?","Du musst dich danach mit deiner E-Mail-Adresse neu anmelden.","Abmelden")) return;
     if(window.jdLogout) window.jdLogout(); else toast("Abmelden geht nur in der echten App"); });
 }
@@ -5584,8 +5656,16 @@ function berichtText(o){
   return L.filter(x=>x!==null).join("\n");
 }
 async function blobToB64(blob){ return await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
-function berichtDialog(id){
+// Gemeinsamer Auftrag: Anteile der Subs, die noch nicht kontrolliert sind
+const offeneKontrollen=o=>subsVon(o).filter(u=>subNurAnteil(o,u)&&!spaetDazu(o,u)&&!o.subAnteil?.[u]?.bestaetigtAm);
+async function kontrolleVorVersand(o){
+  const off=offeneKontrollen(o); if(!off.length) return true;
+  const nichtAb=off.filter(u=>!o.subAnteil?.[u]?.abgegebenAm);
+  return await confirmBox("Noch nicht alles kontrolliert",`${off.map(u=>`<b>${esc(nameOf(u))}</b>: ${o.subAnteil?.[u]?.abgegebenAm?"Bericht abgegeben, aber noch nicht kontrolliert":"Bericht noch nicht abgegeben"}`).join("<br>")}<br><br>${nichtAb.length?"Ohne seine Positionen":"Mit seinen Positionen, wie er sie eingetragen hat,"} zusammenfügen und abschicken?`,"Trotzdem abschicken","warn");
+}
+async function berichtDialog(id,geprueft){
   const o=S.orders[id];
+  if(can.planen() && !geprueft && !await kontrolleVorVersand(o)) return;
   const typ=o.berichtTyp||o.abschluss?.typ||"ok";
   const rk=Object.values(S.reklas).filter(r=>r.auftragId===id).sort((a,c)=>c.am-a.am)[0];
   const cands=[];

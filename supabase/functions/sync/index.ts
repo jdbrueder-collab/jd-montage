@@ -373,7 +373,8 @@ async function pushNachricht(db: any, nid: string, von: string) {
   const o = await getDoc(db, "auftraege", n.auftragId);
   if (!o) return { gesendet: 0, grund: "kein Auftrag" };
   await updDoc(db, "nachrichten", nid, { gemeldetAm: Date.now() });
-  const an = new Set<string>([...(await chefIds(db)), ...((o.monteure || []) as string[])]);
+  // private Nachricht (z. B. „Menge angepasst“ an einen Sub): nur an diese Person
+  const an = n.nur ? new Set<string>([String(n.nur)]) : new Set<string>([...(await chefIds(db)), ...((o.monteure || []) as string[])]);
   an.delete(von);
   const rollen = (await getDoc(db, "einstellungen", "rollen")) || {};
   const { data: prof } = await db.from("profiles").select("name").eq("id", von).maybeSingle();
