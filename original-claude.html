@@ -1825,8 +1825,11 @@ function anteilKarte(o){
     ${zu?abrechnungTabelle({...d,uid:me},P):`<div id="preisliste">`}`;
   if(zu) return h+`</div>`;
   h+=posBloecke(P?posFuer(P):posListe(o),o,x=>zeile(x.label,x.einheit,P?nn(pr[x.k]):"","data-lq",x.k,d.mengen?.[x.k]));
-  h+=zeile("km selbst gefahren","km",P?nn(P.kmSelbst):"","data-lf","kmSelbst",d.kmSelbst);
-  h+=zeile("km mitgefahren","km",P?nn(P.kmMit):"","data-lf","kmMit",d.kmMit);
+  // Fahrt: Kilometer zählen nur einmal je Fahrzeug. Wer bei JD Brüder mitgefahren ist, trägt keine km ein.
+  const fa=d.fahrtArt||(nn(d.kmSelbst)?"eigen":"");
+  h+=`<div class="pl-z pl-etage"><div class="pl-l">Fahrt<span>Kilometer zählen nur einmal je Fahrzeug</span></div>
+    <div class="grid2" style="gap:6px;grid-column:1/-1"><button type="button" class="btn sm ${fa==="mit"?"on":""}" data-fahrt="mit" ${zu?"disabled":""}>🚗 Bei JD Brüder mitgefahren</button><button type="button" class="btn sm ${fa==="eigen"?"on":""}" data-fahrt="eigen" ${zu?"disabled":""}>🚐 Eigenes Fahrzeug</button></div>
+    ${fa==="mit"?`<div class="small mute" style="grid-column:1/-1">Keine eigenen Kilometer – die Fahrt zählt beim Fahrer.</div>`:fa==="eigen"?`<div style="grid-column:1/-1"><div class="small mute">km hin + zurück${P?" · "+fmtEUR(nn(P.kmSelbst))+" je km":""}</div>${inp("data-lf","kmSelbst",d.kmSelbst)}</div>`:""}</div>`;
   h+=`<div class="pl-z pl-etage"><div class="pl-l">Etagengeld<span>${P?fmtEUR(nn(P.stockSatz))+" je Stockwerk":""}</span></div>
       <div class="grid3" style="gap:6px;grid-column:1/-1">${[["stockwerke","Stockwerke"],["etagenAnzahl","Anzahl"],["personen","Personen"]].map(([k,l])=>`<div><div class="small mute">${l}</div>${inp("data-lf",k,d[k])}</div>`).join("")}</div></div>
     </div>
@@ -2542,9 +2545,9 @@ function einsatzCard(o,fk){
     const pv=e.personenVorOrt||b.personen||(o.monteure||[]).length||"";
     const akm=e.anfahrtKm??"";
     h+=`<div class="banner ok" style="margin-bottom:14px"><b>📍 Angekommen um ${new Date(e.ankunftAm).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})} Uhr</b>
-       <label class="f" style="margin-top:8px">Wie viele Kilometer seid ihr gefahren?</label>
+       <label class="f" style="margin-top:8px">Wie viele Kilometer hin? <span class="mute" style="font-weight:500">(einfache Strecke, je Fahrzeug – nicht je Person)</span></label>
        <div class="row" style="flex-wrap:nowrap;align-items:center"><input class="i" id="anKm" inputmode="decimal" value="${esc(akm)}" placeholder="${esc(o.sollKm||"z. B. 85")}" style="font-size:18px;text-align:center;font-weight:700"><b>km</b></div>
-       ${o.sollKm?`<div class="small mute" style="margin-top:4px">Laut Route ca. ${esc(o.sollKm)} km</div>`:""}</div>
+       <div class="small mute" style="margin-top:4px">${o.sollKm?`Laut Route ca. ${esc(o.sollKm)} km. `:""}Die Rückfahrt rechnet die App dazu (hin + zurück). Wer mitfährt, zählt nicht extra.</div></div>
      <div class="q">Montage beginnen?</div>
      ${e.personenVorOrt?`<div class="small" style="margin:8px 0 2px;font-weight:600" id="pvInfo">👷 ${esc(e.personenVorOrt)} Person${e.personenVorOrt==1?"":"en"} vor Ort · <a href="#" id="pvAend">ändern</a></div>`:""}
      <div id="pvW" ${e.personenVorOrt?'style="display:none"':""}><label class="f">Wie viele Personen sind vor Ort?</label>
@@ -2804,13 +2807,15 @@ function erfassenTeil(o,fk,imBericht=false){
   </div>`;
 }
 const MEHR_GRUENDE=["Räume nur teilweise montierbar","Anhänger abladen & sortieren","Material fehlt / falsch geliefert","Wartezeit auf der Baustelle","Baustelle nicht frei / andere Gewerke"];
+// Mehraufwand: wie viele Personen beteiligt waren, gibt man selbst an – nicht die Personen vor Ort oder Mitfahrer
+const mehrPersonen=(m,sel)=>{ const v=parseInt(m.querySelector(sel).value,10); if(!(v>0)){ m.querySelector(sel).focus(); toast("Bitte eintragen, wie viele Personen am Mehraufwand beteiligt waren",3500); return null; } return String(v); };
 function mehrAufwandDialog(id){
-  const o=S.orders[id], pv=nn(o.einsatz?.personenVorOrt)||nn(o.bericht?.personen)||"";
+  const o=S.orders[id];
   modal(`<h2>⏱ Mehraufwand / Sonderbemerkung</h2>
    <label class="f">Was ist passiert? *</label>
    <div class="ziel-w">${MEHR_GRUENDE.map(g=>`<button class="fp" data-mg="${esc(g)}">${esc(g)}</button>`).join("")}</div>
    <textarea class="i" id="maT" style="margin-top:8px" placeholder="z. B. Mehraufwand, weil die Räume nur teilweise montierbar waren"></textarea>
-   <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="maS" inputmode="decimal" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen</label><input class="i" id="maP" inputmode="numeric" value="${esc(pv)}"></div></div>
+   <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="maS" inputmode="decimal" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen beteiligt *</label><input class="i" id="maP" inputmode="numeric" value="" placeholder="z. B. 2"></div></div>
    <label class="f">Fotos</label>${fotoWahlHtml()}
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
     const fotos=[]; fotoWahlBinden(m,fotos);
@@ -2818,9 +2823,10 @@ function mehrAufwandDialog(id){
     m.querySelector("#ok").onclick=async()=>{
       const t=m.querySelector("#maT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
       const sv=m.querySelector("#maS").value.trim(), min=sv?parseMin(sv):null; if(sv && min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
+      const pers=mehrPersonen(m,"#maP"); if(!pers) return;
       const bt=m.querySelector("#ok"); bt.disabled=true;
       const sid="s"+Date.now().toString(36), c=S.orders[id]||o;
-      const neu=[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:String(parseInt(m.querySelector("#maP").value,10)||1),min:min||null,bemerkung:"",von:myId(),am:Date.now()}];
+      const neu=[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:pers,min:min||null,bemerkung:"",von:myId(),am:Date.now()}];
       await upd(orderPath(id),{bericht:{sonder:neu}});
       close(); if(fotos.length) await uploadFotos(id,"sonder:"+sid,fotos.map(f=>f.file),{position:"Mehraufwand"});
       toast("Mehraufwand eingetragen ✓ – steht im Montagebericht",3000);
@@ -2858,7 +2864,7 @@ function fotoUmstellen(id,fids){
     ${so.length?`<label class="f">An einen vorhandenen Mehraufwand</label><div class="erf-wahl">${so.map(x=>`<button class="fp" data-ua="s:${esc(x.id)}">${esc(String(x.arbeit).slice(0,50))}</button>`).join("")}</div><label class="f">… oder neu</label>`:`<label class="f">Was ist passiert?</label>`}
     <div class="ziel-w">${MEHR_GRUENDE.map(g=>`<button class="fp" data-mg="${esc(g)}">${esc(g)}</button>`).join("")}</div>
     <textarea class="i" id="umT" style="margin-top:8px" placeholder="z. B. Räume nur teilweise montierbar">${esc(altPos?"Mehraufwand – "+altPos:"")}</textarea>
-    <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="umS" inputmode="decimal" placeholder="z. B. 2:30"></div><div><label class="f">Personen</label><input class="i" id="umP" inputmode="numeric" value="${esc(o.einsatz?.personenVorOrt||1)}"></div></div>
+    <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="umS" inputmode="decimal" placeholder="z. B. 2:30"></div><div><label class="f">Personen</label><input class="i" id="umP" inputmode="numeric" value="" placeholder="z. B. 2"></div></div>
    </div>
    <div data-ut="mf">
     <label class="f">Welche Position ist fertig?</label><input class="i" id="umPos" value="${esc(erst.position&&akt==="montage"?erst.position:"")}" placeholder="z. B. WC Damen EG" list="umPosL"><datalist id="umPosL">${vs.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
@@ -2888,8 +2894,9 @@ function fotoUmstellen(id,fids){
         else {
           const t=m.querySelector("#umT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
           const sv=m.querySelector("#umS").value.trim(), min=sv?parseMin(sv):null; if(sv&&min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
+          const pers=mehrPersonen(m,"#umP"); if(!pers) return;
           const sid="s"+Date.now().toString(36);
-          await upd(P,{bericht:{sonder:[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:String(parseInt(m.querySelector("#umP").value,10)||1),min:min||null,bemerkung:"",von:uid,am:erst.am||Date.now()}]}});
+          await upd(P,{bericht:{sonder:[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:pers,min:min||null,bemerkung:"",von:uid,am:erst.am||Date.now()}]}});
           kat="sonder:"+sid;
         }
         position="Mehraufwand";
@@ -2907,14 +2914,15 @@ function sonderBearbeiten(id,sid){
   const o=S.orders[id]; const x=sonderListe(o?.bericht||{}).find(e=>e.id===sid); if(!x) return;
   modal(`<h2>⏱ Mehraufwand</h2>
    <label class="f">Was ist passiert?</label><textarea class="i" id="seT">${esc(x.arbeit||"")}</textarea>
-   <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="seS" inputmode="decimal" value="${x.min?fmtHMin(x.min):""}" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen</label><input class="i" id="seP" inputmode="numeric" value="${esc(x.personen||1)}"></div></div>
+   <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="seS" inputmode="decimal" value="${x.min?fmtHMin(x.min):""}" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen beteiligt *</label><input class="i" id="seP" inputmode="numeric" value="${esc(x.personen||"")}" placeholder="z. B. 2"></div></div>
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
     setTimeout(()=>m.querySelector(x.min?"#seT":"#seS")?.focus(),60);
     m.querySelector("#ok").onclick=async()=>{
       const t=m.querySelector("#seT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
       const sv=m.querySelector("#seS").value.trim(), min=sv?parseMin(sv):null; if(sv&&min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
+      const pers=mehrPersonen(m,"#seP"); if(!pers) return;
       const c=S.orders[id]||o;
-      await upd(orderPath(id),{bericht:{sonder:sonderListe(c.bericht||{}).map(e=>e.id===sid?{...e,arbeit:t.slice(0,300),min:min||null,personen:String(parseInt(m.querySelector("#seP").value,10)||1)}:e)}});
+      await upd(orderPath(id),{bericht:{sonder:sonderListe(c.bericht||{}).map(e=>e.id===sid?{...e,arbeit:t.slice(0,300),min:min||null,personen:pers}:e)}});
       close(); toast("Mehraufwand gespeichert ✓",2200);
     };
   });
@@ -2977,7 +2985,7 @@ function reklaBerichtCard(o,fk){
    <div class="grid3">
      <div><label class="f">Arbeitszeit</label><input class="i" id="rkAz" value="${az!=null?fmtHMin(az):""}" placeholder="z. B. 3:30">${gest!=null?`<div class="small mute">gestoppt: ${fmtHMin(gest)} Std.</div>`:""}</div>
      <div><label class="f">Personen</label><input class="i" data-b="personen" inputmode="numeric" value="${esc(b.personen??e.personenVorOrt??"")}"></div>
-     <div><label class="f">Gefahrene km</label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}"></div>
+     <div><label class="f">Gefahrene km <span class="mute" style="font-weight:500">(hin + zurück)</span></label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}"></div>
    </div>
    <label class="f">Was wurde gemacht?</label>
    <textarea class="i" data-b="taetigkeit" id="fTaet" placeholder="z. B. Tür Kabine 3 neu eingestellt, Scharnier getauscht, Abdeckkappen ersetzt">${esc(b.taetigkeit??"")}</textarea>
@@ -3119,7 +3127,7 @@ function bindEinsatz(o){
     if(!nn(km)) { $("#anKm")?.focus(); return toast("Bitte eintragen, wie viele km ihr gefahren seid"); }
     const pv=parseInt($("#pvo").value,10); if(!(pv>0)) return toast("Bitte die Anzahl der Personen vor Ort eintragen");
     const now=Date.now(); const z=[...(o.zeiten||[])].map(x=>({...x})); if(!running(o)) z.push({s:now,by:myId(),p:pv});
-    const bp={personen:String(pv)}; if(leer(o.bericht?.istKm)) bp.istKm=km;
+    const bp={personen:String(pv)}; if(leer(o.bericht?.istKm)) bp.istKm=String(Math.round(nn(km)*2*10)/10); // hin + zurück, einmal je Fahrzeug
     const monS=(o.monteure||[]).includes(myId())?null:[...(o.monteure||[]),myId()];
     await upd(P,{zeiten:z,einsatz:{startAm:now,personenVorOrt:pv,anfahrtKm:km},bericht:bp,...(monS?{monteure:monS}:{})}); toast("Montage läuft ⏱ – jetzt Vorher-Fotos machen 📷",3500);
   });
@@ -3520,6 +3528,7 @@ function bindLohn(o){
   document.querySelectorAll("[data-ldel]").forEach(b=>b.onclick=()=>{ delete S.lohnNeu[o.id+":"+b.dataset.ldel]; save({mengen:{[b.dataset.ldel]:""}}); });
   $("#posWahl") && ($("#posWahl").onclick=()=>posWahlDialog(o,save));
   document.querySelectorAll("[data-lf]").forEach(i=>i.onchange=()=>save({[i.dataset.lf]:i.value.trim()}));
+  document.querySelectorAll("[data-fahrt]").forEach(b=>b.onclick=async()=>{ const a=b.dataset.fahrt; await save(a==="mit"?{fahrtArt:"mit",kmSelbst:"",kmMit:""}:{fahrtArt:"eigen",kmMit:""}); render(); });
 }
 
 /* ---------- Bericht einsprechen ---------- */
