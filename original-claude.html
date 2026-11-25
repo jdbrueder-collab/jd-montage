@@ -23,10 +23,6 @@ header.top .sp{flex:1}
 .chip.ok{background:var(--okbg);color:var(--ok)}.chip.warn{background:var(--warnbg);color:var(--warn)}.chip.bad{background:var(--badbg);color:var(--bad)}.chip.info{background:var(--infobg);color:var(--info)}.chip.dark{background:rgba(255,255,255,.16);color:#fff}.chip.gold{background:#fff4dc;color:#8a5a00}
 main{max-width:860px;margin:0 auto;padding:14px 14px calc(90px + env(safe-area-inset-bottom))}
 nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
-nav.bottom a{flex:1;max-width:150px;text-align:center;padding:8px 2px 9px;font-size:11.5px;color:var(--mute);text-decoration:none;font-weight:600}
-nav.bottom a .ic{display:block;font-size:20px;line-height:1.2}
-nav.bottom a.on{color:var(--brand)}
-nav.bottom a .dot{display:inline-block;min-width:16px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font-size:10px;margin-left:2px}
 .card{background:var(--card);border-radius:var(--r);border:1px solid var(--line);padding:14px;margin-bottom:12px}
 .card h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--mute)}
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -383,10 +379,6 @@ label.f{font-weight:600;color:var(--grey)}
 .thumbs .t.pdf svg.ic{width:28px;height:28px;color:var(--brand2)}
 /* Untere Leiste: ruhige Symbole */
 nav.bottom{background:rgba(255,255,255,.94);-webkit-backdrop-filter:saturate(180%) blur(12px);backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--line)}
-nav.bottom a{font-size:11px;font-weight:600;padding:9px 2px 10px;color:#98a2b3}
-nav.bottom a .ic{display:block;margin:0 auto 3px;width:22px;height:22px;stroke-width:1.8}
-nav.bottom a.on{color:var(--brand)}
-nav.bottom a.on .ic{stroke-width:2.2}
 .modal{border-radius:20px 20px 0 0}
 @media(min-width:600px){.modal{border-radius:20px}}
 .toast{border-radius:14px;font-weight:500}
@@ -445,28 +437,9 @@ details.sk>summary .badge{margin-left:auto}
 .msg-b .badge{min-width:16px;height:16px;font-size:10px;padding:0 4px}
 /* ===== Fußleiste: schwebend, rund, aktives Symbol hinterlegt ===== */
 nav.bottom{left:0;right:0;bottom:0;background:transparent!important;border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding:0 12px calc(10px + env(safe-area-inset-bottom));pointer-events:none}
-nav.bottom .nav-in{pointer-events:auto;display:flex;width:100%;max-width:520px;margin:0 auto;background:rgba(255,255,255,.86);-webkit-backdrop-filter:saturate(180%) blur(18px);backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(16,24,40,.06);border-radius:24px;box-shadow:0 10px 30px rgba(16,24,40,.14),0 2px 6px rgba(16,24,40,.06);padding:6px}
-nav.bottom a{flex:1;max-width:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px 5px;border-radius:18px;color:#8a94a6;text-decoration:none;-webkit-tap-highlight-color:transparent;transition:transform .12s}
-nav.bottom a:active{transform:scale(.94)}
-nav.bottom .nav-ic{position:relative;display:flex;align-items:center;justify-content:center;width:52px;height:30px;border-radius:15px;transition:background .2s,color .2s}
-nav.bottom .nav-ic .ic{width:22px;height:22px;margin:0;stroke-width:1.9;display:block}
-nav.bottom .nav-ic .badge{position:absolute;top:-4px;left:30px;box-shadow:0 0 0 2px #fff}
-nav.bottom .nav-l{font-size:11px;font-weight:600;line-height:1.1;white-space:nowrap}
-nav.bottom a.on{color:var(--brand)}
-nav.bottom a.on .nav-ic{background:var(--infobg);color:var(--brand)}
-nav.bottom a.on .nav-ic .ic{stroke-width:2.3}
-nav.bottom a.on .nav-l{font-weight:750}
 main{padding-bottom:calc(112px + env(safe-area-inset-bottom))!important}
 .toast{bottom:calc(100px + env(safe-area-inset-bottom))!important}
 /* iPhone: Apple-Blau; Android: Material-Töne */
-html[data-geraet=ios] nav.bottom a.on,html[data-geraet=ios] nav.bottom a.on .nav-ic{color:#007aff}
-html[data-geraet=ios] nav.bottom a.on .nav-ic{background:#e6f0ff}
-html[data-geraet=ios] nav.bottom .nav-l{font-size:10.5px}
-html[data-geraet=android] nav.bottom .nav-in{background:rgba(243,244,249,.94);border-radius:28px}
-html[data-geraet=android] nav.bottom a.on,html[data-geraet=android] nav.bottom a.on .nav-ic{color:#001a41}
-html[data-geraet=android] nav.bottom a.on .nav-ic{background:#d9e2ff}
-html[data-geraet=android] nav.bottom .nav-ic .badge{box-shadow:0 0 0 2px #f3f4f9}
-@media(min-width:900px){nav.bottom .nav-in{max-width:560px}}
 
 /* ===== „Zu tun“: schlicht – eine Zeile, Punkt in der Farbe, Zahl als Abzeichen ===== */
 .tun{flex-wrap:nowrap;overflow-x:auto;gap:6px;margin:0 -16px 10px;padding:0 16px 2px;scrollbar-width:none}
@@ -1224,7 +1197,6 @@ function alsGelesen(id){ const g=gelesen(); if(!ungelesen(id)) return; g[id]=Dat
 const nachrichtenVon=id=>Object.values(S.nachrichten||{}).filter(n=>n.auftragId===id&&(!n.nur||n.nur===myId()||n.von===myId()||can.planen())).sort((a,b)=>a.am-b.am);
 function ungelesen(id){ const g=gelesen(), ab=Math.max(g[id]||0,g.seit||0); return nachrichtenVon(id).filter(n=>n.von!==myId()&&n.am>ab).length; }
 const binBeteiligt=o=>can.planen()||(o.monteure||[]).includes(myId());
-const ungelesenGesamt=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&binBeteiligt(o)).reduce((n,o)=>n+ungelesen(o.id),0);
 // Termin: hat der Eingeteilte ihn bestätigt? (gilt nur für genau dieses Datum)
 const terminKey=o=>o.termin?String(o.termin):"";
 const terminBestaetigt=(o,uid)=>!!o.termin && o.terminOk?.[uid]===terminKey(o);
@@ -2087,7 +2059,7 @@ function viewDetail(id){
   // Chef: alle Positionen aller Monteure zusammen
   if(can.planen() && !frueh && !kompakt) h+=gesamtKarte(o);
   // Berichte der Subunternehmer: wer hat abgegeben, wem fehlt er – mit „Bericht anfordern“
-  if(can.planen() && !o.storniert && !kompakt && subsVon(o).length && (o.termin||istFertig(o))) h+=subBerichtKarte(o);
+  if(can.planen() && !o.storniert && !kompakt && subsVon(o).length && (istFertig(o)||!!o.einsatz?.startAm||(!!o.termin&&terminTag(o)<tagHeute()))) h+=subBerichtKarte(o);
   // Anteil des Subunternehmers (gemeinsamer Auftrag) – nur für die Abrechnung, geht nicht an meta
   if((o.gemeinsam||o.nachgetragen) && can.planen() && !frueh && !kompakt) h+=anteilChefKarte(o);
 
@@ -2254,7 +2226,7 @@ function abschlussStand(o,f,reklas){
   if(o.abschluss && o.berichtTyp!=="leerfahrt"){ const ab=abnahmeStatus(o);
     z+=ab==="ok"?zeile("ok","Sichtabnahme unterschrieben",o.unterschrift?`${esc(o.unterschrift.name||"")} · ${fmtDT(o.unterschrift.am)}`:o.abnahmeDatei?"hochgeladen":"auf Papier")
       :ab==="versendet"?zeile("warn","Sichtabnahme beim Kunden – wartet",`Frist bis ${new Date(o.abnahmeAnfrage.frist).toLocaleDateString("de-DE")}`)
-      :ab==="verzicht"?zeile("ok","Sichtabnahme nicht angefordert"):zeile(abnahmeFaellig(o)?"bad":"warn","Sichtabnahme fehlt"); }
+      :ab==="verzicht"?zeile("ok","Sichtabnahme nicht angefordert"):`<button type="button" class="ab-z ab-btn ${abnahmeFaellig(o)?"bad":"warn"}" data-zur-abnahme><span class="ab-i">${abnahmeFaellig(o)?"!":"•"}</span><div style="flex:1;min-width:0;text-align:left"><b>Sichtabnahme fehlt</b><div class="small mute">antippen: unterschreiben, anfordern oder Foto hochladen</div></div><span class="ab-pfeil">›</span></button>`; }
   const off=reklas.filter(r=>r.offen).length; if(reklas.length) z+=zeile(off?"warn":"ok",off?`${off} Reklamation${off>1?"en":""} offen`:"Reklamationen erledigt");
   z+=abgerechnet(o)?zeile("ok","Vergütung von meta erhalten",[o.abgerechnetMit?"Abrechnung "+esc(o.abgerechnetMit):"",can.finanzen()&&f?fmtEUR(f.summe):""].filter(Boolean).join(" · ")):zeile("warn","Vergütung von meta steht noch aus");
   const ae=o.aenderung;
@@ -2453,7 +2425,6 @@ function geschListe(t){
     if(/^eg$|^erdgeschoss$/i.test(x)) return "EG"; if(/^kg$|^keller/i.test(x)) return "KG"; if(/^ug$/i.test(x)) return "UG"; if(/^dg$|^dach/i.test(x)) return "DG";
     const m=x.match(/^(\d+)\s*\.?\s*(og|obergeschoss)$/i); return m?`${m[1]}. OG`:x; }))];
 }
-const geschText=l=>[...l].sort((a,c)=>{ const i=GESCH_ALLE.indexOf(a), j=GESCH_ALLE.indexOf(c); return (i<0?99:i)-(j<0?99:j); }).join(", ");
 // Geschosse als Liste: Geschoss wählen + Anzahl; „＋ Geschoss“ fügt eine Zeile hinzu
 function geschZeilen(b){
   if(Array.isArray(b?.geschossListe) && geschLText(b.geschossListe)===String(b.geschosse||"")) return b.geschossListe.map(x=>({g:x.g||"",n:x.n??""})); // sonst (z. B. eingesprochen) aus dem Text
@@ -2695,18 +2666,6 @@ function berichtSchreiberHtml(o){
 const NACHWEISE=[["passschnitt","✂️ Passschnitt"],["aussparung","⭕ Aussparung"],["bohrung_fsz","🔩 Feinsteinzeug bohren"],["ausklinkung_fliese","📐 Ausklinkung Fliese"]];
 const nwLabel=k=>(NACHWEISE.find(x=>x[0]===k)?.[1]||"").replace(/^\S+\s/,"")||(S.lohnPos.find(p=>p.k===k)||{}).label||k;
 const nwEinheit=k=>(S.lohnPos.find(p=>p.k===k)||{}).einheit||"Stück";
-function nachweiseTeil(o,fk,imBericht=false){
-  const nw=(o.nachweise||[]).filter(istMeins), so=sonderFertig(o.bericht||{}).filter(istMeins);
-  const fz=k=>fk(k).length;
-  return `<div class="nw-k" id="nachweise">
-   <div style="font-weight:700;margin-bottom:6px">✂️ Nachweise & Mehraufwand</div>
-   <div class="ziel-w">${NACHWEISE.map(([k,l])=>`<button class="fp" data-nw="${k}">${l}</button>`).join("")}<button class="fp" data-nw="andere">＋ andere Position</button></div>
-   <button class="btn block" id="mehrAufw" style="margin-top:8px;min-height:46px">⏱ Mehraufwand / Sonderbemerkung</button>
-   ${nw.length||so.length?`<div class="nw-l">${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b>${vonTag(x)} · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?`<div class="small mute">${esc(x.bem)}</div>`:""}${fz("nachweis:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("nachweis:"+x.id)} Foto${fz("nachweis:"+x.id)>1?"s":""}</summary>${thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false)}</details>`:""}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}
-     ${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>⏱ ${esc(x.arbeit)}</b>${vonTag(x)} · ${fmtStd(x.min)} Std. · ${esc(x.personen||1)} Pers.${x.bemerkung?`<div class="small mute">${esc(x.bemerkung)}</div>`:""}${fz("sonder:"+x.id)?`<details class="mini-f"><summary>📷 ${fz("sonder:"+x.id)} Foto${fz("sonder:"+x.id)>1?"s":""}</summary>${thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false)}</details>`:""}</div><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}</div>`
-     :`<div class="small mute" style="margin-top:6px">${imBericht?"Keine Nachweise erfasst.":"Antippen, Anzahl eintragen, Foto machen – die Menge steht danach automatisch im Montagebericht."}</div>`}
-  </div>`;
-}
 // gewählte Fotos merken und erst beim Speichern hochladen
 function fotoWahlHtml(){ return `<div class="thumbs" id="fwL" style="margin-top:8px"></div>
    <div class="grid2" style="margin-top:8px"><label class="btn ok" style="min-height:50px">📷 Kamera<input type="file" accept="image/*" capture="environment" multiple hidden data-fw></label><label class="btn" style="min-height:50px">🖼 Galerie<input type="file" accept="image/*" multiple hidden data-fw></label></div>`; }
@@ -2832,13 +2791,6 @@ function mehrAufwandDialog(id){
       toast("Mehraufwand eingetragen ✓ – steht im Montagebericht",3000);
     };
   });
-}
-// Fotos während der Montage – jedes mit Position (z. B. „WC Damen EG · Kabine 2“)
-function montageFotosTeil(o,fk){
-  const l=fk("montage"), gr={};
-  l.forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push(f); });
-  return `<div style="margin-top:12px"><button class="btn block" id="mFotoBtn" style="min-height:50px">📷 Fotos hinzufügen – mit Position</button>
-   ${l.length?`<details class="mini-f" style="margin-top:8px"><summary>🗂 Fotos während der Montage · ${l.length}</summary><div style="margin-top:4px">${Object.entries(gr).map(([k,a])=>`<details class="mini-f mf-z" style="display:block"><summary>📍 ${esc(k)} · 📷 ${a.length}</summary>${thumbs(a,"montage",false)}</details>`).join("")}</div></details>`:""}</div>`;
 }
 function positionVorschlaege(o){
   const an=(o.dokInfo?.anlagen||[]).map(a=>[a.raum,a.geschoss].filter(Boolean).join(" · ")).filter(Boolean);
@@ -2968,11 +2920,6 @@ function nmbTeil(o){
    ${ok?"":`<div class="small mute" style="margin-top:4px">„Weiter“ geht erst, wenn beide Freigaben abgehakt sind.</div>`}
    <button class="btn ghost block" id="nmbLeer" style="margin-top:14px;color:var(--bad)">✕ Ohne Freigabe beenden – ${LEERFAHRT_NMB}</button>`;
 }
-function sonderVorschlaege(){
-  const cnt={}; SONDER_VORLAGEN.forEach(t=>cnt[t]=0);
-  Object.values(S.orders).forEach(x=>(x.bericht?.sonder||[]).forEach(s=>{ const t=(s.arbeit||"").trim(); if(t) cnt[t]=(cnt[t]||0)+1; }));
-  return Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b,"de"));
-}
 const istReklaAuftrag=o=>/^R[\s-]?\d/i.test(String(o?.nr||"").trim());
 // Reklamationsbericht: Zeit (gestoppt ab Montagestart), Personen, km, was gemacht wurde, Zusatzarbeiten – keine Positionen
 function reklaBerichtCard(o,fk){
@@ -3076,15 +3023,6 @@ function berichtFertigCard(o,fk){
    <button class="btn ok block" id="berFertig" style="margin-top:12px;min-height:56px;font-size:16px">✓ Bericht fertig – weiter${istReklaAuftrag(o)?" → Sichtabnahme":" → Reklamation"}</button></div>`;
 }
 const missList=f=>`<ul class="miss">${f.map(x=>`<li class="${x.soft?"soft":""}">• ${esc(x.t)}</li>`).join("")}</ul>`;
-function abschlussCard(o,fk){
-  if(istFertig(o)) return "";
-  const f=fehlendeAngaben(o,fk);
-  return `<div class="card"><h3>Montageabschluss</h3>
-   ${f.length?`<div class="small"><b>Noch offen:</b></div>${missList(f)}`:`<div class="banner ok small" style="margin:0">Alle Angaben vollständig ✓</div>`}
-   <div style="display:grid;gap:8px;margin-top:12px">
-    <button class="btn ok block" id="finOk">✓ Montage fertig – alles gut</button>
-    <button class="btn warn block" id="finRekla">⚠ Montage mit Reklamation</button></div></div>`;
-}
 function bindEinsatz(o){
   const id=o.id, P=orderPath(id), e=o.einsatz||{};
   // Losfahren: mit Fahrtenbuch-Auto → Kilometerstand speichern und Fahrt öffnen
@@ -3094,7 +3032,8 @@ function bindEinsatz(o){
       const fid=await fahrtStarten({fzId:fzW,startKm:kmW,auftragId:id,zweck:`Montage Auftrag ${o.nr}`,von:(fahrtenVon(fzW).filter(f=>!f.offen).slice(-1)[0]?.nach)||S.settings.firmenAdresse||"",nach:adresseOf(o),ziel:"baustelle"});
       if(!fid) return false; extra={fahrtId:fid,fahrtFz:fzW}; startGeoMerken(fid); }
     const mon=(o.monteure||[]).includes(myId())?null:[...(o.monteure||[]),myId()];
-    await upd(P,{einsatz:{...patch,abfahrtAm:Date.now(),von:myId(),...extra},...(mon?{monteure:mon}:{})}); if(fzW) toast("Gute Fahrt 🚗 – Kilometerstand gespeichert",3000);
+    const tOk=terminOffenFuerMich(o)?{terminOk:{[myId()]:terminKey(o)}}:{}; // wer losfährt, für den passt der Termin
+    await upd(P,{einsatz:{...patch,abfahrtAm:Date.now(),von:myId(),...extra},...(mon?{monteure:mon}:{}),...tOk}); if(fzW) toast("Gute Fahrt 🚗 – Kilometerstand gespeichert",3000);
     return true;
   };
   document.querySelectorAll("#einsatzCard [data-fz]").forEach(b=>b.onclick=()=>{ S.fzWahl[id]={fahrzeug:b.dataset.fz,fahrzeugText:null}; render(); });
@@ -4946,7 +4885,7 @@ function bind(r){
   app.querySelectorAll("[data-fotos-handy]").forEach(b=>b.onclick=()=>fotosAufsHandy(b.dataset.fotosHandy));
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go(can.mitarbeiter()?"zeit":"auftraege"));
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; t.dataset.scan?dokViewer(t.dataset.zoom,"scan","Unterlage"):lightbox(t.dataset.zoom); });
-  const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); if(n&&n!==document.activeElement){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } },250); }; }
+  const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); if(n&&n!==q&&document.activeElement===document.body){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } },250); }; } // nur wenn das Feld ersetzt wurde – nie den Fokus zurückholen
   // Zusatztasten R, -, / und Löschen: schreiben ins Suchfeld, ohne dass die Zahlentastatur zugeht
   if(q) document.querySelectorAll("[data-qk]").forEach(b=>{ b.onpointerdown=e=>e.preventDefault(); b.onmousedown=e=>e.preventDefault();
     b.onclick=()=>{ const k=b.dataset.qk, a=q.selectionStart??q.value.length, e=q.selectionEnd??a;
@@ -5010,6 +4949,7 @@ function bindDetail(id){
   $("#losJetzt") && ($("#losJetzt").onclick=()=>einsatzLosfahren(o));
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
+  document.querySelectorAll("[data-zur-abnahme]").forEach(b=>b.onclick=()=>{ const k=document.querySelector("#abnahmeCard")||[...document.querySelectorAll("main .card h3")].find(h=>/Sichtabnahme/.test(h.textContent))?.closest(".card"); k?.scrollIntoView({behavior:"smooth",block:"start"}); });
   document.querySelectorAll("[data-pruef]").forEach(b=>b.onclick=()=>b.dataset.pruef==="einzel"?berichtAnsicht(id,{bestaetigen:true}):pruefDialog(id,b.dataset.pruef));
   $("#uebermitteln") && ($("#uebermitteln").onclick=()=>berichtDialog(id,true));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
@@ -5594,9 +5534,6 @@ function mcpMsg(e){
   return e?.message||c||String(e);
 }
 const txt = el => (el?.textContent||"").replace(/ /g," ").replace(/\s+/g," ").trim();
-const num = s => { const v=parseFloat(String(s).replace(/\s/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",",".")); return isNaN(v)?0:v; };
-function splitBV(s){ const i=s.lastIndexOf(","); return i>0?{bauvorhaben:s.slice(0,i).trim(),plzOrt:s.slice(i+1).trim()}:{bauvorhaben:s,plzOrt:""}; }
-function htmlDoc(m){ const h=(m.htmlBody||"").replace(/<br\s*\/?>/gi," "); if(!h) return null; return new DOMParser().parseFromString(h,"text/html"); }
 
 async function syncMails(){
   if(!can.mails()) return;
