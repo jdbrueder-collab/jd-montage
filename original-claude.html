@@ -570,6 +570,7 @@ button.ab-btn{width:100%;border:0;border-bottom:1px solid var(--line);background
 button.ab-btn:active{background:var(--greybg)}
 .ab-z.info .ab-i{background:var(--infobg);color:var(--info)}
 .ab-pfeil{font-size:22px;color:var(--mute);align-self:center;line-height:1}
+.modal-back{position:sticky;top:-24px;z-index:3;display:flex;width:calc(100% + 8px);margin:-10px -4px 6px;padding:16px 4px 8px;font-size:15px;background:var(--card,#fff)}
 .ab-senden{margin-top:10px;padding:12px;border-radius:14px;background:var(--okbg);color:var(--ink)}
 /* ===== Bericht kontrollieren ===== */
 details.kontr{margin:8px 0 4px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--card)}
@@ -742,6 +743,13 @@ function modal(html, onMount, onClose){
   bg.addEventListener("click",e=>{ if(e.target===bg) close(); });
   bg.querySelectorAll("[data-close]").forEach(b=>b.onclick=close);
   onMount && onMount(bg.firstElementChild, close);
+  return close;
+}
+const ZURUECK=`<button type="button" class="back modal-back" data-close>‹ Zurück</button>`;
+function modalZurueck(html,onMount){
+  let zu=null; const pop=()=>{ if(zu) zu(); };
+  const close=modal(ZURUECK+html,(m,c)=>{ zu=c; onMount&&onMount(m,c); },()=>{ window.removeEventListener("popstate",pop); zu=null; if(history.state?.jdFenster) history.back(); });
+  try{ history.pushState({...(history.state||{}),jdFenster:1},""); window.addEventListener("popstate",pop); }catch(e){}
   return close;
 }
 function confirmBox(title, text, okLabel="Ja", cls="pri"){
@@ -2207,8 +2215,8 @@ function pruefDialog(id,key){
        ${gesamtKarte(o).replace(/^<div class="card">/,"<div>").replace(/<h3>[\s\S]*?<\/h3>/,"")||`<table class="pos"><tbody>${Object.entries(tot).map(([k,v])=>`<tr><td>${esc(lab(k))}</td><td><b>${fmtZahl(v)}</b></td></tr>`).join("")}</tbody></table>`}`;
       fuss=`<button class="btn block" id="pdPdf">📄 Bericht-PDF ansehen</button>`;
     } else if(key==="einzel"){ close(); return berichtAnsicht(id,{bestaetigen:true}); }
-    m.querySelector(".pd-in").innerHTML=iconize(h+`<div style="display:grid;gap:8px;margin-top:14px">${fuss}<button class="btn block" data-close>Schließen</button></div>`);
-    m.querySelector("[data-close]").onclick=close;
+    m.querySelector(".pd-in").innerHTML=iconize(h.replace(/^<h2>/,'<h2 style="margin-top:0">')+`<div style="display:grid;gap:8px;margin-top:14px">${fuss}<button class="btn block" data-close>Schließen</button></div>`);
+    m.querySelectorAll("[data-close]").forEach(b=>b.onclick=close);
     m.querySelectorAll("[data-z]").forEach(t=>t.onclick=()=>lightbox(t.dataset.z));
     bindKontrolle(m,id,()=>{ render(); zeichne(m,close); });
     m.querySelectorAll("[data-bfehlt]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bfehlt; b.disabled=true; await upd(orderPath(id),{berichtFehlt:{[u]:{am:Date.now(),von:myId()}}});
@@ -2227,7 +2235,7 @@ function pruefDialog(id,key){
       else { const e={am:Date.now(),von:myId()}; await upd(orderPath(id),{eigenOk:e}); S.orders[id]={...c,eigenOk:e}; toast("✓ Dein Bericht ist als korrekt markiert",2600); }
       close(); render(); scrollTo({top:0,behavior:"smooth"}); });
   };
-  modal(`<div class="pd-in"></div>`,(m,close)=>zeichne(m,close));
+  modalZurueck(`<div class="pd-in"></div>`,(m,close)=>zeichne(m,close));
 }
 function abschlussStand(o,f,reklas){
   const chef=can.planen(), titel=o.berichtTyp==="leerfahrt"?"Leerfahrt-Bericht":istReklaAuftrag(o)?"Reklamationsbericht":"Montagebericht", a=o.abschluss||{};
@@ -2272,7 +2280,7 @@ function berichtAnsicht(id,opt={}){
   const fk=k=>Object.values(S.fotos).filter(f=>f.kat===k&&!/pdf/i.test(f.typ||"")&&fotoMeins(f)).sort((a,c)=>(a.am||0)-(c.am||0)).map(f=>"/_blob/"+f.assetId);
   const rk=Object.values(S.reklas).filter(r=>r.auftragId===id&&istMeins(r));
   const darfBearb=can.einsatz() && !berichtGesperrt(o) && (can.planen() || !berichtAbgegeben(o));
-  modal(`<h2>${titel} ${esc(o.nr)}</h2><div class="small mute" style="margin-bottom:10px">${esc(o.bauvorhaben||"")}${o.abschluss?` · abgeschlossen ${fmtDT(o.abschluss.am)}`:""}${o.berichtGesendetAm?` · an meta ${fmtDT(o.berichtGesendetAm)}`:""}</div>
+  modalZurueck(`<h2>${titel} ${esc(o.nr)}</h2><div class="small mute" style="margin-bottom:10px">${esc(o.bauvorhaben||"")}${o.abschluss?` · abgeschlossen ${fmtDT(o.abschluss.am)}`:""}${o.berichtGesendetAm?` · an meta ${fmtDT(o.berichtGesendetAm)}`:""}</div>
    ${(()=>{ const nt=naechteText(b); const fa=[rek&&az?"⏱ "+fmtHMin(az)+" Std.":"",b.personen?"👷 "+esc(b.personen)+" Pers.":"",b.istKm?"🚗 "+esc(b.istKm)+" km":"",nt&&nt!=="keine"?"🛏 "+esc(nt):"",b.geschosse?"🏢 "+esc(b.geschosse):""].filter(Boolean);
      return fa.length?`<div class="ber-fakten">${fa.map(x=>`<span>${x}</span>`).join("")}</div>`:""; })()}
    <dl class="kv">
@@ -4993,7 +5001,7 @@ function bindDetail(id){
   $("#losJetzt") && ($("#losJetzt").onclick=()=>einsatzLosfahren(o));
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
-  document.querySelectorAll("[data-pruef]").forEach(b=>b.onclick=()=>pruefDialog(id,b.dataset.pruef));
+  document.querySelectorAll("[data-pruef]").forEach(b=>b.onclick=()=>b.dataset.pruef==="einzel"?berichtAnsicht(id,{bestaetigen:true}):pruefDialog(id,b.dataset.pruef));
   $("#uebermitteln") && ($("#uebermitteln").onclick=()=>berichtDialog(id,true));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
   $("#subDazu") && ($("#subDazu").onclick=()=>subImEinsatzDialog(id));
