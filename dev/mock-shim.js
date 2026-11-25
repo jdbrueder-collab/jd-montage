@@ -28,13 +28,13 @@
       { k: "stunden", label: "Stunden (Zusatzarbeit)", einheit: "Std." }
     ];
     const preise = { vorderfront: 38, trennwand: 22, seitenwand: 18, aussparung: 12, feinsteinzeug: 6, vorhangschiene: 9, passschnitt: 5, urinaltrennwand: 15, kabine_demontage: 20, spiegel: 8, ablage: 6, stunden: 35 };
-    const zelt = { name: "Zeltwald", preise: { ...preise, vorderfront: 33, trennwand: 19, aussparung: 10 }, stockSatz: 4, kmSelbst: 0.3, kmMit: 0.1 };
+    const zelt = { name: "Sub (Test)", preise: { ...preise, vorderfront: 33, trennwand: 19, aussparung: 10 }, stockSatz: 4, kmSelbst: 0.3, kmMit: 0.1 };
     const docs = {
       "einstellungen/allgemein": { firmenAdresse: "Hauptstraße 1, 56305 Puderbach", monteurName: "JD Brüder GbR", monteurNr: "286", antwortEmail: "test-antwort@example.com", berichtEmail: "test-bericht@example.com", serien: [{ id: "std", name: "Serie 13", typen: "RP, RF", pos: lohnPos.map(x => x.k) }, { id: "s30", name: "Serie 30", typen: "RW, NR, FT, FN", pos: lohnPos.map(x => x.k) }, { id: "kiga", name: "KIGA 13/30", typen: "", pos: lohnPos.map(x => x.k) }] },
-      "einstellungen/rollen": { map: { [SUB]: "sub", [MON]: "monteur", [META]: "hersteller" }, info: { [SUB]: { firma: "Zeltwald" }, [META]: { firma: "meta Trennwandanlagen" } } },
+      "einstellungen/rollen": { map: { [SUB]: "sub", [MON]: "monteur", [META]: "hersteller" }, info: { [SUB]: { firma: "Sub (Test)" }, [META]: { firma: "meta Trennwandanlagen" } } },
       "einstellungen/lohnpositionen": { items: lohnPos },
       "lohn/preise": { preise, stockSatz: 5, kmSelbst: 0.3, kmMit: 0.1, listen: { lz: zelt, s30: { name: "Serie 30", serie: true, preise: { ...preise, vorderfront: 50, trennwand: 30 }, stockSatz: 5, kmSelbst: 0.3, kmMit: 0.1 }, kiga: { name: "KIGA 13/30", serie: true, preise: { ...preise, vorderfront: 45 }, stockSatz: 5, kmSelbst: 0.3, kmMit: 0.1 } }, zuordnung: { [SUB]: "lz" }, sichtbarFuer: [], subSicht: [SUB] },
-      [`lohnsicht/${SUB}`]: { name: "Zeltwald", preise: zelt.preise, stockSatz: 4, kmSelbst: 0.3, kmMit: 0.1 },
+      [`lohnsicht/${SUB}`]: { name: "Sub (Test)", preise: zelt.preise, stockSatz: 4, kmSelbst: 0.3, kmMit: 0.1 },
       "auftraege/17714-1": { nr: "17714/1", bauvorhaben: "Wohnquartier Rheinblick", plzOrt: "67059 Ludwigshafen", adresse: "Rheinallee 12, 67059 Ludwigshafen", kw: 47, jahr: 2026, kabinen: "9", terminStatus: "fest", termin: T, prodStatus: "abholbereit", bauleiterName: "Herr Bauer", bauleiterTel: "0621 123456", bauleiterMail: "test-kunde@example.com", zahlungspflichtiger: "Musterbau GmbH, Industriestr. 5, 67059 Ludwigshafen", geschosse: "EG, 1. OG, 2. OG", monteure: [ME, SUB], erstelltAm: T - 5 * D },
       "auftraege/TEST-2": { nr: "TEST-2", bauvorhaben: "Testauftrag – abholbereit", plzOrt: "56305 Puderbach", kw: 48, jahr: 2026, kabinen: "2", terminStatus: "zu_terminieren", prodStatus: "abholbereit", erstelltAm: T },
       "auftraege/TEST-1": { nr: "TEST-1", bauvorhaben: "Testauftrag – Einsatz durchspielen", plzOrt: "56305 Puderbach", adresse: "Teststraße 1, 56305 Puderbach", kw: 47, jahr: 2026, kabinen: "4", terminStatus: "fest", termin: T, prodStatus: "abholbereit", abholbereitAm: T - D, bauleiterName: "Frau Test", bauleiterTel: "0123 456789", bauleiterMail: "test-kunde@example.com", zahlungspflichtiger: "Testbau GmbH, Teststraße 1, 56305 Puderbach", geschosse: "EG, 1. OG", monteure: [ME, MON], erstelltAm: T },
@@ -103,7 +103,7 @@
     };
   }
   const db = { collection: colRef, doc: path => { const [c, i] = path.split("/"); return docRef(c, i); } };
-  const names = { [ME]: "Jonathan (Test)", [SUB]: "Zeltwald (Test)", [MON]: "Monteur (Test)", [META]: "meta Disposition (Test)" };
+  const names = { [ME]: "Jonathan (Test)", [SUB]: "Sub (Test)", [MON]: "Monteur (Test)", [META]: "meta Disposition (Test)" };
   const user = {
     me: async () => ({ id: myId, name: names[myId], email: myId + "@example.com" }),
     isOwner: async () => rolle === "chef",
