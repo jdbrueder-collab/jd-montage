@@ -565,6 +565,12 @@ body.tun-auf .tun-dock{display:none}
 .tun-panel .tun-p{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:10px 10px 10px 12px;border-radius:12px;font-size:14px;white-space:normal}
 .tp-t{flex:1;min-width:0;display:flex;flex-direction:column}.tp-t small{font-weight:500;color:var(--mute);font-size:12px;margin-top:1px}
 body.nav-aus .tun-dock{display:none}
+/* ===== Berichte prüfen (Statuskarte) ===== */
+button.ab-btn{width:100%;border:0;border-bottom:1px solid var(--line);background:none;cursor:pointer;color:inherit;font:inherit;text-align:left;padding:9px 2px;border-radius:0;-webkit-tap-highlight-color:transparent}
+button.ab-btn:active{background:var(--greybg)}
+.ab-z.info .ab-i{background:var(--infobg);color:var(--info)}
+.ab-pfeil{font-size:22px;color:var(--mute);align-self:center;line-height:1}
+.ab-senden{margin-top:10px;padding:12px;border-radius:14px;background:var(--okbg);color:var(--ink)}
 /* ===== Bericht kontrollieren ===== */
 details.kontr{margin:8px 0 4px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--card)}
 details.kontr>summary{cursor:pointer;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -1860,10 +1866,31 @@ function anteilChefKarte(o){
       ${o.aenderung?.status==="angefragt"&&o.aenderung.von===u?`<div class="banner warn small" style="margin:8px 0 0">✏️ Änderungswunsch: „${esc(o.aenderung.grund||"")}“<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div></div>`:""}</div>`; }).join("")}
     <div class="small mute" style="margin-top:6px">${subs.every(u=>spaetDazu(o,u))?"Nachträglich dazugenommen: nur für die interne Abrechnung – geht nicht an meta.":"Die Positionen zählen mit in den Bericht an meta (siehe „Alle Positionen zusammen“)."}</div></div>`;
 }
+// Kontrolle eines Sub-Berichts binden (auf der Seite oder im Prüf-Fenster)
+function bindKontrolle(root,id,nachher=render){
+  root.querySelectorAll("[data-kneu]").forEach(sel=>sel.onchange=()=>{ const u=sel.dataset.kneu, k=sel.value; if(!k) return;
+    S.kontrNeu=S.kontrNeu||{}; S.kontrNeu[id+u]=[...(S.kontrNeu[id+u]||[]),k]; S.fold[id+":kontr:"+u]=true; nachher();
+    setTimeout(()=>{ const i=(document.querySelector(".modal [data-kq=\""+CSS.escape(u+"|"+k)+"\"]")||document.querySelector("[data-kq=\""+CSS.escape(u+"|"+k)+"\"]")); i?.focus(); },60); });
+  root.querySelectorAll("[data-kq]").forEach(i=>i.onchange=async()=>{
+    const [u,k]=i.dataset.kq.split("|"), c=S.orders[id], key=lohnDocId(id,u), l=S.lohn[key]; if(!l) return toast("Kein Bericht von "+nameOf(u));
+    const kz={...(l.kuerzung||{})}, orig=kz[k]?nn(kz[k].alt):nn(l.mengen?.[k]), neu=nn(String(i.value).replace(",","."))||0, lab=(S.lohnPos.find(p=>p.k===k)||{}).label||k;
+    const mengen={...(l.mengen||{})};
+    if(neu<orig){
+      if(!await confirmBox("Menge verringern?",`<b>${esc(lab)}</b>: ${fmtZahl(orig)} → ${fmtZahl(neu)}<br>${esc(nameOf(u))} bekommt Bescheid, seine Abrechnung wird angepasst.`,"Verringern","warn")){ nachher(); return; }
+      if(neu) mengen[k]=neu; else delete mengen[k];
+      kz[k]={alt:orig,neu,am:Date.now(),von:myId()};
+    } else { if(kz[k]){ mengen[k]=orig; delete kz[k]; } }
+    const next={...l,mengen,kuerzung:kz}; delete next.id; S.lohn[key]={id:key,...next}; await setDoc("lohnberichte/"+key,next);
+    const plus=neu>orig?neu:null; await upd(orderPath(id),{kontrolle:{[u]:{plus:{[k]:plus},am:Date.now(),von:myId()}}});
+    S.orders[id]={...c,kontrolle:{...(c.kontrolle||{}),[u]:{...(c.kontrolle?.[u]||{}),plus:{...(c.kontrolle?.[u]?.plus||{}),[k]:plus}}}};
+    if(neu<orig){ nachrichtSenden(id,`📉 ${nameOf(u)}: In deinem Bericht wurde eine Menge angepasst – ${lab}: ${fmtZahl(orig)} → ${fmtZahl(neu)}. Sie hat nicht gestimmt; deine Abrechnung ist entsprechend geändert.`,u); toast(`Verringert ✓ – ${nameOf(u)} bekommt Bescheid`,3000); }
+    else toast(neu>orig?"Ergänzt ✓ – nur im Bericht an meta":"Gespeichert ✓",2400);
+    nachher(); });
+}
 function bindAnteil(id){
   const o=S.orders[id]; if(!o) return; const P=orderPath(id);
   requestAnimationFrame(()=>plFenster());
-  document.querySelectorAll("[data-bfehlt]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bfehlt, c=S.orders[id]||o; b.disabled=true;
+  $("#app").querySelectorAll("[data-bfehlt]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bfehlt, c=S.orders[id]||o; b.disabled=true;
     const patch={berichtFehlt:{[u]:{am:Date.now(),von:myId()}}};
     // Bericht an meta ist schon geschrieben → der Sub trägt seinen Anteil nach
     if(istFertig(c) && !subNurAnteil(c,u) && c.abschluss?.by!==u){ patch.nachgetragen={[u]:{am:Date.now(),von:myId()}}; patch.gemeinsam=true; }
@@ -1902,24 +1929,7 @@ function bindAnteil(id){
     const neu={...a,abgegebenAm:Date.now()}; await upd(P,{subAnteil:{[myId()]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[myId()]:neu}};
     nachrichtSenden(id,`🤝 Meine Montageabrechnung ist fertig${mitPreis?` (${fmtEUR(a.summe)})`:""} – bitte prüfen und bestätigen.`); toast("Abgegeben ✓ – JD Brüder bekommt Bescheid",3000); render();
   });
-  document.querySelectorAll("[data-kneu]").forEach(sel=>sel.onchange=()=>{ const u=sel.dataset.kneu, k=sel.value; if(!k) return;
-    S.kontrNeu=S.kontrNeu||{}; S.kontrNeu[id+u]=[...(S.kontrNeu[id+u]||[]),k]; S.fold[id+":kontr:"+u]=true; render();
-    setTimeout(()=>{ const i=document.querySelector(`[data-kq="${CSS.escape(u+"|"+k)}"]`); i?.focus(); },60); });
-  document.querySelectorAll("[data-kq]").forEach(i=>i.onchange=async()=>{
-    const [u,k]=i.dataset.kq.split("|"), c=S.orders[id]||o, key=lohnDocId(id,u), l=S.lohn[key]; if(!l) return toast("Kein Bericht von "+nameOf(u));
-    const kz={...(l.kuerzung||{})}, orig=kz[k]?nn(kz[k].alt):nn(l.mengen?.[k]), neu=nn(String(i.value).replace(",","."))||0, lab=(S.lohnPos.find(p=>p.k===k)||{}).label||k;
-    const mengen={...(l.mengen||{})};
-    if(neu<orig){
-      if(!await confirmBox("Menge verringern?",`<b>${esc(lab)}</b>: ${fmtZahl(orig)} → ${fmtZahl(neu)}<br>${esc(nameOf(u))} bekommt Bescheid, seine Abrechnung wird angepasst.`,"Verringern","warn")){ render(); return; }
-      if(neu) mengen[k]=neu; else delete mengen[k];
-      kz[k]={alt:orig,neu,am:Date.now(),von:myId()};
-    } else { if(kz[k]){ mengen[k]=orig; delete kz[k]; } }
-    const next={...l,mengen,kuerzung:kz}; delete next.id; S.lohn[key]={id:key,...next}; await setDoc("lohnberichte/"+key,next);
-    const plus=neu>orig?neu:null; await upd(orderPath(id),{kontrolle:{[u]:{plus:{[k]:plus},am:Date.now(),von:myId()}}});
-    S.orders[id]={...c,kontrolle:{...(c.kontrolle||{}),[u]:{...(c.kontrolle?.[u]||{}),plus:{...(c.kontrolle?.[u]?.plus||{}),[k]:plus}}}};
-    if(neu<orig){ nachrichtSenden(id,`📉 ${nameOf(u)}: In deinem Bericht wurde eine Menge angepasst – ${lab}: ${fmtZahl(orig)} → ${fmtZahl(neu)}. Sie hat nicht gestimmt; deine Abrechnung ist entsprechend geändert.`,u); toast(`Verringert ✓ – ${nameOf(u)} bekommt Bescheid`,3000); }
-    else toast(neu>orig?"Ergänzt ✓ – nur im Bericht an meta":"Gespeichert ✓",2400);
-    render(); });
+  bindKontrolle($("#app"),id); // nur die Seite – das Prüf-Fenster bindet sich selbst
   document.querySelectorAll("[data-anteil-ok]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.anteilOk;
     if(!await confirmBox("Kontrolliert – genehmigen?",`Der Bericht von <b>${esc(nameOf(u))}</b> wird so festgehalten. ${esc(nameOf(u))} kann danach seine Rechnung schreiben. Deine Ergänzungen zählen nur für den Bericht an meta.`,"Genehmigen","ok")) return;
     const neu={...(o.subAnteil?.[u]||{}),bestaetigtAm:Date.now(),bestaetigtVon:myId()}; await upd(P,{subAnteil:{[u]:neu}}); S.orders[id]={...S.orders[id],subAnteil:{...(o.subAnteil||{}),[u]:neu}};
@@ -2064,14 +2074,15 @@ function viewDetail(id){
   }
 
   // Chef: alle Positionen aller Monteure zusammen
-  if(can.planen() && !frueh) h+=gesamtKarte(o);
+  if(can.planen() && !frueh && !kompakt) h+=gesamtKarte(o);
   // Berichte der Subunternehmer: wer hat abgegeben, wem fehlt er – mit „Bericht anfordern“
-  if(can.planen() && !o.storniert && subsVon(o).length && (o.termin||istFertig(o))) h+=subBerichtKarte(o);
+  if(can.planen() && !o.storniert && !kompakt && subsVon(o).length && (o.termin||istFertig(o))) h+=subBerichtKarte(o);
   // Anteil des Subunternehmers (gemeinsamer Auftrag) – nur für die Abrechnung, geht nicht an meta
-  if((o.gemeinsam||o.nachgetragen) && can.planen() && !frueh && (!kompakt||anteilOffen(o)||Object.keys(o.nachgetragen||{}).some(u=>!o.subAnteil?.[u]?.bestaetigtAm))) h+=anteilChefKarte(o);
+  if((o.gemeinsam||o.nachgetragen) && can.planen() && !frueh && !kompakt) h+=anteilChefKarte(o);
 
   // Bericht-Versand (beim gemeinsamen Auftrag sieht der Sub nur seinen Anteil)
   if(o.gemeinsam && can.sub()){ /* nichts – der Bericht an meta kommt vom Chef */ }
+  else if(kompakt && can.planen()){ /* Prüfen und Übermitteln stehen oben in der Statuskarte */ }
   else if(o.berichtStatus==="pruefung" && (can.planen()||!kompakt)){
     h+=`<div class="card" style="border-left:5px solid var(--accent)"><h3>${can.planen()?"Bericht prüfen":"Montagebericht"}</h3>
      ${can.planen()?(()=>{ const sl=S.lohn[lohnDocId(o.id,o.berichtVonSub)]; const sc=sl&&subPreiseAn()?calcLohn(sl,S.preise):null; const meta=can.finanzen()&&S.fin[o.id]?Number(S.fin[o.id].summe)||0:null;
@@ -2141,12 +2152,91 @@ function stornoDialog(id){
 }
 // Fertiger Montagebericht – nur zum Ansehen
 // Fertiggestellt/Erledigt: was erledigt ist und was noch zu prüfen ist – kurz untereinander
+/* ---------- Berichte prüfen (oben im fertigen Auftrag) ----------
+   Je Sub/Mitmonteur ein Bericht, dazu der eigene Bericht von JD Brüder und der zusammengefügte Bericht an meta.
+   Erst wenn alle „korrekt“ sind, erscheint „An meta übermitteln“. */
+const anteilLeute=o=>[...new Set([...(o.gemeinsam?(o.monteure||[]).filter(m=>S.roles[m]==="sub"):[]),...Object.keys(o.nachgetragen||{}),...Object.keys(o.subAnteil||{})])].filter(u=>S.roles[u]==="sub"||o.subAnteil?.[u]||spaetDazu(o,u));
+const eigenerOk=o=>!anteilLeute(o).length||!!o.eigenOk?.am||!!o.bestaetigtAm;
+const bereitZumSenden=o=>!!o.berichtStatus&&o.berichtStatus!=="gesendet"&&o.berichtStatus!=="pruefung"&&anteilLeute(o).every(u=>o.subAnteil?.[u]?.bestaetigtAm||spaetDazu(o,u))&&eigenerOk(o);
+function pruefZeilen(o){
+  const leute=anteilLeute(o), gesendet=o.berichtStatus==="gesendet";
+  const btn=(st,key,titel,info)=>`<button type="button" class="ab-z ab-btn ${st}" data-pruef="${esc(key)}"><span class="ab-i">${st==="ok"?"✓":st==="bad"?"!":"•"}</span><div style="flex:1;min-width:0;text-align:left"><b>${titel}</b>${info?`<div class="small mute">${info}</div>`:""}</div><span class="ab-pfeil">›</span></button>`;
+  let z="";
+  if(leute.length){
+    leute.forEach(u=>{ const a=o.subAnteil?.[u]||{};
+      z+=btn(a.bestaetigtAm?"ok":a.abgegebenAm?"warn":"bad","sub:"+u,`Montagebericht ${a.bestaetigtAm?"":"prüfen – "}${esc(nameOf(u))}`,
+        a.bestaetigtAm?`korrekt übernommen · ${fmtDT(a.bestaetigtAm)}`:a.abgegebenAm?`abgegeben ${fmtDT(a.abgegebenAm)} – bitte prüfen`:"noch nicht abgegeben"+(spaetDazu(o,u)?" · nur Abrechnung":"")); });
+    const w=o.berichtVon||o.abschluss?.by;
+    z+=btn(eigenerOk(o)?"ok":"warn","eigen",`${w&&w!==myId()?"Montagebericht JD Brüder":"Mein Montagebericht"}`,eigenerOk(o)?`korrekt${o.eigenOk?.am?" · "+fmtDT(o.eigenOk.am):""}`:"bitte prüfen und als korrekt markieren");
+    z+=btn(gesendet?"ok":"info","gesamt","🔗 Montagebericht zusammengefügt",gesendet?"so an meta gesendet":"alle Positionen für meta");
+  } else if(o.berichtStatus==="pruefung"){
+    z+=btn("warn","einzel",`Montagebericht prüfen – ${esc(nameOf(berichtVonWem(o)))}`,"antippen, ansehen, korrekt übernehmen");
+  } else if(o.berichtVonSub && (o.bestaetigtAm||o.subGeprueftAm)){
+    z+=btn("ok","einzel",`Montagebericht ${esc(nameOf(o.berichtVonSub))}`,`korrekt übernommen · ${fmtDT(o.bestaetigtAm||o.subGeprueftAm)}`);
+  }
+  if(bereitZumSenden(o)) z+=`<div class="ab-senden"><b>✓ ${leute.length?"Alle Berichte korrekt":"Bericht korrekt"}</b><div class="small">${leute.length?"Soll der zusammengefügte Bericht":"Soll der Bericht"} jetzt an meta übermittelt werden?</div>
+    ${can.senden()?`<button class="btn ok block" id="uebermitteln" style="margin-top:8px;min-height:50px">📨 An meta übermitteln</button>`:`<div class="small mute" style="margin-top:6px">Zum Senden muss Gmail in claude.ai verbunden sein.</div>`}</div>`;
+  return z;
+}
+function pruefDialog(id,key){
+  const zeichne=(m,close)=>{ const o=S.orders[id]; if(!o) return close();
+    let h="", fuss="";
+    if(key.startsWith("sub:")){ const u=key.slice(4), a=o.subAnteil?.[u]||{}, l=S.lohn[lohnDocId(id,u)];
+      const fotos=Object.values(S.fotos).filter(f=>f.auftragId===id&&f.von===u&&f.kat!=="unterlagen"&&/^image/.test(f.typ||"image"));
+      h=`<h2>Montagebericht – ${esc(nameOf(u))}</h2><div class="small mute" style="margin-bottom:8px">${a.abgegebenAm?`abgegeben ${fmtDT(a.abgegebenAm)}`:"noch nicht abgegeben"}${a.bestaetigtAm?` · korrekt übernommen ${fmtDT(a.bestaetigtAm)}`:""}${spaetDazu(o,u)?" · nachträglich dazu – zählt nur für seine Abrechnung":""}</div>`;
+      if(!a.abgegebenAm){ h+=`<div class="banner warn small">${esc(nameOf(u))} hat seinen Bericht noch nicht abgegeben.${o.berichtFehlt?.[u]?` Angefordert am ${fmtDT(o.berichtFehlt[u].am)}.`:""}</div>${l?abrechnungTabelle({...l,uid:u},null):""}`;
+        fuss=`<button class="btn pri block" data-bfehlt="${esc(u)}">📣 ${o.berichtFehlt?.[u]?"Nochmal erinnern":"Bericht anfordern"}</button>`; }
+      else { S.fold[id+":kontr:"+u]=true;
+        h+=(o.berichtStatus!=="gesendet"&&!spaetDazu(o,u)?kontrolleTeil(o,u):"")+`<div class="small mute" style="margin:8px 0 4px">${esc(nameOf(u))} – seine Mengen (Abrechnung):</div>`+abrechnungTabelle(l?{...l,uid:u}:null,can.preise()&&(!istSubUid(u)||subPreiseAn())?preisFuer(u,S.preise,serieId(o)):null);
+        if(fotos.length) h+=`<label class="f">Seine Fotos <span class="mute">(${fotos.length})</span></label><div class="thumbs">${fotos.map(f=>`<div class="t" data-z="/_blob/${esc(f.assetId)}"><img loading="lazy" src="/_blob/${esc(f.assetId)}" alt=""></div>`).join("")}</div>`;
+        fuss=a.bestaetigtAm?`<div class="banner ok small" style="margin:0">✓ Korrekt übernommen</div>`:`<button class="btn ok block" id="pdOk" style="min-height:52px">✓ Korrekt &amp; übernehmen</button>`; }
+    } else if(key==="eigen"){
+      const jd=Object.values(S.lohn).filter(l=>l.auftragId===id&&!istSubUid(l.uid)&&!o.subAnteil?.[l.uid]&&!spaetDazu(o,l.uid));
+      if(!jd.some(l=>l.uid===myId())) jd.push({uid:myId(),mengen:{}});
+      const b=o.bericht||{}, lab=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k, ein=k=>(S.lohnPos.find(p=>p.k===k)||{}).einheit||"";
+      h=`<h2>${(o.berichtVon||o.abschluss?.by)&&(o.berichtVon||o.abschluss?.by)!==myId()?"Montagebericht JD Brüder":"Mein Montagebericht"}</h2>
+       <div class="ber-fakten" style="margin-bottom:8px">${[b.personen?"👷 "+esc(b.personen)+" Pers.":"",b.istKm?"🚗 "+esc(b.istKm)+" km":"",b.geschosse?"🏢 "+esc(b.geschosse):"",naechteText(b)&&naechteText(b)!=="keine"?"🛏 "+esc(naechteText(b)):""].filter(Boolean).map(x=>`<span>${x}</span>`).join("")}</div>
+       ${jd.map(l=>{ const keys=S.lohnPos.map(p=>p.k).filter(k=>nn(l.mengen?.[k])||(l.uid===myId()&&(S.eigenNeu?.[id]||[]).includes(k)));
+         return `<div class="small" style="font-weight:700;margin:10px 0 2px">${esc(l.uid===myId()?"Ich":nameOf(l.uid))}</div>${keys.map(k=>`<div class="kt-z"><div class="kt-l"><b>${esc(lab(k))}</b><span class="small mute">${esc(ein(k))}</span></div><input class="i kt-q" inputmode="decimal" data-eq="${esc(l.uid)}|${esc(k)}" value="${esc(String(l.mengen?.[k]??"").replace(".",","))}" placeholder="0"></div>`).join("")||`<div class="small mute">nichts eingetragen</div>`}`; }).join("")}
+       ${o.berichtStatus!=="gesendet"?`<select class="i" id="eigNeu" style="margin-top:10px"><option value="">＋ Position dazu …</option>${posListe(o).map(x=>`<option value="${esc(x.k)}">${esc(x.label)}</option>`).join("")}</select>
+       <button class="btn ghost block sm" id="eigBearb" style="margin-top:8px">✏️ Ganzen Bericht bearbeiten (Geschosse, km, Fotos …)</button>`:""}`;
+      fuss=o.berichtStatus==="gesendet"?"":eigenerOk(o)&&o.eigenOk?`<div class="banner ok small" style="margin:0">✓ Als korrekt markiert</div>`:`<button class="btn ok block" id="pdOk" style="min-height:52px">✓ Bericht korrekt – kann übernommen werden</button>`;
+    } else if(key==="gesamt"){
+      const tot=summeMengen(o), lab=k=>(S.lohnPos.find(p=>p.k===k)||{}).label||k;
+      h=`<h2>Montagebericht zusammengefügt</h2><div class="small mute" style="margin-bottom:8px">Das geht an meta – deine Positionen und die kontrollierten Berichte zusammen.</div>
+       ${gesamtKarte(o).replace(/^<div class="card">/,"<div>").replace(/<h3>[\s\S]*?<\/h3>/,"")||`<table class="pos"><tbody>${Object.entries(tot).map(([k,v])=>`<tr><td>${esc(lab(k))}</td><td><b>${fmtZahl(v)}</b></td></tr>`).join("")}</tbody></table>`}`;
+      fuss=`<button class="btn block" id="pdPdf">📄 Bericht-PDF ansehen</button>`;
+    } else if(key==="einzel"){ close(); return berichtAnsicht(id,{bestaetigen:true}); }
+    m.querySelector(".pd-in").innerHTML=iconize(h+`<div style="display:grid;gap:8px;margin-top:14px">${fuss}<button class="btn block" data-close>Schließen</button></div>`);
+    m.querySelector("[data-close]").onclick=close;
+    m.querySelectorAll("[data-z]").forEach(t=>t.onclick=()=>lightbox(t.dataset.z));
+    bindKontrolle(m,id,()=>{ render(); zeichne(m,close); });
+    m.querySelectorAll("[data-bfehlt]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bfehlt; b.disabled=true; await upd(orderPath(id),{berichtFehlt:{[u]:{am:Date.now(),von:myId()}}});
+      await nachrichtSenden(id,`📝 ${nameOf(u)}: Dein Montagebericht fehlt noch. Bitte trag ihn unter „🤝 Mein Anteil“ ein und gib ihn ab.`); toast(`📣 ${nameOf(u)} hat die Nachricht bekommen`,3000); render(); zeichne(m,close); });
+    m.querySelectorAll("[data-eq]").forEach(i=>i.onchange=async()=>{ const [u,k]=i.dataset.eq.split("|"), v=String(i.value).trim().replace(",","."); await saveLohn(S.orders[id],u,{mengen:{[k]:v}}); toast("Gespeichert ✓",1800); render(); zeichne(m,close); });
+    m.querySelector("#eigNeu") && (m.querySelector("#eigNeu").onchange=e=>{ const k=e.target.value; if(!k) return; S.eigenNeu=S.eigenNeu||{}; S.eigenNeu[id]=[...(S.eigenNeu[id]||[]),k]; zeichne(m,close); setTimeout(()=>m.querySelector(`[data-eq="${CSS.escape(myId()+"|"+k)}"]`)?.focus(),60); });
+    m.querySelector("#eigBearb") && (m.querySelector("#eigBearb").onclick=()=>{ close(); S.bearbeiten[id]=true; render(); scrollTo(0,0); });
+    m.querySelector("#pdPdf") && (m.querySelector("#pdPdf").onclick=async()=>{ try{ const cs=await renderVordruck(S.orders[id]); vorschauZeigen(cs.slice(0,1),`Montagebericht ${S.orders[id].nr}`); }catch(e){ toast("Vorschau nicht möglich"); } });
+    m.querySelector("#pdOk") && (m.querySelector("#pdOk").onclick=async()=>{ const c=S.orders[id];
+      // Bericht lag „zur Prüfung“ (vom Sub oder Mitarbeiter geschrieben): mit dem Übernehmen auch freigeben
+      const frei=c.berichtStatus==="pruefung"&&(key==="eigen"?!c.berichtVonSub:key==="sub:"+c.berichtVonSub);
+      if(frei){ const jetzt=Date.now(), bp={berichtStatus:"bereit",bestaetigtAm:jetzt,bestaetigtVon:myId(),subGeprueftAm:jetzt,subGeprueftVon:myId()}; await upd(orderPath(id),bp); Object.assign(c,bp); S.sync?.run({subFreigabe:id}).catch(()=>{}); }
+      if(key.startsWith("sub:")){ const u=key.slice(4), neu={...(c.subAnteil?.[u]||{}),bestaetigtAm:Date.now(),bestaetigtVon:myId()};
+        await upd(orderPath(id),{subAnteil:{[u]:neu}}); S.orders[id]={...c,subAnteil:{...(c.subAnteil||{}),[u]:neu}};
+        nachrichtSenden(id,`✓ ${nameOf(u)}: Dein Montagebericht ist kontrolliert und übernommen – du kannst deine Rechnung schreiben.`,u); toast(`✓ Bericht von ${nameOf(u)} übernommen`,2600); }
+      else { const e={am:Date.now(),von:myId()}; await upd(orderPath(id),{eigenOk:e}); S.orders[id]={...c,eigenOk:e}; toast("✓ Dein Bericht ist als korrekt markiert",2600); }
+      close(); render(); scrollTo({top:0,behavior:"smooth"}); });
+  };
+  modal(`<div class="pd-in"></div>`,(m,close)=>zeichne(m,close));
+}
 function abschlussStand(o,f,reklas){
   const chef=can.planen(), titel=o.berichtTyp==="leerfahrt"?"Leerfahrt-Bericht":istReklaAuftrag(o)?"Reklamationsbericht":"Montagebericht", a=o.abschluss||{};
   const zeile=(st,txt,sub="")=>`<div class="ab-z ${st}"><span class="ab-i">${st==="ok"?"✓":st==="bad"?"!":"•"}</span><div><b>${txt}</b>${sub?`<div class="small mute">${sub}</div>`:""}</div></div>`;
   let z="";
   if(o.abschluss) z+=zeile("ok",a.typ==="rekla"?"Montage abgeschlossen – mit Reklamation":"Montage abgeschlossen",`${fmtDT(a.am)}${a.by?" · "+esc(nameOf(a.by)):""}`);
-  if(o.berichtStatus==="gesendet") z+=zeile("ok",`${titel} an meta gesendet`,`${o.berichtGesendetAm?fmtDT(o.berichtGesendetAm):""}${o.berichtAn?" · "+esc(o.berichtAn):""}`);
+  const pz=chef?pruefZeilen(o):"";
+  if(o.berichtStatus==="gesendet") z+=zeile("ok",`${titel} an meta gesendet`,`${o.berichtGesendetAm?fmtDT(o.berichtGesendetAm):""}${o.berichtAn?" · "+esc(o.berichtAn):""}`)+pz;
+  else if(chef) z+=pz||(o.berichtStatus?zeile("warn",`${titel} noch an meta senden`):"");
   else if(o.berichtStatus==="pruefung") z+=zeile("warn",chef?`${titel} prüfen`:`${titel} wird von JD Brüder geprüft`,o.berichtVon?"von "+esc(nameOf(berichtVonWem(o))):"");
   else if(o.bestaetigtAm) z+=zeile(chef?"warn":"ok",chef?`${titel} bestätigt – noch an meta senden`:`${titel} bestätigt`,fmtDT(o.bestaetigtAm));
   else if(o.berichtStatus) z+=zeile("warn",chef?`${titel} noch an meta senden`:`${titel} fertig – wartet auf Versand`);
@@ -2173,7 +2263,7 @@ function aenderungAnfragen(id,art){
       nachrichtSenden(id,`✏️ Änderungsanfrage zum ${art==="anteil"?"Anteil":"Bericht"}: ${g}`); close(); toast("Anfrage gesendet ✓ – du bekommst Bescheid",3500); };
   });
 }
-function berichtAnsicht(id){
+function berichtAnsicht(id,opt={}){
   const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o), rek=istReklaAuftrag(o);
   const titel=o.berichtTyp==="leerfahrt"?"Leerfahrt":rek?"Reklamationsbericht":"Montagebericht";
   const pos=Object.entries(summeMengen(o,can.planen()?null:myId())).filter(([k])=>k!=="stunden").map(([k,v])=>`${String(v).replace(".",",")}× ${esc((S.lohnPos.find(p=>p.k===k)||{}).label||k)}`);
@@ -2195,6 +2285,7 @@ function berichtAnsicht(id){
    </dl>
    ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("/_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Fertigstellung · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${(o.nachweise||[]).map(x=>gruppe(`Nachweis · ${esc(x.label)} · ${esc(String(x.menge).replace(".",","))}`,fk("nachweis:"+x.id))).join("")}${sonderFertig(b).map(x=>gruppe(`Mehraufwand · ${esc(x.arbeit)}`,fk("sonder:"+x.id))).join("")}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["/_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"/_blob/"+a)))}
    <div style="display:grid;gap:8px;margin-top:14px">
+    ${opt.bestaetigen&&can.planen()&&o.berichtStatus==="pruefung"?`<button class="btn ok block" id="einzelOk" style="min-height:52px">✓ Korrekt &amp; übernehmen</button>`:""}
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
     <button class="btn block" id="fotosHandy">📲 Fotos aufs Handy</button>
     ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
@@ -2204,6 +2295,9 @@ function berichtAnsicht(id){
     <button class="btn block" data-close>Schließen</button></div>`,(m,close)=>{
     m.querySelectorAll("[data-z]").forEach(t=>t.onclick=()=>lightbox(t.dataset.z));
     m.querySelector("#fotosHandy").onclick=()=>fotosAufsHandy(id);
+    m.querySelector("#einzelOk") && (m.querySelector("#einzelOk").onclick=async()=>{ const jetzt=Date.now(), bp={berichtStatus:"bereit",bestaetigtAm:jetzt,bestaetigtVon:myId(),subGeprueftAm:jetzt,subGeprueftVon:myId()};
+      await upd(orderPath(id),bp); S.orders[id]={...S.orders[id],...bp}; S.sync?.run({subFreigabe:id}).catch(()=>{});
+      toast("✓ Korrekt übernommen",2600); close(); render(); scrollTo({top:0,behavior:"smooth"}); });
     m.querySelector("#pdfAns").onclick=async()=>{ const bt=m.querySelector("#pdfAns"); bt.disabled=true; bt.innerHTML=`<span class="spin"></span> wird erstellt …`;
       try{ const cs=await renderVordruck(o); vorschauZeigen(o.unterschrift?cs:cs.slice(0,1),`${titel} ${o.nr}`); }catch(e){ toast("Vorschau nicht möglich"); } bt.disabled=false; bt.textContent="📄 Bericht-PDF ansehen"; };
     m.querySelector("#bearb") && (m.querySelector("#bearb").onclick=()=>{ S.bearbeiten[id]=true; close(); render(); scrollTo(0,0); });
@@ -2483,8 +2577,8 @@ function einsatzCard(o,fk){
      ${af?`${ok?`<div class="banner ok small" style="margin:12px 0 0">✓ Sichtabnahme liegt vor${o.unterschrift?` – unterschrieben von <b>${esc(o.unterschrift.name||"")}</b>, ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?" – auf Papier":""}</div>`:""}
       <div class="grid2" style="margin-top:12px">
        <button class="btn ${af==="ja"&&!ok?"pri":""}" id="abfSign" style="min-height:66px;flex-direction:column;gap:2px">✍️ Unterschreiben<span class="small" style="font-weight:500;opacity:.85">${ok&&o.unterschrift?"neu unterschreiben":"vor Ort am Handy"}</span></button>
-       <button class="btn ${af==="nein"||ok?"ok":""}" id="abfSend" style="min-height:66px;flex-direction:column;gap:2px">${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?"🔗 Zusammenfügen & abschicken":"✉️ Versenden"}<span class="small" style="font-weight:500;opacity:.85">${ok?"Bericht + Sichtabnahme":"Bericht ohne Sichtabnahme"}</span></button></div>
-      ${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?`<div class="small mute" style="margin-top:6px">🔗 Deine Positionen und die kontrollierten Berichte von ${subsVon(o).filter(u=>subNurAnteil(o,u)).map(u=>esc(nameOf(u))).join(", ")} werden zu einem Bericht an meta zusammengefügt.${offeneKontrollen(o).length?` <b style="color:var(--warn)">Noch nicht kontrolliert: ${offeneKontrollen(o).map(u=>esc(nameOf(u))).join(", ")}.</b>`:""}</div>`:""}
+       <button class="btn ${af==="nein"||ok?"ok":""}" id="abfSend" style="min-height:66px;flex-direction:column;gap:2px">${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?"✓ Mein Bericht fertig":"✉️ Versenden"}<span class="small" style="font-weight:500;opacity:.85">${ok?"Bericht + Sichtabnahme":"Bericht ohne Sichtabnahme"}</span></button></div>
+      ${subsVon(o).some(u=>subNurAnteil(o,u))&&can.planen()?`<div class="small mute" style="margin-top:6px">🔗 Danach oben im Auftrag: Bericht von ${subsVon(o).filter(u=>subNurAnteil(o,u)).map(u=>esc(nameOf(u))).join(", ")} und deinen prüfen, beide „korrekt“ – dann geht der zusammengefügte Bericht an meta.${offeneKontrollen(o).length?` <b style="color:var(--warn)">Noch nicht kontrolliert: ${offeneKontrollen(o).map(u=>esc(nameOf(u))).join(", ")}.</b>`:""}</div>`:""}
       <div class="small mute" style="margin-top:8px">${ok?"Der Montagebericht geht mit der Sichtabnahme per Mail raus.":"Der Montagebericht geht ohne Sichtabnahme per Mail raus. Wird die Sichtabnahme später unterschrieben, kommt sie dazu."}${can.planen()?"":" Vorher prüft JD Brüder den Bericht."}</div>
       ${af==="nein"&&can.planen()&&can.mails()&&!ok&&!o.abnahmeAnfrage?`<button class="btn ghost block sm" id="reqAbn" style="margin-top:8px">👁 Sichtabnahme per Mail an den Kunden senden</button>`:""}
       ${af==="ja"&&!ok?`<details class="fold" style="margin-top:10px"><summary><span class="small">📄 Auf Papier unterschrieben? Foto hochladen</span></summary><div class="foldin">${abnahmeTeil(o,fk)}</div></details>`:""}`:""}`;
@@ -3053,9 +3147,9 @@ function bindEinsatz(o){
   $("#abfSign") && ($("#abfSign").onclick=async()=>{ if(o.bericht?.abnahmeFrage!=="ja") await upd(P,{bericht:{abnahmeFrage:"ja",abnahmeArt:"handy"}}); else if(o.bericht?.abnahmeArt!=="handy") upd(P,{bericht:{abnahmeArt:"handy"}}); signDialog(id); });
   $("#abfSend") && ($("#abfSend").onclick=async()=>{
     const cur=S.orders[id], typ=Object.values(S.reklas).some(r=>r.auftragId===id&&!r.leerfahrt)?"rekla":"ok";
-    if(can.planen() && !await kontrolleVorVersand(cur)) return;
     if(!await abschluss(id,typ)) return;
-    if(can.planen()&&can.senden()) setTimeout(()=>berichtDialog(id,true),250);
+    if(can.planen() && anteilLeute(S.orders[id]||cur).length){ toast("Montage abgeschlossen ✓ – jetzt oben die Berichte prüfen",3500); setTimeout(()=>scrollTo({top:0,behavior:"smooth"}),200); }
+    else if(can.planen()&&can.senden()) setTimeout(()=>berichtDialog(id,true),250);
   });
   $("#stepBack") && ($("#stepBack").onclick=async ev=>{ ev.preventDefault(); const p=stepBackPatch(o); if(!p) return; if(!await confirmBox("Einen Schritt zurück?","Die Angabe aus dem letzten Schritt wird zurückgenommen.","Zurück")) return; delete S.bereitWahl[id]; upd(P,p); });
   // Bericht
@@ -4899,6 +4993,8 @@ function bindDetail(id){
   $("#losJetzt") && ($("#losJetzt").onclick=()=>einsatzLosfahren(o));
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
+  document.querySelectorAll("[data-pruef]").forEach(b=>b.onclick=()=>pruefDialog(id,b.dataset.pruef));
+  $("#uebermitteln") && ($("#uebermitteln").onclick=()=>berichtDialog(id,true));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
   $("#subDazu") && ($("#subDazu").onclick=()=>subImEinsatzDialog(id));
   document.querySelectorAll("[data-bs]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bs||null; if((o.berichtSchreiber||null)===u) return;
