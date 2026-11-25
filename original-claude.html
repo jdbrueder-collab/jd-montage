@@ -62,6 +62,9 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .toolbar input{flex:1}
 .q-w{flex:1;position:relative;display:flex;min-width:0}.q-w input{flex:1;padding-right:64px;min-width:0}
 .q-w input::-webkit-search-cancel-button{display:none}
+.q-keys{display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:40;gap:6px;padding:6px;border-radius:12px;background:var(--card);box-shadow:var(--sh);border:1px solid var(--line)}
+.q-w:focus-within .q-keys{display:flex}
+.q-keys button{flex:1;min-height:44px;border:1px solid var(--line);background:var(--greybg,#f1f1f1);color:var(--ink);border-radius:10px;font-size:20px;font-weight:750;cursor:pointer;touch-action:manipulation}
 .q-tast{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:1px solid var(--line);background:var(--greybg,#f1f1f1);color:var(--ink);border-radius:8px;padding:6px 9px;font-size:12px;font-weight:750;cursor:pointer;min-height:32px}
 .kw{margin:18px 2px 8px;display:flex;align-items:baseline;gap:8px}
 .kw b{font-size:16px}
@@ -1270,7 +1273,10 @@ function tick(){
 /* ============ Rendering ============ */
 // Suchfeld: öffnet direkt die Zahlentastatur (Auftragsnummern); „ABC“ schaltet auf Buchstaben (Bauvorhaben, Ort) und bleibt gemerkt
 const suchTasten=()=>{ try{ return localStorage.getItem("jdSucheTasten")==="text"?"text":"numeric"; }catch(e){ return "numeric"; } };
-const suchFeld=ph=>`<div class="q-w"><input class="i" id="q" type="search" placeholder="${esc(ph)}" value="${esc(S.q)}" inputmode="${suchTasten()==="text"?"search":"numeric"}" ${suchTasten()==="text"?"":'pattern="[0-9]*"'} enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button type="button" class="q-tast" id="qTast" aria-label="Tastatur umschalten">${suchTasten()==="text"?"123":"ABC"}</button></div>`;
+const suchFeld=ph=>`<div class="q-w"><input class="i" id="q" type="search" placeholder="${esc(ph)}" value="${esc(S.q)}" inputmode="${suchTasten()==="text"?"search":"numeric"}" ${suchTasten()==="text"?"":'pattern="[0-9]*"'} enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button type="button" class="q-tast" id="qTast" aria-label="Tastatur umschalten">${suchTasten()==="text"?"123":"ABC"}</button><div class="q-keys">${["R","-","/"].map(k=>`<button type="button" data-qk="${k}" aria-label="${k==="R"?"R für Reklamation":k==="-"?"Bindestrich":"Schrägstrich"}">${k}</button>`).join("")}<button type="button" data-qk="del" aria-label="Löschen">⌫</button></div></div>`;
+// Suche: Leerzeichen und Bindestriche zählen nicht („R47212“ findet „R-47212“)
+const suchNorm=t=>String(t||"").toLowerCase().replace(/[\s\-]+/g,"");
+const passtSuche=(felder,q)=>{ const t=felder.join(" ").toLowerCase(); return t.includes(q)||suchNorm(t).includes(suchNorm(q)); };
 // Neu zeichnen, ohne das gerade benutzte Suchfeld auszutauschen – sonst springt die Handy-Tastatur zurück auf Buchstaben
 function zeichnen(app,html){
   const alt=document.activeElement?.id==="q"?document.activeElement:null, altTb=alt&&[...app.children].find(c=>c.contains(alt));
@@ -1534,7 +1540,7 @@ function viewListe(){
   // Mitarbeiter/Subunternehmer: keine Aufträge aus „Nicht verplant“ (auch nicht in der Suche)
   if(!can.planen()) list=list.filter(o=>phase(o)!=="offen" && (phase(o)!=="storniert" || (o.monteure||[]).includes(myId())));
   const q=S.q.trim().toLowerCase(), suche=!!q;
-  if(q) list=list.filter(o=>[o.nr,o.bauvorhaben,o.plzOrt,o.adresse,o.vorgang].join(" ").toLowerCase().includes(q));
+  if(q) list=list.filter(o=>passtSuche([o.nr,o.bauvorhaben,o.plzOrt,o.adresse,o.vorgang],q));
   if(S.nurMeine) list=list.filter(o=>(o.monteure||[]).includes(myId()));
   const imBereich=o=>suche || (spez ? !o.storniert && spez.f(o) : phase(o)===S.filter);
   const land=S.land||"alle";
@@ -1585,7 +1591,7 @@ function metaKarte(o){
 function viewMeta(){
   let list=Object.values(S.orders).filter(fuerMeta);
   const q=S.q.trim().toLowerCase();
-  if(q) list=list.filter(o=>[o.nr,o.bauvorhaben,o.plzOrt].join(" ").toLowerCase().includes(q));
+  if(q) list=list.filter(o=>passtSuche([o.nr,o.bauvorhaben,o.plzOrt],q));
   const kw=o=>{ const w=planWeek(o); return wkKey(w.jahr,w.kw)||999999; };
   // offene zuerst, dann abholbereite; jeweils nach KW
   list.sort((a,b)=>(metaAbholbereit(a)-metaAbholbereit(b))||kw(a)-kw(b)||String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
@@ -4726,6 +4732,12 @@ function bind(r){
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go(can.mitarbeiter()?"zeit":"auftraege"));
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; t.dataset.scan?dokViewer(t.dataset.zoom,"scan","Unterlage"):lightbox(t.dataset.zoom); });
   const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); if(n&&n!==document.activeElement){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } },250); }; }
+  // Zusatztasten R, -, / und Löschen: schreiben ins Suchfeld, ohne dass die Zahlentastatur zugeht
+  if(q) document.querySelectorAll("[data-qk]").forEach(b=>{ b.onpointerdown=e=>e.preventDefault(); b.onmousedown=e=>e.preventDefault();
+    b.onclick=()=>{ const k=b.dataset.qk, a=q.selectionStart??q.value.length, e=q.selectionEnd??a;
+      if(k==="del"){ if(a!==e) q.setRangeText("",a,e,"end"); else if(a>0) q.setRangeText("",a-1,a,"end"); }
+      else q.setRangeText(k,a,e,"end");
+      if(document.activeElement!==q) q.focus(); q.dispatchEvent(new Event("input",{bubbles:true})); }; });
   const qt=$("#qTast"); if(qt&&q){ qt.onpointerdown=e=>e.preventDefault(); // Suchfeld behält den Fokus
     qt.onclick=()=>{ const text=suchTasten()!=="text"; try{ localStorage.setItem("jdSucheTasten",text?"text":"zahl"); }catch(e){}
       q.setAttribute("inputmode",text?"search":"numeric"); text?q.removeAttribute("pattern"):q.setAttribute("pattern","[0-9]*"); qt.textContent=text?"123":"ABC";
