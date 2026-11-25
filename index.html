@@ -60,6 +60,9 @@ input.i:focus,select.i:focus,textarea.i:focus{outline:2px solid var(--brand2);ou
 .order.storno{opacity:.75}.order.storno .bv{text-decoration:line-through}
 .toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
 .toolbar input{flex:1}
+.q-w{flex:1;position:relative;display:flex;min-width:0}.q-w input{flex:1;padding-right:64px;min-width:0}
+.q-w input::-webkit-search-cancel-button{display:none}
+.q-tast{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:1px solid var(--line);background:var(--greybg,#f1f1f1);color:var(--ink);border-radius:8px;padding:6px 9px;font-size:12px;font-weight:750;cursor:pointer;min-height:32px}
 .kw{margin:18px 2px 8px;display:flex;align-items:baseline;gap:8px}
 .kw b{font-size:16px}
 .kw .now{color:var(--accent);font-weight:700;font-size:12px}
@@ -564,7 +567,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="6a71a006a36d";</script>
+<script>window.JD_BUILD="8b30062e8043";</script>
 </head>
 <body>
 <header class="top">
@@ -1285,6 +1288,21 @@ function tick(){
 }
 
 /* ============ Rendering ============ */
+// Suchfeld: öffnet direkt die Zahlentastatur (Auftragsnummern); „ABC“ schaltet auf Buchstaben (Bauvorhaben, Ort) und bleibt gemerkt
+const suchTasten=()=>{ try{ return localStorage.getItem("jdSucheTasten")==="text"?"text":"numeric"; }catch(e){ return "numeric"; } };
+const suchFeld=ph=>`<div class="q-w"><input class="i" id="q" type="search" placeholder="${esc(ph)}" value="${esc(S.q)}" inputmode="${suchTasten()==="text"?"search":"numeric"}" ${suchTasten()==="text"?"":'pattern="[0-9]*"'} enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button type="button" class="q-tast" id="qTast" aria-label="Tastatur umschalten">${suchTasten()==="text"?"123":"ABC"}</button></div>`;
+// Neu zeichnen, ohne das gerade benutzte Suchfeld auszutauschen – sonst springt die Handy-Tastatur zurück auf Buchstaben
+function zeichnen(app,html){
+  const alt=document.activeElement?.id==="q"?document.activeElement:null, altTb=alt&&[...app.children].find(c=>c.contains(alt));
+  if(!altTb){ app.innerHTML=html; return; }
+  const t=document.createElement("template"); t.innerHTML=html;
+  const neuQ=t.content.querySelector("#q"), neuTb=neuQ&&[...t.content.children].find(c=>c.contains(neuQ));
+  if(!neuTb){ app.innerHTML=html; return; }
+  [...app.childNodes].forEach(c=>{ if(c!==altTb) c.remove(); });
+  const vor=[], nach=[]; let hinter=false;
+  [...t.content.childNodes].forEach(n=>{ if(n===neuTb){ hinter=true; return; } (hinter?nach:vor).push(n); });
+  altTb.before(...vor); altTb.after(...nach);
+}
 function route(){ const h=location.hash.replace(/^#/,""); if(h.startsWith("a-")) return {v:"detail",id:h.slice(2)};
   let v=h||"auftraege"; if(can.mitarbeiter() && ["auftraege","rekla","woche"].includes(v)) v="zeit"; // Mitarbeiter: Zeiterfassung ist die Startseite
   return {v}; }
@@ -1338,7 +1356,7 @@ function render(scrollTop){
   let html=vorschauLeiste();
   if(S.loadErr) html+=`<div class="banner bad">${esc(S.loadErr)}</div>`;
   if(S.role==="pending"){ app.innerHTML=S.rolesLoaded?viewPending()+`<div style="margin-top:16px">${kontoKarte()}</div>`:`<div class="empty"><span class="spin"></span></div>`; bindPending(); bindKonto(); return; }
-  if(S.role==="hersteller" && !S.isOwner){ app.innerHTML=iconize(html+viewMeta()); bindMeta(); bind({v:"meta"}); if(scrollTop) window.scrollTo(0,0); return; }
+  if(S.role==="hersteller" && !S.isOwner){ zeichnen(app,iconize(html+viewMeta())); bindMeta(); bind({v:"meta"}); if(scrollTop) window.scrollTo(0,0); return; }
   if(r.v==="detail") html+=viewDetail(r.id);
   else if(r.v==="fahrten" && can.fahrten()) html+=viewFahrten();
   else if(r.v==="woche") html+=viewWoche();
@@ -1348,7 +1366,7 @@ function render(scrollTop){
   else if(r.v==="meine" && can.sub()) html+=viewSubAbrechnung();
   else if(r.v==="setup") html+=`<h2 style="margin:0 0 10px;font-size:20px">Setup</h2><div class="setup-grid">${kontoKarte()}${can.setup()?viewSetup():""}</div>`;
   else html+=viewListe();
-  app.innerHTML=iconize(html);
+  zeichnen(app,iconize(html));
   if(S._scrollZiel && S.loaded){ const y=S._scrollZiel; S._scrollZiel=0; requestAnimationFrame(()=>window.scrollTo(0,y)); setTimeout(()=>window.scrollTo(0,y),120); }
   if(r.v==="setup") setupKnoepfe(app);
   bind(r);
@@ -1560,7 +1578,7 @@ function viewListe(){
   const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
   list=list.filter(imBereich);
   const tun=zuTun();
-  let h=`${fahrtLeiste()}<div class="toolbar"><input class="i" id="q" placeholder="Suchen: Nummer, Bauvorhaben, Ort" value="${esc(S.q)}" inputmode="search">${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>${umsatzStreifen()}
+  let h=`${fahrtLeiste()}<div class="toolbar">${suchFeld("Suchen: Nummer, Bauvorhaben, Ort")}${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>${umsatzStreifen()}
   ${tun.length?`<div class="tun" aria-label="Zu tun">${tun.map(([k,n])=>`<button class="tun-p ${SPEZIAL[k].cls} ${S.filter===k?"on":""}" data-f="${k}">${SPEZIAL[k].p(n)}${badge(n)}</button>`).join("")}</div>`:""}
   <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
@@ -1609,7 +1627,7 @@ function viewMeta(){
   const offen=list.filter(o=>!metaAbholbereit(o)).length;
   return `<h2 style="margin:4px 0 2px;font-size:20px">Auftragsliste für JD Brüder</h2>
   <div class="small mute" style="margin-bottom:10px">${offen} offen · ${list.length-offen} abholbereit</div>
-  ${list.length>8||q?`<div class="toolbar"><input class="i" id="q" placeholder="Auftragsnummer suchen …" value="${esc(S.q)}" inputmode="search"></div>`:""}
+  ${list.length>8||q?`<div class="toolbar">${suchFeld("Auftragsnummer suchen …")}</div>`:""}
   <div style="margin-top:10px">${list.length?list.map(metaKarte).join(""):`<div class="empty">Keine Aufträge.</div>`}</div>
   <div style="margin-top:20px">${kontoKarte()}</div>`;
 }
@@ -4742,7 +4760,11 @@ function bind(r){
   const app=$("#app");
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go(can.mitarbeiter()?"zeit":"auftraege"));
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; t.dataset.scan?dokViewer(t.dataset.zoom,"scan","Unterlage"):lightbox(t.dataset.zoom); });
-  const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); },250); }; }
+  const q=$("#q"); if(q){ q.oninput=()=>{ S.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const pos=q.selectionStart; render(); const n=$("#q"); if(n&&n!==document.activeElement){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } },250); }; }
+  const qt=$("#qTast"); if(qt&&q){ qt.onpointerdown=e=>e.preventDefault(); // Suchfeld behält den Fokus
+    qt.onclick=()=>{ const text=suchTasten()!=="text"; try{ localStorage.setItem("jdSucheTasten",text?"text":"zahl"); }catch(e){}
+      q.setAttribute("inputmode",text?"search":"numeric"); text?q.removeAttribute("pattern"):q.setAttribute("pattern","[0-9]*"); qt.textContent=text?"123":"ABC";
+      q.blur(); q.focus(); }; }
   app.querySelectorAll("#flt [data-f], .fzeile [data-f], .tun [data-f], .spez-kopf [data-f]").forEach(b=>b.onclick=()=>{
     const f=b.dataset.f, normal=HAUPT_PHASEN.some(([k])=>k===f);
     if(f==="zurueck" || (S.filter===f && !normal)) S.filter=S.letzterBereich||meinePhasen()[0][0];
