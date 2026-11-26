@@ -6,7 +6,8 @@ import { createServer } from "node:http";
 import { execFileSync } from "node:child_process";
 
 const { installed: c } = JSON.parse(readFileSync(new URL("google-client.json", import.meta.url)));
-const SCOPES = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
+// modify = lesen + Labels setzen (Ordner „JD Aufträge/<Nr>“), send = Berichte verschicken. Löschen kann die App damit nicht endgültig.
+const SCOPES = "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send";
 
 const server = createServer();
 server.listen(0, "127.0.0.1", () => {
@@ -16,7 +17,7 @@ server.listen(0, "127.0.0.1", () => {
     scope: SCOPES, access_type: "offline", prompt: "consent select_account",
   });
   console.log("\nIm Browser öffnet sich Google. Mit dem Postfach anmelden, aus dem die App lesen und senden soll.\n");
-  execFileSync("open", [url]);
+  if (process.platform === "win32") execFileSync("cmd", ["/c", "start", "", url.replace(/&/g, "^&")]); else execFileSync("open", [url]);
 
   server.on("request", async (req, res) => {
     const code = new URL(req.url, redirect).searchParams.get("code");
@@ -31,7 +32,8 @@ server.listen(0, "127.0.0.1", () => {
 
       const envFile = new URL(".gmail-secrets.env", import.meta.url);
       writeFileSync(envFile, `GMAIL_CLIENT_ID=${c.client_id}\nGMAIL_CLIENT_SECRET=${c.client_secret}\nGMAIL_REFRESH_TOKEN=${t.refresh_token}\nGMAIL_ADDRESS=${me.emailAddress}\n`, { mode: 0o600 });
-      try { execFileSync("supabase", ["secrets", "set", "--env-file", envFile.pathname, "--yes"], { stdio: "inherit" }); }
+      const envPfad = process.platform === "win32" ? decodeURIComponent(envFile.pathname).replace(/^\//, "") : envFile.pathname;
+      try { execFileSync(process.platform === "win32" ? "npx.cmd" : "npx", ["--yes", "supabase@3.2.0", "secrets", "set", "--env-file", envPfad, "--remote=glxnvjpoipcienngybmj", "--yes"], { stdio: "inherit", shell: process.platform === "win32" }); }
       finally { unlinkSync(envFile); }
 
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

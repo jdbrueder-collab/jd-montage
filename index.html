@@ -538,6 +538,14 @@ body.tun-auf .tun-dock{display:none}
 .tun-panel .tun-p{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:10px 10px 10px 12px;border-radius:12px;font-size:14px;white-space:normal}
 .tp-t{flex:1;min-width:0;display:flex;flex-direction:column}.tp-t small{font-weight:500;color:var(--mute);font-size:12px;margin-top:1px}
 body.nav-aus .tun-dock{display:none}
+/* ===== Mailverkehr ===== */
+.mail-k-btn{width:100%;text-align:left;border:0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mail-z{padding:10px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.mail-k{display:flex;gap:6px;align-items:baseline;min-width:0}.mail-k b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.mail-r{flex:none;font-weight:800;font-size:13px}.mail-r.ein{color:var(--info)}.mail-r.aus{color:var(--ok)}
+.mail-s{color:var(--mute);margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mail-text{white-space:pre-wrap;font-size:13.5px;line-height:1.45;background:var(--greybg);border-radius:10px;padding:10px;margin-top:8px;max-height:50vh;overflow:auto}
+.mail-offen{display:block;width:100%;text-align:left;margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-left:4px solid var(--info);border-radius:12px;background:var(--card);color:var(--ink);font-weight:650;font-size:14px;cursor:pointer}
 /* ===== Berichte prüfen (Statuskarte) ===== */
 button.ab-btn{width:100%;border:0;border-bottom:1px solid var(--line);background:none;cursor:pointer;color:inherit;font:inherit;text-align:left;padding:9px 2px;border-radius:0;-webkit-tap-highlight-color:transparent}
 button.ab-btn:active{background:var(--greybg)}
@@ -589,7 +597,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="22496f7d5283";</script>
+<script>window.JD_BUILD="eeb4af6fd77a";</script>
 </head>
 <body>
 <header class="top">
@@ -1293,6 +1301,7 @@ async function boot(){
   db.collection("fahrten").onSnapshot(snap=>{ const a={}; snap.docs.forEach(d=>a[d.id]={id:d.id,...d.data()}); S.fahrten=a; loadProfiles(Object.values(a).map(x=>x.fahrer)); scheduleRender(); },()=>{});
   db.doc("einstellungen/lohnpositionen").onSnapshot(d=>{ S.lohnPos=(d.exists?d.data().items:null)||[]; scheduleRender(); },()=>{});
   db.collection("lohnberichte").onSnapshot(snap=>{ const l={}; snap.docs.forEach(d=>l[d.id]={id:d.id,...d.data()}); S.lohn=l; loadProfiles(Object.values(l).map(x=>x.uid)); scheduleRender(); },()=>{});
+  if(S.isOwner) db.doc("lohn/mailinfo").onSnapshot(d=>{ S.mailInfo=d.exists?d.data():null; scheduleRender(); },()=>{});
   if(S.isOwner) db.doc("lohn/preise").onSnapshot(d=>{ S.preise=d.exists?d.data():null; scheduleRender();
     if(S.preise && (S.preise.subStand||0)<2 && !S._subNeu){ S._subNeu=1; setTimeout(()=>savePreise({subStand:2}).catch(e=>console.error(e)),2500); } },()=>{});
   else if(myId()) db.doc("lohnsicht/"+myId()).onSnapshot(d=>{ S.preise=d.exists?d.data():null; scheduleRender(); },()=>{});
@@ -1611,7 +1620,7 @@ function viewListe(){
   const anzahl={}; list.forEach(o=>{ const p=phase(o); anzahl[p]=(anzahl[p]||0)+1; });
   list=list.filter(imBereich);
   const tun=zuTun();
-  let h=`${fahrtLeiste()}<div class="toolbar">${suchFeld("Suchen: Nummer, Bauvorhaben, Ort")}${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>${umsatzStreifen()}
+  let h=`${fahrtLeiste()}<div class="toolbar">${suchFeld("Suchen: Nummer, Bauvorhaben, Ort")}${can.planen()?`<button class="btn" id="newOrder" title="Auftrag von Hand anlegen" aria-label="Auftrag von Hand anlegen" style="min-width:48px;font-size:22px;padding:0 10px">＋</button>`:""}</div>${umsatzStreifen()}${S.isOwner&&S.mailInfo?.offen?`<button type="button" class="mail-offen" id="mailsOffen">📧 ${S.mailInfo.offen} Mail${S.mailInfo.offen===1?"":"s"} ohne Auftrag – zuordnen ›</button>`:""}
   ${tunDock(tun)}
   <div class="seg phasen" id="flt">${meinePhasen().map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}<span class="n">${anzahl[k]||0}</span></button>`).join("")}</div>
   <div class="fzeile">${["alle","de","lu"].map(k=>`<button class="fp ${land===k?"on":""}" data-land="${k}">${k==="alle"?"Alle":LAENDER[k][0]} <span class="n">${proLand[k]}</span></button>`).join("")}
@@ -2045,6 +2054,7 @@ function viewDetail(id){
    </div>`;
   knoepfe.push(sk("unter","📂","Unterlagen",`${fk("unterlagen").length} Datei${fk("unterlagen").length===1?"":"en"}`,unterInhalt,'id="unterlagenCard"'));
   h+=`<div class="det-grid" style="grid-template-columns:repeat(${knoepfe.length},minmax(0,1fr))">${knoepfe.join("")}</div>`;
+  if(S.isOwner && S.sync) h+=`<button class="card fold foldbtn mail-k-btn" id="mailsAnsehen"><b>📧 Mails</b><span class="small mute">${o.mailAnzahl?`${o.mailAnzahl} Mail${o.mailAnzahl===1?"":"s"}${o.mailLetzte?" · zuletzt "+mailZeit(o.mailLetzte):""}`:"noch keine"}</span></button>`;
 
   // Sub: Bericht fehlt (angefordert oder Montagetag vorbei)
   if(can.sub() && (o.monteure||[]).includes(myId()) && subBerichtFehlt(o,myId())){ const ang=o.berichtFehlt?.[myId()];
@@ -2228,6 +2238,49 @@ function pruefDialog(id,key){
       close(); render(); scrollTo({top:0,behavior:"smooth"}); });
   };
   modalZurueck(`<div class="pd-in"></div>`,(m,close)=>zeichne(m,close));
+}
+/* ---------- Mailverkehr je Auftrag (nur Inhaber) ----------
+   Der Server legt alle Mails des meta-Postfachs ab und ordnet sie Aufträgen zu (Nummer, Verlauf, Bauleiter, Bauvorhaben). */
+const mailZeit=t=>t?new Date(t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
+const mailName=v=>esc(String(v||"").replace(/<.*>/,"").replace(/"/g,"").trim()||String(v||"").replace(/[<>]/g,""));
+function mailZeile(m,mitAuftrag){
+  return `<div class="mail-z" data-mail="${esc(m.id)}"><div class="mail-k"><span class="mail-r ${m.aus?"aus":"ein"}">${m.aus?"↗":"↙"}</span><b>${esc(m.betreff||"")}</b><span class="small mute" style="margin-left:auto;white-space:nowrap">${mailZeit(m.datum)}</span></div>
+    <div class="small mute">${m.aus?"an "+mailName(m.an):"von "+mailName(m.von)}${m.anh?.length?` · 📎 ${m.anh.length}`:""}${mitAuftrag&&m.grund?` · ${esc(m.grund)}`:""}</div>
+    <div class="small mail-s">${esc(m.snippet||"")}</div><div class="mail-voll" hidden></div></div>`;
+}
+function mailAuftragWahl(sel=""){
+  const l=Object.values(S.orders).filter(o=>!o.storniert).sort((a,b)=>(b.erstelltAm||0)-(a.erstelltAm||0));
+  return `<select class="i mail-wahl"><option value="">Auftrag wählen …</option>${l.map(o=>`<option value="${esc(o.id)}" ${o.id===sel?"selected":""}>${esc(o.nr)}${o.bauvorhaben?" – "+esc(String(o.bauvorhaben).slice(0,40)):""}</option>`).join("")}</select>`;
+}
+async function mailOeffnen(z,m,neuLaden){
+  const v=z.querySelector(".mail-voll"); if(!v.hidden){ v.hidden=true; return; }
+  v.hidden=false; v.innerHTML=`<span class="spin"></span>`;
+  let t=""; try{ t=(await S.sync.run({mailText:m.id}))?.text||""; }catch(e){ t="Konnte die Mail nicht laden."; }
+  v.innerHTML=`<div class="mail-text">${esc(t)}</div>${m.anh?.length?`<div class="small" style="margin-top:6px">📎 ${m.anh.map(a=>esc(a.name)).join(", ")}</div>`:""}
+    <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">${m.link?`<a class="btn sm" href="${esc(m.link)}" target="_blank" rel="noopener">In Gmail öffnen ↗</a>`:""}<button type="button" class="btn sm ghost" data-umzu>↔ Anderem Auftrag zuordnen</button></div>
+    <div class="mail-um" hidden style="margin-top:8px">${mailAuftragWahl(m.auftragId)}<div class="grid2" style="margin-top:6px"><button type="button" class="btn sm ok" data-mz>Zuordnen</button><button type="button" class="btn sm ghost" data-mk>Kein Auftrag</button></div></div>`;
+  v.querySelector("[data-umzu]").onclick=e=>{ e.stopPropagation(); v.querySelector(".mail-um").hidden=false; };
+  v.onclick=e=>e.stopPropagation();
+  const zu=async(auftragId,ignorieren)=>{ try{ const r=await S.sync.run({mailZuordnen:{id:m.id,auftragId,ignorieren}}); toast(ignorieren?"Als „kein Auftrag“ markiert ✓":`Zugeordnet ✓${r?.anzahl>1?` (${r.anzahl} Mails des Verlaufs)`:""}`,2600); neuLaden(); }catch(e){ toast("Zuordnen fehlgeschlagen"); } };
+  v.querySelector("[data-mz]").onclick=()=>{ const a=v.querySelector(".mail-wahl").value; if(!a) return toast("Bitte einen Auftrag wählen"); zu(a,false); };
+  v.querySelector("[data-mk]").onclick=()=>zu("",true);
+}
+function mailsDialog(id){
+  const o=S.orders[id]; if(!o) return;
+  modalZurueck(`<h2 style="margin-top:0">📧 Mails ${esc(o.nr)}</h2><div class="small mute" style="margin-bottom:8px">${esc(o.bauvorhaben||"")} · der ganze Mailverkehr zu diesem Auftrag</div><div class="mail-liste"><span class="spin"></span></div><button class="btn block" data-close style="margin-top:12px">Schließen</button>`,(m,close)=>{
+    const laden=async()=>{ const box=m.querySelector(".mail-liste"); let l=[]; try{ l=(await S.sync.run({mailsFuer:id}))?.mails||[]; }catch(e){ box.innerHTML=`<div class="small mute">Mails konnten nicht geladen werden.</div>`; return; }
+      box.innerHTML=l.length?l.map(x=>mailZeile(x,false)).join(""):`<div class="small mute">Noch keine Mails zu diesem Auftrag.</div>`;
+      box.querySelectorAll("[data-mail]").forEach(z=>z.onclick=()=>mailOeffnen(z,l.find(x=>x.id===z.dataset.mail),laden)); };
+    laden();
+  });
+}
+function mailsOffenDialog(){
+  modalZurueck(`<h2 style="margin-top:0">📧 Mails ohne Auftrag</h2><div class="small mute" style="margin-bottom:8px">Antippen, lesen und einem Auftrag zuordnen – Antworten im selben Verlauf landen danach automatisch dort. „Kein Auftrag“ blendet sie aus.</div><div class="mail-liste"><span class="spin"></span></div><button class="btn block" data-close style="margin-top:12px">Schließen</button>`,(m,close)=>{
+    const laden=async()=>{ const box=m.querySelector(".mail-liste"); let l=[]; try{ l=(await S.sync.run({mailsOffen:1}))?.mails||[]; }catch(e){ box.innerHTML=`<div class="small mute">Mails konnten nicht geladen werden.</div>`; return; }
+      box.innerHTML=l.length?l.map(x=>mailZeile(x,false)).join(""):`<div class="small mute">Alles zugeordnet 👍</div>`;
+      box.querySelectorAll("[data-mail]").forEach(z=>z.onclick=()=>mailOeffnen(z,l.find(x=>x.id===z.dataset.mail),laden)); };
+    laden();
+  });
 }
 function abschlussStand(o,f,reklas){
   const chef=can.planen(), titel=o.berichtTyp==="leerfahrt"?"Leerfahrt-Bericht":istReklaAuftrag(o)?"Reklamationsbericht":"Montagebericht", a=o.abschluss||{};
@@ -4922,6 +4975,7 @@ function bind(r){
     qt.onclick=()=>{ const text=suchTasten()!=="text"; try{ localStorage.setItem("jdSucheTasten",text?"text":"zahl"); }catch(e){}
       q.setAttribute("inputmode",text?"search":"numeric"); text?q.removeAttribute("pattern"):q.setAttribute("pattern","[0-9]*"); qt.textContent=text?"123":"ABC";
       q.blur(); q.focus(); }; }
+  $("#mailsOffen") && ($("#mailsOffen").onclick=mailsOffenDialog);
   $("#tunDock") && ($("#tunDock").onclick=()=>document.body.classList.toggle("tun-auf"));
   app.querySelectorAll("[data-tun-zu], .tun-panel [data-f]").forEach(x=>x.addEventListener("click",()=>document.body.classList.remove("tun-auf")));
   app.querySelectorAll("#flt [data-f], .fzeile [data-f], .tun [data-f], .spez-kopf [data-f]").forEach(b=>b.onclick=()=>{
@@ -4975,6 +5029,7 @@ function bindDetail(id){
   $("#losJetzt") && ($("#losJetzt").onclick=()=>einsatzLosfahren(o));
   $("#fzWahlAendern") && ($("#fzWahlAendern").onclick=e=>{ e.preventDefault(); delete S.fzWahl[id]; render(); });
   $("#berichtAnsehen") && ($("#berichtAnsehen").onclick=()=>berichtAnsicht(id));
+  $("#mailsAnsehen") && ($("#mailsAnsehen").onclick=()=>mailsDialog(id));
   document.querySelectorAll("[data-zur-abnahme]").forEach(b=>b.onclick=()=>{ const k=document.querySelector("#abnahmeCard")||[...document.querySelectorAll("main .card h3")].find(h=>/Sichtabnahme/.test(h.textContent))?.closest(".card"); k?.scrollIntoView({behavior:"smooth",block:"start"}); });
   document.querySelectorAll("[data-pruef]").forEach(b=>b.onclick=()=>b.dataset.pruef==="einzel"?berichtAnsicht(id,{bestaetigen:true}):pruefDialog(id,b.dataset.pruef));
   $("#uebermitteln") && ($("#uebermitteln").onclick=()=>berichtDialog(id,true));

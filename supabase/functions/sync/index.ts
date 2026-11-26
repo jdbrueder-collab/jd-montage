@@ -6,7 +6,7 @@ import Anthropic from "npm:@anthropic-ai/sdk";
 import { createClient } from "jsr:@supabase/supabase-js@2.119.1";
 import { DOMParser } from "npm:linkedom@0.18.5";
 import * as webpush from "jsr:@negrel/webpush@0.3.0";
-import { b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
+import { accessToken, b64urlToStd, gmail, message, mime } from "../_shared/gmail.ts";
 import {
   art, cleanSubject, DECK_FELDER, kundeAusAbrechnung, DECK_PROMPT, eigenerText, findeAuftrag, idOf, istAbnahmeVerguetung, istEigenerBericht, kwAusMail, mitAbgerechnet, nrAusMail,
   parseAbrechnung, parseUebersicht, parseZusage, rechnungsZeile, reklaAufstellung, splitBV, unterlagen, vonMeta,
@@ -31,7 +31,7 @@ const admin = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SU
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const db = admin();
-  let quelle = "manuell";
+  let quelle = "manuell"; const startZeit = Date.now();
   try {
     // Anmeldung neuer Leute (ohne Login): Zugang anfragen / persönlichen Code einlösen
     const vorab = await req.clone().json().catch(() => ({}));
@@ -52,6 +52,8 @@ Deno.serve(async (req) => {
       if (body?.ergaenzen) return json(await abruf(db, "ergaenzen", "", { abfrage: String(body.ergaenzen), nurBestehende: true }));
       if (body?.erinnerung) return json(await metaErinnerung(db, false));
       // Fertige Aufträge mit Lexware-Rechnungen abgleichen (lexFertig: "probe" = nur auflisten, "anwenden" = eindeutige → erledigt)
+      // Mailverkehr je Auftrag: {mailArchiv:"probe"} nur zählen, {mailArchiv:1} ablegen
+      if (body?.mailArchiv) { try { return json(await mailArchiv(db, 100_000, body.mailArchiv === "probe")); } catch (e: any) { return json({ fehler: e.message || String(e) }); } }
       if (body?.lexFertig) { try { return json(await lexFertig(db, body.lexFertig === "anwenden")); } catch (e: any) { return json({ fehler: e.message || String(e) }); } }
       // Unterlagen vorhandener Aufträge neu auslesen (z. B. nach besserer Auslese) – nur offene Aufträge, wenige pro Lauf
       if (body?.dokNachlesen) return json(await dokNachlesen(db, Math.min(+body.anzahl || 3, 6), String(body.ab || "")));
@@ -78,6 +80,11 @@ Deno.serve(async (req) => {
       // Admin: Lexware Office (Verbindung prüfen, Rechnungsentwurf anlegen, Stand der Rechnung holen)
       if (body?.lexStatus) return json(await lexStatus(db));
       if (body?.lexRechnung) return json(await lexRechnung(db, String(body.lexRechnung)));
+      // Admin: Mailverkehr je Auftrag
+      if (body?.mailsFuer) return json(await mailsFuer(db, String(body.mailsFuer)));
+      if (body?.mailsOffen) return json(await mailsOffen(db));
+      if (body?.mailText) return json(await mailText(db, String(body.mailText)));
+      if (body?.mailZuordnen) return json(await mailZuordnen(db, body.mailZuordnen));
       if (body?.lexAbgleich) return json(await lexAbgleich(db, String(body.lexAbgleich)));
       // Admin: Unterlagen eines Auftrags komplett neu auslesen
       if (body?.dokLesen) {
@@ -89,7 +96,10 @@ Deno.serve(async (req) => {
       // Admin: Erinnerung zum Testen sofort senden (an die eigene Adresse oder an alle Empfänger)
       if (body?.erinnerung) return json(await metaErinnerung(db, true, body.an ? String(body.an) : ""));
     }
-    return json(await abruf(db, quelle));
+    const ergebnis: any = await abruf(db, quelle);
+    const rest = 125_000 - (Date.now() - startZeit); // Edge-Funktion darf nicht zu lange laufen
+    if (quelle === "zeitplan" && rest > 15_000) { try { ergebnis.mailArchiv = await mailArchiv(db, Math.min(40_000, rest - 10_000)); } catch (e: any) { ergebnis.mailArchivFehler = e.message || String(e); } }
+    return json(ergebnis);
   } catch (e: any) {
     console.error(e);
     return json({ code: e.code || "upstream_error", message: e.message || String(e) }, e.code === "server_not_connected" || e.code === "needs_reauth" ? 409 : 502);
@@ -1005,6 +1015,178 @@ async function lexFertig(db: any, anwenden: boolean) {
     ergebnis.push(e);
   }
   return { ok: true, ab, rechnungen: rechnungen.length, auftraege: fertig.length, ergebnis };
+}
+// ---------- Mailverkehr je Auftrag ----------
+// Alle Mails mit meta und den Bauleitern (90 Tage) werden in „mails“ abgelegt (nur Inhaber lesen „mails“) und einem Auftrag
+// zugeordnet: Gesprächsverlauf → Auftragsnummer → Bauleiter-Adresse. Was nicht passt, landet unter „nicht zugeordnet“.
+// Darf die App in Gmail Labels setzen (gmail.modify), bekommt jede Mail zusätzlich den Ordner „JD Aufträge/<Nr> <Bauvorhaben>“.
+const ARCHIV_TAGE = 90;
+const LABEL_WURZEL = "JD Aufträge";
+const textAusHtml = (h: string) => String(h || "").replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, " ").replace(/<br\s*\/?>|<\/p>|<\/div>|<\/tr>|<\/li>/gi, "\n")
+  .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  .replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n+/g, "\n\n").trim();
+const adresse = (s: string) => (String(s || "").match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).map((x) => x.toLowerCase());
+const mailDocId = (msgId: string) => "m_" + msgId;
+// gehört zu keinem Auftrag: Mails der App selbst, Google-Hinweise, meta-Übersichten über alle Aufträge
+const mailIstSystem = (m: any) => /Anmeldecode|^\s*(AW:|WG:|Re:|Fwd?:)?\s*TEST[-\s]|Testauftrag|Sicherheitswarnung|Google-Konto|Gemini|aktuellen meta-Montageauftr/i.test(m.subject || "")
+  || /@(accounts\.)?google\.com|no-?reply@google/i.test(m.sender || "");
+async function mailGmailDarfLabels() {
+  try { const t = await (await fetch("https://oauth2.googleapis.com/tokeninfo?access_token=" + encodeURIComponent(await accessToken()))).json(); return /gmail\.modify|mail\.google\.com\//.test(t.scope || ""); }
+  catch (_) { return false; }
+}
+function auftragZuMail(m: any, orders: Record<string, any>, bauleiter: Record<string, string[]>) {
+  const nr = nrAusMail(m);
+  let id = nr ? findeAuftrag(orders, nr) : "";
+  if (id) return { id, grund: "Nummer " + nr };
+  // jede 4–6-stellige Nummer im Betreff, die es als Auftrag gibt (z. B. „AW: 17714/1 Termin“)
+  for (const k of String(m.subject || "").match(/(?:R\s?-?\s?)?\d{4,6}(?:\/\d{1,2})?/g) || []) {
+    const t = findeAuftrag(orders, k.replace(/^R\s*-?\s*/i, "R-")); if (t) return { id: t, grund: "Betreff " + k };
+  }
+  for (const a of [...adresse(m.sender), ...adresse(m.to)]) { const l = bauleiter[a] || []; if (l.length === 1) return { id: l[0], grund: "Bauleiter " + a }; }
+  // Name des Bauvorhabens im Betreff (eindeutig unter den offenen Aufträgen)
+  const betr = String(m.subject || "").toLowerCase();
+  const treffer = Object.entries(orders).filter(([, o]: any) => !o.storniert && !o.abgerechnet && String(o.bauvorhaben || "").length >= 8 && betr.includes(String(o.bauvorhaben).toLowerCase().split(",")[0].trim()));
+  if (treffer.length === 1) return { id: treffer[0][0], grund: "Bauvorhaben" };
+  return { id: "", grund: "" };
+}
+async function mailAnzahlSetzen(db: any, ids: Set<string>) {
+  for (const id of ids) {
+    if (!id) continue;
+    const { data, error } = await db.from("docs").select("datum:data->datum").eq("col", "mails").eq("data->>auftragId", id);
+    if (error) throw error;
+    const letzte = Math.max(0, ...(data || []).map((r: any) => Number(r.datum) || 0));
+    await updDoc(db, "auftraege", id, { mailAnzahl: (data || []).length, mailLetzte: letzte || null });
+  }
+}
+async function mailOffenZaehlen(db: any) {
+  const { count } = await db.from("docs").select("id", { count: "exact", head: true }).eq("col", "mails").like("id", "m_%").eq("data->>auftragId", "").neq("data->>zuordnung", "ignoriert");
+  const offen = count || 0;
+  await setDoc(db, "lohn", "mailinfo", { offen, am: Date.now() });
+  return offen;
+}
+// Gmail-Ordner: je Auftrag ein Label unter „JD Aufträge“, alte (abgerechnet > 30 Tage) werden wieder entfernt
+async function mailLabels(db: any, st: any, orders: Record<string, any>, ende: number) {
+  st.labels = st.labels || {};
+  const alle = (await gmail("labels")).labels || [];
+  const finde = (n: string) => alle.find((l: any) => l.name === n);
+  const neu = async (name: string) => { const ex = finde(name); if (ex) return ex.id;
+    const l = await gmail("labels", { method: "POST", body: JSON.stringify({ name, labelListVisibility: "labelShow", messageListVisibility: "show" }) }); alle.push(l); return l.id; };
+  await neu(LABEL_WURZEL);
+  const { data } = await db.from("docs").select("id,data").eq("col", "mails").like("id", "m_%").neq("data->>auftragId", "").is("data->>label", null).limit(300);
+  const jeAuftrag: Record<string, string[]> = {};
+  for (const r of data || []) { const a = r.data?.auftragId; if (a && orders[a]) (jeAuftrag[a] = jeAuftrag[a] || []).push(r.id); }
+  let n = 0;
+  for (const [aid, docIds] of Object.entries(jeAuftrag)) {
+    if (Date.now() > ende) break;
+    const o = orders[aid]; const name = `${LABEL_WURZEL}/${String(o.nr || aid).replace(/\//g, "-")}${o.bauvorhaben ? " " + String(o.bauvorhaben).replace(/\//g, "-").slice(0, 40) : ""}`;
+    const lid = st.labels[aid] || await neu(name); st.labels[aid] = lid;
+    await gmail("messages/batchModify", { method: "POST", body: JSON.stringify({ ids: docIds.map((d) => d.slice(2)), addLabelIds: [lid] }) });
+    for (const d of docIds) await updDoc(db, "mails", d, { label: lid });
+    n += docIds.length;
+  }
+  // aufräumen: Aufträge, die seit über 30 Tagen abgerechnet sind
+  for (const [aid, lid] of Object.entries(st.labels)) {
+    const o = orders[aid]; const alt = !o || (o.abgerechnet && (o.abgerechnetAm || 0) < Date.now() - 30 * 864e5) || o.storniert;
+    if (!alt) continue;
+    try { await gmail("labels/" + lid, { method: "DELETE" }); } catch (_) { /* schon weg */ }
+    delete st.labels[aid];
+  }
+  return n;
+}
+async function mailArchiv(db: any, budget = 45_000, probe = false) {
+  const ende = Date.now() + budget;
+  const st = (await getDoc(db, "mails", "archiv")) || { threads: {} };
+  st.threads = st.threads || {};
+  const orders = await getCol(db, "auftraege");
+  const bauleiter: Record<string, string[]> = {};
+  for (const [id, o] of Object.entries(orders) as any) {
+    if (o.storniert || (o.abgerechnet && (o.abgerechnetAm || 0) < Date.now() - 60 * 864e5)) continue;
+    for (const a of adresse(o.bauleiterMail)) (bauleiter[a] = bauleiter[a] || []).push(id);
+  }
+  // Das Postfach (jd.brueder.meta@gmail.com) ist nur für die meta-Arbeit da: alles außer Werbung/Spam ablegen.
+  // Eine einfache Suche – lange Adresslisten zählen bei Google als teure Abfrage und werden gebremst.
+  const q = `newer_than:${ARCHIV_TAGE}d -category:promotions -category:social -in:chats`;
+  const zu: any[] = []; let pageToken = "";
+  for (let s = 0; s < 6; s++) {
+    const l = await gmail(`threads?q=${encodeURIComponent(q)}&maxResults=100${pageToken ? "&pageToken=" + pageToken : ""}`);
+    for (const t of l.threads || []) if (st.threads[t.id] !== t.historyId) zu.push(t);
+    if (!l.nextPageToken) break; pageToken = l.nextPageToken;
+  }
+  const erg: any = { threads: zu.length, neu: 0, zugeordnet: 0, offen: 0, beispiele: [] as any[] };
+  const geaendert = new Set<string>();
+  let gelesen = 0;
+  for (const t of zu) {
+    if (Date.now() > ende || gelesen >= 60) { erg.rest = true; break; } // Gmail-Kontingent schonen: Rest beim nächsten Lauf
+    let th: any;
+    try { th = await gmail(`threads/${t.id}?format=full`); gelesen++; await new Promise((r) => setTimeout(r, 250)); }
+    catch (e: any) { if (/quota|rate/i.test(e.message || "")) { erg.rest = true; erg.gebremst = true; break; } throw e; }
+    const ids = (th.messages || []).map((m: any) => mailDocId(m.id));
+    const { data: da } = await db.from("docs").select("id,data").eq("col", "mails").in("id", ids);
+    const vorhanden = new Map((da || []).map((r: any) => [r.id, r.data]));
+    // Gesprächsverlauf: hängt schon eine Mail dieses Verlaufs an einem Auftrag, gehören die neuen auch dazu
+    let verlauf = [...vorhanden.values()].map((d: any) => d?.auftragId).find(Boolean) || "";
+    for (const raw of th.messages || []) {
+      const did = mailDocId(raw.id); if (vorhanden.has(did)) continue;
+      const m = message(raw);
+      let z = verlauf ? { id: verlauf, grund: "Verlauf" } : auftragZuMail(m, orders, bauleiter);
+      // Mails der App selbst (Anmeldecodes, Testaufträge) gehören zu keinem Auftrag
+      const system = !z.id && mailIstSystem(m);
+      if (z.id && !verlauf) verlauf = z.id;
+      const text = (m.plaintextBody || textAusHtml(m.htmlBody)).slice(0, 12000);
+      const doc = {
+        auftragId: z.id || "", zuordnung: z.id ? "auto" : system ? "ignoriert" : "", grund: z.id ? z.grund : system ? "App-Mail" : "", threadId: m.threadId, msgId: m.id,
+        von: m.sender, an: m.to, betreff: m.subject || "(ohne Betreff)", datum: Date.parse(m.date) || Date.now(),
+        snippet: String(raw.snippet || "").slice(0, 300), text, aus: (raw.labelIds || []).includes("SENT"),
+        anh: (m.attachments || []).map((a: any) => ({ name: a.filename, mime: a.mimeType, size: a.size })),
+        link: m.viewUrl,
+      };
+      erg.neu++; if (z.id) { erg.zugeordnet++; geaendert.add(z.id); } else if (system) erg.ignoriert = (erg.ignoriert || 0) + 1; else erg.offen++;
+      if (erg.beispiele.length < 15) erg.beispiele.push({ betreff: doc.betreff.slice(0, 70), auftrag: z.id ? (orders[z.id]?.nr || z.id) : "–", grund: z.grund });
+      if (!probe) await setDoc(db, "mails", did, doc);
+    }
+    // Verlauf nachträglich zugeordnet (z. B. Antwort mit Nummer): ältere offene Mails im selben Verlauf mitnehmen
+    if (verlauf && !probe) for (const [id, d] of vorhanden) if (d && !d.auftragId && d.zuordnung !== "ignoriert") { await updDoc(db, "mails", id as string, { auftragId: verlauf, zuordnung: "auto", grund: "Verlauf" }); geaendert.add(verlauf); }
+    st.threads[t.id] = t.historyId;
+  }
+  if (probe) return erg;
+  // offene Mails erneut prüfen (z. B. Auftrag erst später angelegt) – nur Datenbank, kein Gmail
+  { const { data } = await db.from("docs").select("id,data").eq("col", "mails").like("id", "m_%").eq("data->>auftragId", "").neq("data->>zuordnung", "ignoriert").limit(300);
+    for (const r of data || []) { const d = r.data || {}; const m = { subject: d.betreff, sender: d.von, to: d.an, plaintextBody: d.text || "" };
+      if (mailIstSystem(m)) { await updDoc(db, "mails", r.id, { zuordnung: "ignoriert", grund: "App-/Google-Mail" }); continue; }
+      const z = auftragZuMail(m, orders, bauleiter); if (!z.id) continue;
+      await updDoc(db, "mails", r.id, { auftragId: z.id, zuordnung: "auto", grund: z.grund }); geaendert.add(z.id); erg.nachgeordnet = (erg.nachgeordnet || 0) + 1; } }
+  if (!st.gezaehlt) { // einmalig: alle Aufträge mit Mails zählen
+    const { data } = await db.from("docs").select("aid:data->>auftragId").eq("col", "mails").like("id", "m_%").neq("data->>auftragId", "");
+    (data || []).forEach((r: any) => geaendert.add(r.aid)); st.gezaehlt = true;
+  }
+  await mailAnzahlSetzen(db, geaendert);
+  if (await mailGmailDarfLabels()) { try { erg.labels = await mailLabels(db, st, orders, ende + 20_000); } catch (e: any) { erg.labelFehler = e.message; } }
+  else erg.labels = "Gmail erlaubt noch keine Ordner – einmal neu verbinden (connect-gmail.mjs)";
+  await setDoc(db, "mails", "archiv", { threads: st.threads, labels: st.labels || {}, gezaehlt: !!st.gezaehlt, am: Date.now() });
+  erg.offenGesamt = await mailOffenZaehlen(db);
+  return erg;
+}
+// Für die App (nur Inhaber): Mails eines Auftrags, offene Mails, einzelne Mail, Zuordnen
+async function mailsFuer(db: any, auftragId: string) {
+  const { data } = await db.from("docs").select("id,data").eq("col", "mails").eq("data->>auftragId", auftragId);
+  return { mails: (data || []).map((r: any) => ({ id: r.id, ...r.data, text: undefined })).sort((a: any, b: any) => b.datum - a.datum) };
+}
+async function mailsOffen(db: any) {
+  const { data } = await db.from("docs").select("id,data").eq("col", "mails").like("id", "m_%").eq("data->>auftragId", "").limit(200);
+  return { mails: (data || []).filter((r: any) => r.data?.zuordnung !== "ignoriert").map((r: any) => ({ id: r.id, ...r.data, text: undefined })).sort((a: any, b: any) => b.datum - a.datum) };
+}
+async function mailText(db: any, id: string) {
+  const d = await getDoc(db, "mails", id); return d ? { text: d.text || d.snippet || "" } : { fehler: "Mail nicht gefunden" };
+}
+async function mailZuordnen(db: any, x: any) {
+  const id = String(x?.id || ""), aid = String(x?.auftragId || ""), ign = !!x?.ignorieren;
+  const d = await getDoc(db, "mails", id); if (!d) return { fehler: "Mail nicht gefunden" };
+  const vorher = d.auftragId || "";
+  // ganzer Gesprächsverlauf wandert mit
+  const { data } = await db.from("docs").select("id,data").eq("col", "mails").eq("data->>threadId", d.threadId);
+  for (const r of data || []) await updDoc(db, "mails", r.id, { auftragId: ign ? "" : aid, zuordnung: ign ? "ignoriert" : aid ? "hand" : "", grund: ign ? "" : aid ? "von Hand" : "", label: null });
+  await mailAnzahlSetzen(db, new Set([vorher, aid].filter(Boolean)));
+  return { ok: true, anzahl: (data || []).length, offen: await mailOffenZaehlen(db) };
 }
 /** Stand der Rechnung aus Lexware holen: sobald sie dort fertig ist, Rechnungsnummer übernehmen */
 async function lexAbgleich(db: any, fid: string) {
