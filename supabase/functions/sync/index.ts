@@ -881,6 +881,12 @@ async function deckblattUebernehmen(db: any, id: string, o: any, res: any, datei
 // Schlusstext übernimmt sie von der letzten Rechnung an denselben Kunden – so wie ihr es bisher macht.
 const LEX_API = "https://api.lexware.io/v1";
 const LEX_LINK = "https://app.lexware.de/permalink/invoices/edit/";
+// Luxemburg: die meta-Abrechnung ist netto, auf die Rechnung an meta Luxemburg kommen 17 % MwSt (luxemburgischer Satz).
+// Beim Abgleich mit Lexware wird deshalb netto + 17 % mit dem Brutto der Lexware-Rechnung verglichen.
+const UST_LU = 17;
+const rund2 = (x: number) => Math.round(x * 100) / 100;
+const erwartetVon = (f: any) => { const netto = rund2(Number(f?.summe) || 0), satz = (f?.kunde || kundeAusAbrechnung(f)) === "lu" ? UST_LU : null;
+  return { netto, satz, brutto: satz == null ? null : rund2(netto * (1 + satz / 100)) }; };
 const warte = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function lex(pfad: string, init: any = {}) {
   const key = Deno.env.get("LEXWARE_API_KEY");
@@ -952,8 +958,9 @@ async function lexRechnung(db: any, fid: string) {
     const vorlage = await lexVorlage(kontakt.id);
     if (!vorlage) return { fehler: `Für ${kontakt.name} gibt es in Lexware noch keine Rechnung, von der die App Steuer und Zahlungsbedingungen übernehmen kann. Bitte die erste Rechnung von Hand schreiben.` };
     const tc = vorlage.taxConditions || {};
-    const steuer = tc.taxType && tc.taxType !== "gross" ? { taxType: tc.taxType, ...(tc.taxTypeNote ? { taxTypeNote: tc.taxTypeNote } : {}) } : { taxType: "net" };
-    const satz = vorlage.lineItems?.find((x: any) => x.unitPrice)?.unitPrice?.taxRatePercentage ?? 19;
+    const steuer = tc.taxType && tc.taxType !== "gross" ? { taxType: tc.taxType, ...(tc.taxSubType ? { taxSubType: tc.taxSubType } : {}), ...(tc.taxTypeNote ? { taxTypeNote: tc.taxTypeNote } : {}) } : { taxType: "net" };
+    // Luxemburg immer 17 % auf die Netto-Summe von meta, sonst der Satz der letzten Rechnung an denselben Kunden
+    const satz = kunde === "lu" ? UST_LU : vorlage.lineItems?.find((x: any) => x.unitPrice)?.unitPrice?.taxRatePercentage ?? 19;
     const o = (await getDoc(db, "auftraege", f.auftragId || fid)) || {};
     // Eine Position „Bauleistung Meta“ (Dienstleistung aus Lexware) über die ganze Summe, darunter Auftrag bzw. Reklamation und Ort
     const art: any = (await lexArtikel(db).then((x) => x.artikel).catch(() => null)) || ausVorlage(vorlage);
@@ -978,7 +985,9 @@ async function lexRechnung(db: any, fid: string) {
     try { r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) }); }
     catch (e: any) { if (!art?.id || e.code !== "lex_fehler") throw e; body.lineItems = zeilen = zeile(false); r = await lex("/invoices", { method: "POST", body: JSON.stringify(body) }); } // Verknüpfung mit dem Artikel abgelehnt → gleiche Position ohne Verknüpfung
     await updDoc(db, "finanzen", fid, { lexId: r.id, lexAm: Date.now(), lexKunde: kontakt.name, kunde, rechnungStatus: f.rechnungStatus === "offen" ? "freigegeben" : f.rechnungStatus });
-    return { ok: true, id: r.id, link: LEX_LINK + r.id, kunde: kontakt.name, positionen: zeilen.length, text };
+    // gleich danach Beträge prüfen (Netto, bei Luxemburg Brutto mit 17 %)
+    const abgl: any = await lexAbgleich(db, fid).catch(() => null);
+    return { ok: true, id: r.id, link: LEX_LINK + r.id, kunde: kontakt.name, positionen: zeilen.length, text, lexBetrag: abgl?.lexBetrag || null };
   } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
 }
 /** Aufträge unter „Fertig“ (Bericht da, keine Abrechnung): gibt es in Lexware schon eine Rechnung an meta mit der Auftragsnummer?
@@ -1199,11 +1208,16 @@ async function lexAbgleich(db: any, fid: string) {
     if (!f?.lexId) return { fehler: "Noch kein Entwurf in Lexware." };
     const r = await lex(`/invoices/${f.lexId}`);
     const st = r.voucherStatus || "";
-    if (st === "draft") return { ok: true, status: st };
-    const patch: any = { rechnungsNr: r.voucherNumber || f.rechnungsNr || "" };
+    // Beträge vergleichen: Netto muss zur meta-Abrechnung passen, bei Luxemburg zusätzlich Brutto = Netto + 17 %
+    const tp = r.totalPrice || {}, e = erwartetVon(f);
+    const lexBetrag: any = { netto: rund2(Number(tp.totalNetAmount) || 0), brutto: rund2(Number(tp.totalGrossAmount) || 0), steuer: rund2(Number(tp.totalTaxAmount) || 0), am: Date.now(),
+      erwartetNetto: e.netto, erwartetBrutto: e.brutto, satz: e.satz };
+    lexBetrag.passt = Math.abs(lexBetrag.netto - e.netto) < 0.02 && (e.brutto == null || Math.abs(lexBetrag.brutto - e.brutto) < 0.02);
+    if (st === "draft") { await updDoc(db, "finanzen", fid, { lexBetrag }); return { ok: true, status: st, lexBetrag }; }
+    const patch: any = { rechnungsNr: r.voucherNumber || f.rechnungsNr || "", lexBetrag };
     if (f.rechnungStatus === "offen" || f.rechnungStatus === "freigegeben") { patch.rechnungStatus = "erstellt"; patch.erstelltAm = Date.now(); }
     if ((st === "paid" || st === "paidoff") && f.rechnungStatus !== "bezahlt") { patch.rechnungStatus = "bezahlt"; patch.bezahltAm = Date.now(); }
     await updDoc(db, "finanzen", fid, patch);
-    return { ok: true, status: st, rechnungsNr: patch.rechnungsNr };
+    return { ok: true, status: st, rechnungsNr: patch.rechnungsNr, lexBetrag };
   } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
 }
