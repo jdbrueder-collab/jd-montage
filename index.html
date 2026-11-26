@@ -189,6 +189,17 @@ details.sk .foldin>h3{font-size:12.5px;color:var(--mute);font-weight:600;margin:
 .kopf-akt{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .kopf-akt .btn{min-height:36px;padding:6px 13px;font-size:13.5px;border-radius:999px;flex:0 1 auto;white-space:nowrap}
 .det-grid{display:grid;gap:8px;align-items:start;margin-bottom:12px}
+.setup-h{grid-column:1/-1;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mute);margin:10px 2px 0}
+.setup-h:first-child{margin-top:0}
+.abn-gr{font-size:11.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--mute);margin-top:4px}
+.foto-los{min-height:56px;font-size:16px;margin:10px 0 6px;cursor:pointer}
+.miss li.zu{cursor:pointer;border-radius:8px;padding:3px 4px;margin:1px -4px}
+.miss li.zu:active{background:var(--greybg)}
+.miss li .zu-pf{font-weight:700;opacity:.7}
+.card.naechst{border:2px solid var(--brand2);box-shadow:0 6px 18px rgba(46,91,143,.12)}
+.nx-l{font-size:11.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--brand2);margin-bottom:4px}
+@keyframes jdBlink{0%{box-shadow:0 0 0 0 rgba(217,145,43,.0)}20%{box-shadow:0 0 0 4px rgba(217,145,43,.55)}100%{box-shadow:0 0 0 0 rgba(217,145,43,0)}}
+.blink{animation:jdBlink 1.6s ease-out;border-radius:var(--r)}
 .det-grid>details.sk{margin:0;padding:10px 8px}
 .det-grid>details.sk[open]{grid-column:1/-1;padding:14px 16px}
 .det-grid>details.sk:not([open])>summary{flex-direction:column;align-items:center;gap:3px;text-align:center}
@@ -511,6 +522,8 @@ nav.bottom{left:auto!important;right:0!important;padding:0 16px calc(16px + env(
 .dock-fab .ic{width:24px;height:24px;margin:0;stroke-width:2.1}
 .dock-fab .badge{position:absolute;top:2px;right:2px;box-shadow:0 0 0 2px #fff}
 body.menu-auf .dock-fab{background:var(--ink);color:#fff}
+.dock-fab{transition:transform .25s ease,opacity .25s ease}
+body.fab-weg:not(.menu-auf) .dock-fab{transform:translateY(96px);opacity:0;pointer-events:none}
 .dock-menu{pointer-events:auto;position:absolute;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));min-width:230px;background:var(--card,#fff);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 44px rgba(16,24,40,.22);padding:6px;display:flex;flex-direction:column;gap:2px;opacity:0;transform:translateY(10px) scale(.97);transform-origin:bottom right;visibility:hidden;transition:opacity .16s,transform .16s,visibility .16s}
 body.menu-auf .dock-menu{opacity:1;transform:none;visibility:visible}
 nav.bottom .dock-menu a{flex:none;flex-direction:row;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;color:var(--ink);text-decoration:none;font-weight:650;font-size:15px;max-width:none}
@@ -533,6 +546,8 @@ body.tun-auf .tun-schleier{display:block}
 .tun-panel{position:fixed;right:10px;top:calc(50% - 30px);transform:translateY(-30%);z-index:47;width:min(320px,calc(100vw - 20px));max-height:70vh;overflow:auto;background:var(--card,#fff);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 44px rgba(16,24,40,.24);padding:8px;display:none}
 body.tun-auf .tun-panel{display:block}
 body.tun-auf .tun-dock{display:none}
+.tun-dock{transition:transform .25s ease}
+body.fab-weg .tun-dock{transform:translateX(30px)}
 .tun-kopf{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 6px 8px}
 .tun-panel .tun{flex-direction:column;flex-wrap:nowrap;overflow:visible;margin:0;padding:0;gap:4px}
 .tun-panel .tun-p{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:10px 10px 10px 12px;border-radius:12px;font-size:14px;white-space:normal}
@@ -597,7 +612,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="84711cc478a8";</script>
+<script>window.JD_BUILD="57461b353517";</script>
 </head>
 <body>
 <header class="top">
@@ -1980,8 +1995,8 @@ function viewDetail(id){
      ${can.planen()&&(o.monteure||[]).length?`<details class="mini-f" style="margin-top:6px"><summary>📝 Bericht schreibt: ${schreiberVon(o)?esc(schreiberVon(o)===myId()?"Ich":nameOf(schreiberVon(o))):"jeder"}</summary>${berichtSchreiberHtml(o)}</details>`
        :schreiberVon(o)?`<div class="small mute" style="margin-top:6px">📝 Bericht schreibt: <b>${esc(schreiberVon(o)===myId()?"du":nameOf(schreiberVon(o)))}</b></div>`:""}
      ${(o.monteure||[]).filter(u=>u!==myId()).length?`<div class="small mute" style="margin-top:6px">🤝 Mit dabei: ${[...new Set((o.monteure||[]).filter(u=>u!==myId()).map(u=>{ const n=nameOf(u); return n==="Jemand"?"JD Brüder":n; }))].map(esc).join(", ")}</div>`:""}</div>`;
-  else h+=`<div class="card"><div class="row between"><div><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
-     <div style="text-align:right"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
+  else h+=`<div class="card"><div class="row between" style="flex-wrap:nowrap;align-items:flex-start"><div style="flex:1;min-width:0"><div class="big">${esc(o.nr)}</div><div style="font-weight:650">${esc(o.bauvorhaben||"")}</div><div class="mute small">${esc(o.plzOrt||"")}</div></div>
+     <div style="text-align:right;flex:none"><div class="chip ${w.kw===NOW.kw&&w.jahr===NOW.jahr?"gold":""}">KW ${esc(o.kw||"?")}${o.jahr?"/"+esc(o.jahr):""}</div>${o.kabinen&&o.kabinen!=="0"?`<div class="small mute" style="margin-top:4px">${esc(o.kabinen)} Kabinen</div>`:""}</div></div>
      <div class="chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${orderChips(o)}</div>
      ${kompakt||nurAnsehen?"":`<div class="kopf-akt">
      ${frueh&&can.planen()?`<button class="btn pri" id="terminieren">📅 Terminieren</button>`:""}
@@ -1997,10 +2012,10 @@ function viewDetail(id){
   if(kompakt) h+=abschlussStand(o,f,reklas);
   if(!kompakt&&!nurAnsehen&&!imEinsatz) h+=terminAnfrageKarte(o);
   // Eingeteilte: Termin bestätigen
-  if(!erl && !imEinsatz && terminOffenFuerMich(o)) h+=`<div class="card tbest"><div style="font-weight:750;font-size:16px">📅 ${esc(langDatum(o.termin))} – passt der Termin?</div>
+  if(!erl && !imEinsatz && terminOffenFuerMich(o) && !(can.einsatz() && !frueh && o.termin && terminTag(o)<=tagHeute())) h+=`<div class="card tbest"><div style="font-weight:750;font-size:16px">📅 ${esc(langDatum(o.termin))} – passt der Termin?</div>
      <div class="small mute" style="margin-top:2px">JD Brüder sieht deine Antwort sofort.</div>
      <div class="grid2" style="margin-top:10px"><button class="btn ok" id="tOk">👍 Passt</button><button class="btn" id="tNein">✋ Passt nicht</button></div></div>`;
-  if(!nurAnsehen && ((!kompakt&&!imEinsatz)||ungelesen(o.id))) h+=nachrichtenKarte(o);
+  if(!nurAnsehen && ((!kompakt&&!imEinsatz)||ungelesen(o.id)) && !(can.planen() && !(o.monteure||[]).length && !nachrichtenVon(o.id).length)) h+=nachrichtenKarte(o);
 
   // Planung: Datum eintragen (= terminiert), Auftrag zuteilen, ggf. stornieren
   const knoepfe=[]; // kleine Knöpfe nebeneinander, gehen beim Antippen auf
@@ -2068,6 +2083,12 @@ function viewDetail(id){
   } else if((erl || berichtGesperrt(o) || berichtAbgegeben(o)) && !(S.bearbeiten[id]&&aenderungFrei(o))){
     const stand=o.bestaetigtAm?`bestätigt am ${fmtDT(o.bestaetigtAm)} – nicht mehr änderbar`:o.berichtStatus==="gesendet"?"an meta gesendet – nicht mehr änderbar":o.berichtStatus==="pruefung"?"abgegeben – wartet auf Bestätigung durch JD Brüder":"fertig – nicht mehr änderbar";
     if(o.abschluss||o.bericht) h+=`<button class="card fold foldbtn" id="berichtAnsehen" style="width:100%;text-align:left;border:0;cursor:pointer"><b>📄 Montagebericht</b><span class="small mute">ansehen · ${stand}</span></button>`;
+  } else if(can.einsatz() && !frueh && can.planen() && !(o.monteure||[]).length && !(o.einsatz?.abfahrtAm||(o.zeiten||[]).length)){
+    h+=`<div class="card naechst"><div class="nx-l">Als Nächstes</div><div style="font-weight:750;font-size:16px">👷 Wer montiert?</div>
+      <div class="small mute" style="margin:2px 0 12px">${o.termin?`Termin: <b>${esc(langDatum(o.termin))}</b> – `:""}jetzt das Team einteilen – die Leute bekommen sofort Bescheid und bestätigen den Termin.</div>
+      <button class="btn pri block" id="teamEinteilen" style="min-height:52px">👷 Team einteilen</button></div>`;
+  } else if(can.einsatz() && !frueh && can.planen() && !(o.monteure||[]).includes(myId()) && !(o.einsatz?.abfahrtAm||(o.zeiten||[]).length)){
+    h+=`<details class="card fold" data-fold="${id}:einsatzChef" ${S.fold[id+":einsatzChef"]?"open":""}><summary><b>🚐 Einsatz</b><span class="small mute">fährt ${esc([...new Set((o.monteure||[]).map(nameOf))].join(", "))} · selbst mitfahren ›</span></summary><div class="foldin">${einsatzCard(o,fk).replace('class="card" id="einsatzCard"','class="" id="einsatzCard"')}</div></details>`;
   } else if(can.einsatz() && !frueh){
     h+=einsatzCard(o,fk);
     const st=schritt(o);
@@ -2362,6 +2383,8 @@ function berichtAnsicht(id,opt={}){
     m.querySelector("#anfrage") && (m.querySelector("#anfrage").onclick=()=>{ close(); aenderungAnfragen(id,"bericht"); });
   });
 }
+// Großer Knopf, der direkt die Kamera öffnet (Galerie geht weiter über das ＋-Feld)
+const kameraKnopf=(kat,text,haupt=true)=>S.assets?`<label class="btn ${haupt?"pri":""} block foto-los">📷 ${esc(text)}<input type="file" accept="image/*" capture="environment" hidden data-upload="${esc(kat)}"></label>`:"";
 function thumbs(list, kat, canAdd){
   const sc=kat==="unterlagen"?' data-scan="1"':"";
   return `<div class="thumbs">${list.map(f=>`${/pdf/i.test(f.typ||"")?`<a class="t pdf" href="_blob/${esc(f.assetId)}" data-pdf="_blob/${esc(f.assetId)}"${sc} target="_blank" rel="noopener" title="${esc(f.name||"PDF")}"><span>📄</span><small>${esc(f.name||"PDF")}</small>`:`<div class="t" data-zoom="_blob/${esc(f.assetId)}"${sc}><img loading="lazy" src="_blob/${esc(f.assetId)}" alt="">`}${(f.von===myId()||can.planen())?`<button class="x" data-delfoto="${esc(f.id)}" title="Löschen">✕</button>${/^(montage$|nachweis:|sonder:)/.test(f.kat||"")?`<button class="x u" data-umfoto="${esc(f.id)}" title="Umstellen">↔</button>`:""}`:""}${/pdf/i.test(f.typ||"")?"</a>":"</div>"}`).join("")}
@@ -2619,14 +2642,15 @@ function einsatzCard(o,fk){
        <input class="i km-gross" id="eKmAn" inputmode="numeric" placeholder="mind. ${kmFmt(S.fahrten[e.fahrtId].startKm)}" value="${routeVorschlag(S.fahrten[e.fahrtId])}"><div class="small" id="eKmDiff" style="margin-top:4px;font-weight:700"></div>${routeHinweis(S.fahrten[e.fahrtId])}</div>`:""}
      <button class="btn ok block" id="ankunft" style="min-height:56px;font-size:16px">✓ Ja, wir sind angekommen</button>`;
   } else if(st==="vorher"){
-    const n=fk("vorher").length, frei=n||!S.assets||e.vorherSkip, w=S.bereitWahl[id];
+    const n=fk("vorher").length, chefSkip=can.planen(), frei=n||!S.assets||(chefSkip&&e.vorherSkip), w=S.bereitWahl[id];
     h+=`${zeitLeiste(o)}
      <div class="q">Vorher-Fotos machen</div>
      <div class="banner info small">Bitte fotografiert die Baustelle, bevor ihr anfangt. So ist festgehalten, wie ihr sie vorgefunden habt.</div>
+     ${kameraKnopf("vorher",n?"Weiteres Vorher-Foto":"Vorher-Foto machen",!n)}
      ${thumbs(fk("vorher"),"vorher",true)}
-     ${!n&&S.assets?(e.vorherSkip?`<div class="small mute" style="margin-top:6px">Vorher-Fotos übersprungen – ihr könnt sie trotzdem noch hinzufügen.</div>`:`<button class="btn ghost block" id="vorherSkip" style="margin-top:8px">Fotos überspringen →</button>`):""}
+     ${!n&&S.assets&&chefSkip?(e.vorherSkip?`<div class="small mute" style="margin-top:6px">Vorher-Fotos übersprungen – ihr könnt sie trotzdem noch hinzufügen.</div>`:`<button class="btn ghost block" id="vorherSkip" style="margin-top:8px">Fotos überspringen → <span class="small mute">(nur Chef)</span></button>`):""}
      <div class="q" style="margin-top:16px">Baustelle montagebereit?</div>
-     ${frei?"":`<div class="small" style="color:var(--bad);margin-bottom:6px">Bitte zuerst ein Vorher-Foto hinzufügen – oder „Fotos überspringen“.</div>`}
+     ${frei?"":`<div class="small" style="color:var(--bad);margin-bottom:6px">Bitte zuerst mindestens ein Vorher-Foto machen${chefSkip?" – oder „Fotos überspringen“":""}.</div>`}
      <div class="grid2"><button class="btn ok" id="bereitJa" ${frei?"":"disabled"} style="min-height:52px">✓ Ja – Montage los</button><button class="btn" id="bereitNein" ${frei?"":"disabled"} style="min-height:52px">✕ Nein</button></div>
      ${w==="ja"?`<button class="btn pri block" id="bereitWeiter" style="margin-top:10px;min-height:52px">Weiter → Montage</button>`:""}`;
   } else if(st==="nmb"){
@@ -3049,7 +3073,7 @@ function reklaBerichtCard(o,fk){
   const b=o.bericht||{}, e=o.einsatz||{}, az=arbeitszeitMin(o), gest=totalMs(o)?Math.round(totalMs(o)/60000):null;
   const vl=vorleistungZeilen(o);
   return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}</div>`:""}
-   ${uebernachtungFold(o)}
+   <div id="bz-ueb">${uebernachtungFold(o)}</div>
    <div class="card" id="berichtCard"><h3>🛠 Reklamationsbericht</h3>
    <div class="small mute" style="margin-bottom:6px">Bei Reklamationen zählen nur Arbeitszeit, Personen, Fahrt und Übernachtung – dazu, was gemacht wurde.</div>
    <div class="grid3">
@@ -3079,12 +3103,20 @@ function berichtCard(o,fk){
   if(istReklaAuftrag(o)) return reklaBerichtCard(o,fk);
   // Montagebericht = nur noch die Preisliste; daraus entsteht der Bericht an meta (km, Personen, Übernachtung kommen aus dem Einsatz)
   const vl=vorleistungZeilen(o);
+  const b=o.bericht||{}, e=o.einsatz||{}, nN=fk("nachher").length;
   return `${vl.length?`<div class="banner warn small">${vl.map(esc).join("<br>")}<div style="margin-top:4px">Wird im Montagebericht und in der Abrechnung mit aufgeführt.</div></div>`:""}
-   ${S.lohnPos.length?lohnCard(o,{montagebericht:true}):""}
-   ${uebernachtungFold(o)}
-   <div class="card">${erfassenTeil(o,fk,true)}</div>
-   <div class="card"><h3>Geschosse &amp; Fotos</h3>${geschTeil(o)}<label class="f">Fotos nach der Montage</label>${thumbs(fk("nachher"),"nachher",true)}
-   <button class="btn sm ghost" data-fotos-handy="${esc(o.id)}" style="margin-top:10px">📲 Alle Fotos aufs Handy</button></div>`;
+   <div id="bz-pos">${S.lohnPos.length?lohnCard(o,{montagebericht:true}):""}</div>
+   <div class="card" id="bz-erfassen">${erfassenTeil(o,fk,true)}</div>
+   <div class="card" id="bz-basis"><h3>Personen, Kilometer &amp; Geschosse</h3>
+     <div class="grid2"><div><label class="f" style="margin-top:0">Personen vor Ort</label><input class="i" data-b="personen" inputmode="numeric" value="${esc(b.personen??e.personenVorOrt??"")}"></div>
+     <div><label class="f" style="margin-top:0">Gefahrene km <span class="mute" style="font-weight:500">(hin + zurück)</span></label><input class="i" data-b="istKm" inputmode="decimal" value="${esc(b.istKm??"")}"></div></div>
+     <div class="small mute" style="margin:4px 0 6px">Kommt aus dem Einsatz – nur ändern, wenn etwas nicht stimmt.</div>
+     ${geschTeil(o)}</div>
+   <div class="card" id="bz-fotos"><h3>Fotos</h3>
+     <label class="f" style="margin-top:0">Nach der Montage</label>${kameraKnopf("nachher",nN?"Weiteres Foto nach der Montage":"Foto nach der Montage machen",!nN)}${thumbs(fk("nachher"),"nachher",true)}
+     <label class="f">Vorher</label>${thumbs(fk("vorher"),"vorher",true)}
+     <button class="btn sm ghost" data-fotos-handy="${esc(o.id)}" style="margin-top:10px">📲 Alle Fotos aufs Handy</button></div>
+   <div id="bz-ueb">${uebernachtungFold(o)}</div>`;
 }
 function uebernachtungFold(o){
   const b=o.bericht||{}, u=uebernachtet(b), n=b.naechte||[];
@@ -3122,32 +3154,47 @@ function abnahmeTeil(o,fk){
   return h;
 }
 function fehlendeAngaben(o,fk){
-  const b=o.bericht||{}, r=[];
-  if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen",soft:true});
-  if(leer(b.istKm)) r.push({t:"Kilometer fehlen",soft:true});
-  if(leer(b.geschosse) && !istReklaAuftrag(o)) r.push({t:"Geschosse fehlen"});
-  if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Mehraufwand: Personen und Stunden angeben"});
-  if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true});
-  else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben"});
-  if(istReklaAuftrag(o)){
-    if(leer(b.taetigkeit)) r.push({t:"Reklamationsbericht: Was wurde gemacht?"});
-    if(!(arbeitszeitMin(o)>0)) r.push({t:"Arbeitszeit fehlt"});
+  const b=o.bericht||{}, r=[], rk=istReklaAuftrag(o), zB=rk?"#berichtCard":"#bz-basis", zF=rk?"#berichtCard":"#bz-fotos";
+  if(leer(b.personen)) r.push({t:"Personen vor Ort fehlen",soft:true,z:zB});
+  if(leer(b.istKm)) r.push({t:"Kilometer fehlen",soft:true,z:zB});
+  if(leer(b.geschosse) && !rk) r.push({t:"Geschosse fehlen",z:zB});
+  if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Mehraufwand: Personen und Stunden angeben",z:rk?"#berichtCard":"#bz-erfassen"});
+  if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true,z:"#bz-ueb"});
+  else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben",z:"#bz-ueb"});
+  if(rk){
+    if(leer(b.taetigkeit)) r.push({t:"Reklamationsbericht: Was wurde gemacht?",z:"#berichtCard"});
+    if(!(arbeitszeitMin(o)>0)) r.push({t:"Arbeitszeit fehlt",z:"#berichtCard"});
   } else {
-    if(SERIEN().length && !serieId(o)) r.push(can.planen()?{t:"Serie fehlt (oben im Montagebericht wählen)"}:{t:"Serie fehlt – JD Brüder legt sie noch fest",soft:true});
-    if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Keine Positionen im Montagebericht eingetragen"});
+    if(SERIEN().length && !serieId(o)) r.push(can.planen()?{t:"Serie fehlt (oben im Montagebericht wählen)",z:"#bz-pos"}:{t:"Serie fehlt – JD Brüder legt sie noch fest",soft:true});
+    if(S.lohnPos.length && !Object.keys(summeMengen(o)).length) r.push({t:"Keine Positionen im Montagebericht eingetragen",z:"#bz-pos"});
   }
-  if(fk && !fk("vorher").length && !o.einsatz?.vorherSkip) r.push({t:"Vorher-Fotos fehlen",soft:true});
-  if(fk && !fk("nachher").length) r.push({t:"Fotos nach der Montage fehlen"});
-  if(!abnahmeOk(o)) r.push({t:"Sichtabnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true});
+  if(fk && !fk("vorher").length && !o.einsatz?.vorherSkip) r.push({t:"Vorher-Fotos fehlen",soft:true,z:zF});
+  if(fk && !fk("nachher").length) r.push({t:"Fotos nach der Montage fehlen",z:zF});
+  if(!abnahmeOk(o)) r.push({t:"Sichtabnahme fehlt (Bericht kann trotzdem verschickt werden)",soft:true,z:"#abnahmeTeil"});
   return r;
 }
 function berichtFertigCard(o,fk){
   const f=fehlendeAngaben(o,fk).filter(x=>!/Sichtabnahme/.test(x.t));
   return `<div class="card"><h3>Bericht fertig?</h3>
-   ${f.length?`<div class="small"><b>Noch offen:</b></div>${missList(f)}`:`<div class="banner ok small" style="margin:0">Alle Angaben vollständig ✓</div>`}
+   ${f.length?`<div class="small"><b>Noch offen</b> <span class="mute">– antippen, dann springst du hin:</span></div>${missList(f,true)}`:`<div class="banner ok small" style="margin:0">Alle Angaben vollständig ✓</div>`}
    <button class="btn ok block" id="berFertig" style="margin-top:12px;min-height:56px;font-size:16px">✓ Bericht fertig – weiter${istReklaAuftrag(o)?" → Sichtabnahme":" → Reklamation"}</button></div>`;
 }
-const missList=f=>`<ul class="miss">${f.map(x=>`<li class="${x.soft?"soft":""}">• ${esc(x.t)}</li>`).join("")}</ul>`;
+const missList=(f,links=false)=>`<ul class="miss">${f.map(x=>links&&x.z?`<li class="${x.soft?"soft":""} zu" data-zu="${esc(x.z)}">• ${esc(x.t)} <span class="zu-pf">›</span></li>`:`<li class="${x.soft?"soft":""}">• ${esc(x.t)}</li>`).join("")}</ul>`;
+// Springt zu einer Stelle auf der Seite, klappt sie auf und hebt sie kurz hervor
+function hinSpringen(sel){
+  const z=document.querySelector(sel); if(!z) return false;
+  if(z.tagName==="DETAILS") z.open=true; z.querySelector?.("details.fold:not([open])")&&(z.querySelector("details.fold").open=true);
+  z.scrollIntoView({behavior:"smooth",block:"start"}); setTimeout(()=>window.scrollBy(0,-70),350);
+  z.classList.remove("blink"); void z.offsetWidth; z.classList.add("blink"); setTimeout(()=>z.classList.remove("blink"),1800);
+  return true;
+}
+// Menüknopf beim Runterscrollen ausblenden (verdeckt sonst Knöpfe), beim Hochscrollen und unten am Ende wieder zeigen
+{ let yAlt=0; window.addEventListener("scroll",()=>{ const y=window.scrollY, unten=y+innerHeight>=document.documentElement.scrollHeight-40;
+    if(Math.abs(y-yAlt)<6 && !unten) return; if(y>yAlt && y>120 && !unten) document.body.classList.add("fab-weg"); else document.body.classList.remove("fab-weg"); yAlt=y; },{passive:true}); }
+document.addEventListener("click",ev=>{
+  const zu=ev.target.closest?.("[data-zu]"); if(zu && !zu.closest(".modal")){ ev.preventDefault(); hinSpringen(zu.dataset.zu); return; }
+  const te=ev.target.closest?.("#teamEinteilen"); if(te){ const r=route(); if(r.v==="detail") pickPerson(r.id); }
+});
 function bindEinsatz(o){
   const id=o.id, P=orderPath(id), e=o.einsatz||{};
   // Losfahren: mit Fahrtenbuch-Auto → Kilometerstand speichern und Fahrt öffnen
@@ -3736,11 +3783,13 @@ function abnahmeCard(o){
   if(abnahmeFaellig(o) && o.berichtGesendetAm && st!=="versendet") h+=`<div class="banner bad" style="margin:10px 0 0">⏰ Der Bericht ging am ${fmtDT(o.berichtGesendetAm)} raus – seitdem liegt keine Sichtabnahme vor. Bitte beim Kunden nachhaken oder die Sichtabnahme anfordern.</div>`;
   else if(abnahmeFaellig(o)) h+=`<div class="banner bad" style="margin:10px 0 0">⏰ ${st==="offen"?`Seit ${tage} Tagen keine Sichtabnahme. Bitte den Kunden informieren: Sichtabnahme prüfen und entscheiden, ob sie an das Bauvorhaben geschickt wird.`:"Frist abgelaufen – beim Kunden nachhaken oder erneut senden."}</div>`;
   if(st!=="ok"){
+    const fern=can.planen()&&(can.mails()||S.assets||st==="offen");
     h+=`<div style="display:grid;gap:8px;margin-top:12px">
-     ${can.einsatz()?`<div class="grid2"><button class="btn" id="signNow">✍️ Unterschreiben lassen</button>${abnFotoKnopf("","📷 Foto machen")}</div><div class="small mute">Ein Foto genügt – dann ist die Sichtabnahme erfolgt, ohne Unterschrift.</div>`:""}
-     ${can.planen()&&can.mails()?`<button class="btn ${abnahmeFaellig(o)?"warn":"ghost"} block" id="reqAbn">👁 Sichtabnahme prüfen &amp; an Kunden senden</button>`:""}
-     ${can.planen()&&st==="offen"?`<button class="btn ghost block" id="noAbn">Nicht an Kunden senden</button>`:""}
-     ${can.planen()&&S.assets?`<label class="btn ghost block">📎 Unterschriebene Sichtabnahme hochladen<input type="file" accept="image/*,application/pdf" hidden id="abnUp"></label>`:""}
+     ${can.einsatz()?`<div class="abn-gr">Vor Ort mit dem Kunden</div><div class="grid2"><button class="btn" id="signNow">✍️ Unterschreiben lassen</button>${abnFotoKnopf("","📷 Foto machen")}</div><div class="small mute">Ein Foto genügt – dann ist die Sichtabnahme erfolgt, ohne Unterschrift.</div>`:""}
+     ${fern?`<div class="abn-gr">Kunde war nicht da?</div>`:""}
+     ${can.planen()&&can.mails()?`<button class="btn ${abnahmeFaellig(o)?"warn":""} block" id="reqAbn">📧 Per Mail an den Kunden schicken</button>`:""}
+     ${can.planen()&&S.assets?`<label class="btn ghost block">📎 Unterschrieben zurück? Hier hochladen<input type="file" accept="image/*,application/pdf" hidden id="abnUp"></label>`:""}
+     ${can.planen()&&st==="offen"?`<button class="btn ghost sm" id="noAbn" style="justify-self:center;border:0;color:var(--mute)">Keine Sichtabnahme anfordern</button>`:""}
     </div>`;
   }
   return h+`</div>`;
@@ -4698,7 +4747,7 @@ function meineEinsaetzeKarte(){
   if(!l.length) return `<div class="card"><h3>🔧 Meine Einsätze</h3><div class="small mute">Gerade keine Einsätze für dich.</div></div>`;
   return `<div class="card"><h3>🔧 Meine Einsätze</h3>${l.map(o=>{ const st=schritt(o), lauf=running(o), ber=["bericht","rekla","abnahme"].includes(st)&&darfBericht(o);
     return `<a class="az-ein" href="#a-${esc(o.id)}"><div style="flex:1;min-width:0"><b>${esc(o.nr)}</b> <span class="mute">${esc(o.bauvorhaben||"")}</span><div class="small mute">${o.termin?(terminTag(o)===heute?"heute":kurzDatum(o.termin)):"ohne Datum"}${o.plzOrt?" · "+esc(o.plzOrt):""}</div></div>
-      ${ungelesen(o.id)?`<span class="chip info">💬 ${ungelesen(o.id)}</span>`:""}${terminOffenFuerMich(o)?`<span class="chip warn">✋ bestätigen</span>`:lauf?`<span class="chip ok">⏱ läuft</span>`:ber?`<span class="chip warn">📝 Bericht</span>`:schreiberVon(o)===myId()?`<span class="chip info">📝 du</span>`:""}<span class="mute">›</span></a>`; }).join("")}</div>`;
+      ${ungelesen(o.id)?`<span class="chip info">💬 ${ungelesen(o.id)}</span>`:""}${terminOffenFuerMich(o)&&!(o.termin&&terminTag(o)<=tagHeute())?`<span class="chip warn">✋ bestätigen</span>`:!lauf&&o.termin&&terminTag(o)===tagHeute()&&!o.einsatz?.abfahrtAm?`<span class="chip info">▶ heute</span>`:lauf?`<span class="chip ok">⏱ läuft</span>`:ber?`<span class="chip warn">📝 Bericht</span>`:schreiberVon(o)===myId()?`<span class="chip info">📝 du</span>`:""}<span class="mute">›</span></a>`; }).join("")}</div>`;
 }
 // Lohn (nur Chef pflegt) und eigene Steuerdaten (Mitarbeiter pflegt)
 const personalVon=uid=>({...(S.az[uid+"_L"]||{}),...((S.preise?.personal||{})[uid]||{})});
@@ -5763,7 +5812,7 @@ async function pushAusschalten(){
 }
 /* ---------- Setup → Konto: Rolle, Benachrichtigungen, Mails, App installieren, Abmelden ---------- */
 // Setup: jeder Bereich ist ein kleiner Knopf, der beim Antippen aufgeht (immer nur einer offen)
-const SETUP_KN=[[/Mein Konto/,"Mein Konto","user"],[/Betrieb/,"Betrieb","settings"],[/Fahrtkosten/,"Fahrtkosten","car"],[/Erinnerung/,"Erinnerung","bell"],
+const SETUP_KN=[[/Mein Konto/,"Mein Konto","user"],[/Betrieb/,"Betrieb","settings"],[/Fahrtkosten/,"Fahrtkosten","car"],[/Erinnerung/,"Erinnerung an meta","bell"],
   [/Anmeldungen/,"Neue Anmeldungen","inbox"],[/Team/,"Team","user"],[/Zugänge/,"Zugänge","mail"],[/Preisliste/,"Preislisten","euro"],[/Lexware/,"Lexware Office","euro"],[/Hinweise/,"Hinweise","file"]];
 function setupKnoepfe(app){
   const grid=app.querySelector(".setup-grid"); if(!grid) return;
@@ -5780,6 +5829,13 @@ function setupKnoepfe(app){
     while(card.firstChild) inn.appendChild(card.firstChild);
     d.appendChild(inn); d.style.cssText=card.style.cssText; card.replaceWith(d);
   });
+  // Nach Themen sortieren (nur wenn es mehrere Bereiche gibt)
+  const gruppen=[["Ich",["Mein Konto"]],["Team",["Neue Anmeldungen","Team","Zugänge"]],["Geld & Abrechnung",["Preislisten","Fahrtkosten","Lexware Office"]],["Firma & Mails",["Betrieb","Erinnerung an meta","Hinweise"]]];
+  const sks=[...grid.querySelectorAll(":scope>details.sk")];
+  if(sks.length>2){ const name=d=>d.dataset.fold.replace(/^setup:/,""); const rest=new Set(sks);
+    gruppen.forEach(([titel,namen])=>{ const teil=namen.map(n=>sks.find(d=>name(d)===n)).filter(Boolean); if(!teil.length) return;
+      const hd=document.createElement("div"); hd.className="setup-h"; hd.textContent=titel; grid.appendChild(hd); teil.forEach(d=>{ grid.appendChild(d); rest.delete(d); }); });
+    if(rest.size){ const hd=document.createElement("div"); hd.className="setup-h"; hd.textContent="Weiteres"; grid.appendChild(hd); rest.forEach(d=>grid.appendChild(d)); } }
   const alle=grid.querySelectorAll("details.sk"); // nur ein Bereich (Mitarbeiter/Sub): gleich offen
   if(alle.length===1 && S.fold[alle[0].dataset.fold]===undefined) alle[0].open=true;
   grid.querySelectorAll("details.sk").forEach(d=>d.addEventListener("toggle",()=>{ S.fold[d.dataset.fold]=d.open;
