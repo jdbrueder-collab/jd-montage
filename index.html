@@ -612,7 +612,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="57461b353517";</script>
+<script>window.JD_BUILD="6908e1101647";</script>
 </head>
 <body>
 <header class="top">
@@ -2424,6 +2424,16 @@ function fahrtZeile(o){
 const kundeVon=f=>f?.kunde||(/lux/i.test([f?.bemerkung,...(f?.positionen||[]).map(p=>p.artikel)].join(" "))?"lu":"de");
 const KUNDEN={de:["🇩🇪","meta Deutschland"],lu:["🇱🇺","meta Luxemburg"]};
 const kundeText=f=>KUNDEN[kundeVon(f)].join(" ");
+// Luxemburg: meta rechnet netto ab, auf die Rechnung an meta Luxemburg kommen 17 % MwSt – so gleicht die App mit Lexware ab
+const UST_LU=17;
+const ustVon=f=>kundeVon(f)==="lu"?UST_LU:null;
+const bruttoVon=f=>{ const u=ustVon(f); return u==null?null:Math.round((Number(f?.summe)||0)*(100+u))/100; };
+const ustZeile=f=>{ const b=bruttoVon(f); return b==null?"":`<div class="small" style="margin-top:2px">netto <span class="mute">+ ${ustVon(f)} % MwSt Luxemburg ${fmtEUR(b-(Number(f.summe)||0))}</span> = <b>${fmtEUR(b)} brutto</b></div>`; };
+// Ergebnis des Abgleichs mit der Rechnung in Lexware (Netto und bei Luxemburg Brutto mit 17 %)
+const lexBetragZeile=f=>{ const b=f?.lexBetrag; if(!b) return "";
+  if(b.passt) return `<div class="banner ok small" style="margin:8px 0 0">✓ <b>Passt zu Lexware:</b> ${fmtEUR(b.netto)} netto${b.satz!=null?` + ${b.satz} % = ${fmtEUR(b.brutto)} brutto`:` · ${fmtEUR(b.brutto)} brutto`} <span class="mute">· geprüft ${fmtDT(b.am)}</span></div>`;
+  return `<div class="banner warn small" style="margin:8px 0 0">⚠️ <b>Lexware weicht ab:</b> dort ${fmtEUR(b.netto)} netto / ${fmtEUR(b.brutto)} brutto – laut meta ${fmtEUR(b.erwartetNetto)} netto${b.erwartetBrutto!=null?` / ${fmtEUR(b.erwartetBrutto)} brutto (mit ${b.satz} %)`:""}. Bitte die Rechnung in Lexware prüfen.</div>`; };
+const lexToast=(r,sonst)=>r?.lexBetrag&&!r.lexBetrag.passt?toast("⚠️ Betrag in Lexware weicht von der meta-Abrechnung ab – siehe Abrechnung",8000):toast(sonst,5000);
 const LEX_LINK="https://app.lexware.de/permalink/invoices/edit/";
 const BEAN_GRUENDE=["Kilometer fehlen / falsch","Position fehlt","Menge stimmt nicht","Geschosse / Etagen fehlen","Übernachtung fehlt","Mehraufwand fehlt"];
 function beanstandenDialog(id){
@@ -2468,13 +2478,13 @@ function finanzCard(o,f){
   if(bean) actions=`<div class="banner warn small" style="margin:0 0 8px">⚠️ <b>Beanstandet am ${fmtDT(bean.am)}</b> – wartet auf die korrigierte Abrechnung von meta.<div style="margin-top:4px;white-space:pre-wrap">${esc(bean.grund||"")}</div></div>
     <button class="btn sm ghost block" id="beanZurueck">Beanstandung zurücknehmen</button>`;
   else if(darfBean) actions+=`<button class="btn ghost block" id="beanstanden" style="margin-top:8px;color:var(--warn)">⚠️ Stimmt nicht – an meta zurückschicken</button>`;
-  if(st==="freigegeben") actions=(f.lexId?`<a class="btn pri block" href="${LEX_LINK}${esc(f.lexId)}" target="_blank" rel="noopener">📄 Entwurf in Lexware öffnen</a><button class="btn block" id="lexAbgl" style="margin-top:8px">🔄 Rechnungsnummer aus Lexware holen</button>`
+  if(st==="freigegeben") actions=(f.lexId?`<a class="btn pri block" href="${LEX_LINK}${esc(f.lexId)}" target="_blank" rel="noopener">📄 Entwurf in Lexware öffnen</a><button class="btn block" id="lexAbgl" style="margin-top:8px">🔄 Mit Lexware abgleichen (Betrag &amp; Nummer)</button>`
     :`<button class="btn pri block" id="lexNeu">📑 Entwurf in Lexware anlegen</button>`)
     +`<details style="margin-top:10px"><summary class="small mute" style="cursor:pointer">Von Hand in Lexware schreiben …</summary><button class="btn block" id="rgCopy" style="margin-top:8px">📋 Rechnungsdaten für Lexware kopieren</button><label class="f">Rechnungsnummer aus Lexware</label><input class="i" id="rgNr" placeholder="z. B. RE261105"><button class="btn block" id="rgErstellt" style="margin-top:8px">In Lexware erstellt ✓</button></details>`;
-  if(st==="erstellt") actions=`<button class="btn pri block" id="rgSend">Rechnung abschicken? → Als versendet markieren</button>`;
+  if(st==="erstellt") actions=`<button class="btn pri block" id="rgSend">Rechnung abschicken? → Als versendet markieren</button>${f.lexId?`<button class="btn sm ghost block" id="lexAbgl" style="margin-top:6px">🔄 Betrag mit Lexware abgleichen</button>`:""}`;
   if(st==="versendet") actions=`<button class="btn ghost block" id="rgPaid">Zahlung eingegangen ✓</button>${f.lexId?`<button class="btn sm ghost block" id="lexAbgl" style="margin-top:6px">🔄 Zahlung in Lexware prüfen</button>`:""}`;
   return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3>
-   <div class="row between"><div><div class="small mute">Montageabrechnung meta${f.datum?" vom "+new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="big">${fmtEUR(f.summe)}</div></div><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span></div>
+   <div class="row between"><div><div class="small mute">Montageabrechnung meta${f.datum?" vom "+new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="big">${fmtEUR(f.summe)}</div>${ustZeile(f)}</div><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span></div>
    <div class="small" style="margin-top:6px">Rechnung an <b>${kundeText(f)}</b>${f.lexKunde?` <span class="mute">(Lexware: ${esc(f.lexKunde)})</span>`:""}${landOf(o)&&landOf(o)!==kundeVon(f)?` <span class="chip warn">Baustelle liegt in ${esc(LAENDER[landOf(o)]?.[1]||landOf(o))} – bitte prüfen</span>`:""}</div>
    ${(()=>{ const k=kostenAuftrag(o.id); const g=r2((Number(f.summe)||0)-k); return `<div class="grid3" style="margin-top:10px;text-align:center"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Vergütung meta</div><b>${fmtEUR(f.summe)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Akkord / Subs</div><b>− ${fmtEUR(k)}</b></div><div style="background:${g>=0?"var(--okbg)":"var(--badbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b style="color:${g>=0?"var(--ok)":"var(--bad)"}">${fmtEUR(g)}</b></div></div>`; })()}
    ${fahrtZeile(o)}
@@ -2483,6 +2493,7 @@ function finanzCard(o,f){
    ${f.positionen?.length?`<table class="pos" style="margin-top:10px"><thead><tr><th>Artikel</th><th>Menge</th><th>EP</th><th>GP</th></tr></thead><tbody>${f.positionen.map(p=>`<tr><td>${esc(p.artikel)}</td><td>${esc(p.menge)}</td><td>${esc(Number(p.ep).toFixed(2))}</td><td>${esc(Number(p.gp).toFixed(2))}</td></tr>`).join("")}</tbody><tfoot><tr><td colspan="3">Summe netto</td><td>${Number(f.summe).toFixed(2)}</td></tr></tfoot></table>`:""}
    <div class="steps">${order.slice(0,4).map((s,i)=>`<div class="${i<=idx&&st!=="offen"?"on":""}"></div>`).join("")}</div>
    ${f.rechnungsNr?`<div class="small">Rechnung: <b>${esc(f.rechnungsNr)}</b></div>`:""}
+   ${lexBetragZeile(f)}
    ${actions}</div>`;
 }
 
@@ -4875,7 +4886,7 @@ function viewGeld(){
      <tfoot><tr><td>Summe</td><td>${fmtEUR(S1)}</td><td>− ${fmtEUR(r2(S2))}</td><td style="color:var(--ok)">${fmtEUR(r2(S1-S2))}</td></tr></tfoot></table>`:`<div class="small mute" style="margin-top:8px">Noch keine Abrechnungen in diesem Monat.</div>`}</div>`; }
   h+=statistikCard();
   if(!rows.length) h+=`<div class="empty">Noch keine Montageabrechnungen.</div>`;
-  rows.forEach(({f,o})=>{ const st=f.rechnungStatus||"offen"; h+=`<a class="order" href="#a-${esc(f.auftragId||f.id)}"><div class="row between"><span class="nr">${esc(o.nr||f.nr)}${f.art==="abnahme"?` <span class="chip info">Sichtabnahme</span>`:f.art==="andere"?` <span class="chip info">für ${esc((f.fuer||[]).join(", "))}</span>`:""}</span><b>${fmtEUR(f.summe)}</b></div><div class="small mute">${esc(o.bauvorhaben||f.bauvorhaben||"")} · ${f.datum?new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="chips"><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span><span class="chip">${kundeText(f)}</span>${f.rechnungsNr?`<span class="chip">${esc(f.rechnungsNr)}</span>`:""}${(()=>{ const g=r2((Number(f.summe)||0)-kostenAuftrag(f.id)); return `<span class="chip ${g>=0?"ok":"bad"}">Gewinn ${fmtEUR(g)}</span>`; })()}</div></a>`; });
+  rows.forEach(({f,o})=>{ const st=f.rechnungStatus||"offen"; h+=`<a class="order" href="#a-${esc(f.auftragId||f.id)}"><div class="row between"><span class="nr">${esc(o.nr||f.nr)}${f.art==="abnahme"?` <span class="chip info">Sichtabnahme</span>`:f.art==="andere"?` <span class="chip info">für ${esc((f.fuer||[]).join(", "))}</span>`:""}</span><b>${fmtEUR(f.summe)}</b></div><div class="small mute">${esc(o.bauvorhaben||f.bauvorhaben||"")} · ${f.datum?new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="chips"><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span><span class="chip">${kundeText(f)}</span>${bruttoVon(f)!=null?`<span class="chip">${fmtEUR(bruttoVon(f))} brutto</span>`:""}${f.lexBetrag&&!f.lexBetrag.passt?`<span class="chip warn">⚠️ Lexware weicht ab</span>`:""}${f.rechnungsNr?`<span class="chip">${esc(f.rechnungsNr)}</span>`:""}${(()=>{ const g=r2((Number(f.summe)||0)-kostenAuftrag(f.id)); return `<span class="chip ${g>=0?"ok":"bad"}">Gewinn ${fmtEUR(g)}</span>`; })()}</div></a>`; });
   return h;
 }
 
@@ -5311,16 +5322,16 @@ function bindDetail(id){
   const FP="finanzen/"+id;
   $("#manFin") && ($("#manFin").onclick=()=>modal(`<h2>Summe eintragen</h2><label class="f">Summe netto (€)</label><input class="i" id="sm" inputmode="decimal"><div class="grid2" style="margin-top:12px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{ m.querySelector("#ok").onclick=async()=>{ const v=parseFloat(m.querySelector("#sm").value.replace(",",".")); if(!(v>0)) return toast("Bitte Betrag eingeben"); await setDoc(FP,{nr:o.nr,bauvorhaben:o.bauvorhaben||"",summe:v,positionen:[],datum:Date.now(),rechnungStatus:"offen",quelle:"manuell"}); close(); }; }));
   const lexAnlegen=async()=>{ toast("📑 Entwurf wird in Lexware angelegt …",9000);
-    try{ const r=await S.sync.run({lexRechnung:id}); toast(r?.ok?`Entwurf in Lexware ✓ – ${r.kunde||kundeText(S.fin[id])}`:(r?.fehler||"Lexware: unbekannter Fehler"),r?.ok?4000:9000); }
+    try{ const r=await S.sync.run({lexRechnung:id}); if(r?.ok) lexToast(r,`Entwurf in Lexware ✓ – ${r.kunde||kundeText(S.fin[id])}`); else toast(r?.fehler||"Lexware: unbekannter Fehler",9000); }
     catch(e){ toast("Lexware: "+(e.message||e),9000); } };
   $("#beanstanden") && ($("#beanstanden").onclick=()=>beanstandenDialog(id));
   $("#beanZurueck") && ($("#beanZurueck").onclick=async()=>{ if(!await confirmBox("Beanstandung zurücknehmen?","Die Abrechnung gilt dann wieder so, wie meta sie geschickt hat. Eine Mail an meta geht dabei nicht raus.","Zurücknehmen")) return; await upd("finanzen/"+id,{beanstandet:null}); S.fin[id]={...S.fin[id],beanstandet:null}; render(); });
   $("#rgFrei") && ($("#rgFrei").onclick=async()=>{ const f=S.fin[id];
-    if(!await confirmBox("Rechnung schreiben?",`Rechnung über <b>${fmtEUR(f.summe)}</b> netto an <b>${kundeText(f)}</b> für Auftrag ${esc(o.nr)} freigeben?<div class="small mute" style="margin-top:6px">Die App legt sie als Entwurf in Lexware Office an – dort prüfen und abschicken.</div>`,"Ja, freigeben","ok")) return;
+    if(!await confirmBox("Rechnung schreiben?",`Rechnung über <b>${fmtEUR(f.summe)}</b> netto${bruttoVon(f)!=null?` (+ ${ustVon(f)} % MwSt = <b>${fmtEUR(bruttoVon(f))}</b> brutto)`:""} an <b>${kundeText(f)}</b> für Auftrag ${esc(o.nr)} freigeben?<div class="small mute" style="margin-top:6px">Die App legt sie als Entwurf in Lexware Office an – dort prüfen und abschicken.</div>`,"Ja, freigeben","ok")) return;
     await upd(FP,{rechnungStatus:"freigegeben",freigegebenAm:Date.now()}); await lexAnlegen(); });
   $("#lexNeu") && ($("#lexNeu").onclick=async()=>{ const b=$("#lexNeu"); b.disabled=true; await lexAnlegen(); b.disabled=false; });
   $("#lexAbgl") && ($("#lexAbgl").onclick=async()=>{ const b=$("#lexAbgl"); b.disabled=true;
-    try{ const r=await S.sync.run({lexAbgleich:id}); toast(r?.fehler?r.fehler:r?.status==="draft"?"Noch ein Entwurf – in Lexware fertigstellen":r?.rechnungsNr?`Rechnung ${r.rechnungsNr} übernommen ✓`:"Stand übernommen ✓",5000); }
+    try{ const r=await S.sync.run({lexAbgleich:id}); if(r?.fehler) toast(r.fehler,7000); else lexToast(r,r?.status==="draft"?"Betrag geprüft – noch ein Entwurf, in Lexware fertigstellen":r?.rechnungsNr?`Rechnung ${r.rechnungsNr} übernommen ✓`:"Stand übernommen ✓"); }
     catch(e){ toast("Lexware: "+(e.message||e),7000); } b.disabled=false; });
   $("#rgCopy") && ($("#rgCopy").onclick=async()=>{ const t=rechnungsText(o,S.fin[id]); try{ await navigator.clipboard.writeText(t); toast("Kopiert – jetzt in Lexware einfügen"); }catch(e){ modal(`<h2>Rechnungsdaten</h2><textarea class="i" style="min-height:260px">${esc(t)}</textarea><button class="btn block" data-close style="margin-top:10px">Schließen</button>`); } });
   $("#rgErstellt") && ($("#rgErstellt").onclick=()=>upd(FP,{rechnungStatus:"erstellt",rechnungsNr:($("#rgNr").value||"").trim(),erstelltAm:Date.now()}));
@@ -5331,6 +5342,7 @@ function rechnungsText(o,f){
   const lines=[`Rechnung – Montageleistung Auftrag ${o.nr}`,`Bauvorhaben: ${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}`, o.vorgang?`meta-Vorgang: ${o.vorgang}`:"", `Leistungszeitraum: ${o.abschluss?new Date(o.abschluss.am).toLocaleDateString("de-DE"):"KW "+(o.kw||"")}`,"","Pos.\tArtikel\tMenge\tEP\tGP"];
   (f.positionen||[]).forEach((p,i)=>lines.push(`${i+1}\t${p.artikel}\t${p.menge}\t${Number(p.ep).toFixed(2)}\t${Number(p.gp).toFixed(2)}`));
   lines.push("",`Summe netto: ${Number(f.summe).toFixed(2)} €`);
+  if(bruttoVon(f)!=null) lines.push(`zzgl. ${ustVon(f)} % MwSt (Luxemburg): ${(bruttoVon(f)-Number(f.summe)).toFixed(2)} €`,`Summe brutto: ${bruttoVon(f).toFixed(2)} €`);
   return lines.filter(l=>l!==null).join("\n");
 }
 
@@ -5360,10 +5372,11 @@ function lexwareCard(){ const x=S.lexStatus;
     return `<div class="person"><span style="font-size:20px">${flag}</span><div style="flex:1;min-width:0"><b>${txt}</b><div class="small mute">${c?esc(c.name)+(c.nr!==""&&c.nr!=null?` · Kd.-Nr. ${esc(c.nr)}`:""):x?.ok?"nicht eindeutig gefunden – bitte wählen":"noch nicht geprüft"}</div></div>
     ${x?.ok&&x.alle?.length?`<select class="i" style="width:auto;max-width:46%;min-height:36px;padding:5px 8px" data-lexk="${k}"><option value="">automatisch</option>${x.alle.map(a=>`<option value="${esc(a.id)}" ${S.lexFest?.[k]===a.id?"selected":""}>${esc(a.name)} (${esc(a.land||"?")})</option>`).join("")}</select>`:""}</div>`; };
   return `<div class="card"><h3>Lexware Office</h3>
-   <div class="small mute" style="margin-bottom:8px">Kommt eine Montageabrechnung von meta, fragt die App per Push, ob die Rechnung geschrieben werden soll. Nach „Freigeben“ liegt sie als Entwurf in Lexware – beim richtigen Kunden: steht „+20 % LUX“ in der Abrechnung, an meta Luxemburg, sonst an meta Deutschland. Eine Position „Bauleistung Meta“ über die Summe, darunter „Über die erfolgte Montage von Auftrag …, Ort“ bzw. „Reklamation …, Ort“. Steuer und Zahlungsbedingungen kommen von eurer letzten Rechnung an denselben Kunden.</div>
+   <div class="small mute" style="margin-bottom:8px">Kommt eine Montageabrechnung von meta, fragt die App per Push, ob die Rechnung geschrieben werden soll. Nach „Freigeben“ liegt sie als Entwurf in Lexware – beim richtigen Kunden: steht „+20 % LUX“ in der Abrechnung, an meta Luxemburg, sonst an meta Deutschland. Eine Position mit eurem Service-Artikel über die Summe – Nr. 11 für meta Luxemburg (mit 17 % MwSt), Nr. 12 für meta Deutschland –, darunter „Über die erfolgte Montage von Auftrag …, Ort“ bzw. „Reklamation …, Ort“. Steuer und Zahlungsbedingungen kommen von eurer letzten Rechnung an denselben Kunden.</div>
    ${x&&!x.ok?`<div class="banner ${x.code==="lex_fehlt"?"info":"bad"} small" style="margin-bottom:8px">${esc(x.fehler||"")}</div>`:""}
    ${zeile("de")}${zeile("lu")}
-   ${x?.ok?`<div class="person" style="flex-wrap:wrap"><span style="font-size:20px">🧾</span><div style="flex:1;min-width:0"><b>Bauleistung Meta</b><div class="small mute">${x.artikel?`✓ ${esc(x.artikel.name)}${x.artikel.ausRechnung?" – aus eurer letzten Rechnung übernommen":" – in Lexware gefunden"}${x.artikel.einheit?" · "+esc(x.artikel.einheit):""}`:x.artikelFehler?`Artikel nicht lesbar: ${esc(x.artikelFehler)}`:"nicht gefunden – bitte rechts wählen"}</div></div>
+   ${x?.ok?["lu","de"].map(k=>{ const a=x.artikelKunde?.[k]; return `<div class="person"><span style="font-size:20px">🧾</span><div style="flex:1;min-width:0"><b>Artikel ${k==="lu"?11:12} · ${KUNDEN[k][1]}</b><div class="small mute">${a?`✓ ${esc(a.name)}${/service/i.test(a.typ||"")?" · Service":""}${a.einheit?" · "+esc(a.einheit):""}`:x.artikelFehler?"Artikel nicht lesbar":`<span style="color:var(--warn)">in Lexware (Artikel → Service) nicht gefunden – es gilt der Ersatz unten</span>`}</div></div></div>`; }).join(""):""}
+   ${x?.ok&&!(x.artikelKunde?.lu&&x.artikelKunde?.de)?`<div class="person" style="flex-wrap:wrap"><span style="font-size:20px">🧾</span><div style="flex:1;min-width:0"><b>Ersatz, falls 11/12 fehlen</b><div class="small mute">${x.artikel?`✓ ${esc(x.artikel.name)}${x.artikel.ausRechnung?" – aus eurer letzten Rechnung übernommen":" – in Lexware gefunden"}${x.artikel.einheit?" · "+esc(x.artikel.einheit):""}`:x.artikelFehler?`Artikel nicht lesbar: ${esc(x.artikelFehler)}`:"nicht gefunden – bitte rechts wählen"}</div></div>
     ${x.artikelAlle?.length?`<select class="i" style="width:auto;max-width:46%;min-height:36px;padding:5px 8px" data-lexk="artikel"><option value="">automatisch</option>${x.artikelAlle.map(a=>`<option value="${esc(a.id)}" ${S.lexFest?.artikel===a.id?"selected":""}>${esc(a.name)}</option>`).join("")}</select>`:""}</div>`:""}
    <button class="btn sm" id="lexTest" style="margin-top:8px">🔌 Verbindung prüfen</button></div>`; }
 function bindSetupLohn(){
