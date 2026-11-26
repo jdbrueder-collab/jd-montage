@@ -1523,7 +1523,8 @@ function gruppen(list){
   const absteigend=S.filter==="erledigt"||S.filter==="fertig"||S.filter==="storniert";
   const keys=Object.keys(groups).map(Number).sort((a,b)=>absteigend?b-a:a-b);
   const nowK=wkKey(NOW.jahr,NOW.kw);
-  const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Neu“</button>`:"";
+  const nvKnopf=o=>S.filter==="abholbereit"&&!S.q.trim()&&can.planen()&&phase(o)==="abholbereit"?`<button class="li-akt" data-nv="${esc(o.id)}">↩ nach „Neu“</button>`
+    :S.filter==="offen"&&!S.q.trim()&&can.planen()&&phase(o)==="offen"?`<button class="li-akt" data-fertigprod="${esc(o.id)}">🏭 Fertig produziert ›</button>`:"";
   return keys.map(k=>{ const g=groups[k];
     g.items.sort((a,b)=>String(a.nr).localeCompare(String(b.nr),"de",{numeric:true}));
     let range=""; if(k){ const m=mondayOf(g.w.jahr,g.w.kw); const f=new Date(m); f.setDate(f.getDate()+4); range=`${m.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}–${f.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`; }
@@ -1975,6 +1976,7 @@ function viewDetail(id){
      </div>`}
      ${!kompakt&&!nurAnsehen&&((addr&&unsicher(o,"adresse"))||(o.bauleiterTel&&unsicher(o,"bauleiterTel")))?`<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ ${[addr&&unsicher(o,"adresse")?"Adresse":"",o.bauleiterTel&&unsicher(o,"bauleiterTel")?"Telefonnummer":""].filter(Boolean).join(" und ")} beim Auslesen unsicher – <a href="#" data-dok="1">bitte im Dokument prüfen</a>.</div>`:""}</div>`;
 
+  if(nurAnsehen && can.planen() && !o.storniert) h+=`<div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:180px"><b>Noch nicht abholbereit</b><div class="small mute">Weißt du schon, dass es fertig produziert ist? Dann direkt weiter zu „Abholbereit“ und terminieren.</div></div><button class="btn pri" data-fertigprod="${esc(id)}">🏭 Fertig produziert – kann terminiert werden</button></div>`;
   if(kompakt) h+=abschlussStand(o,f,reklas);
   if(!kompakt&&!nurAnsehen&&!imEinsatz) h+=terminAnfrageKarte(o);
   // Eingeteilte: Termin bestätigen
@@ -2316,7 +2318,7 @@ function berichtAnsicht(id,opt={}){
     ${z("Positionen",pos.join(", "))}
     ${z("Mehraufwand",sonderFertig(b).map(x=>esc(sonderZeile(x))).join("<br>"))}
     ${z("Vorleistung",vorleistungZeilen(o).map(esc).join("<br>"))}
-    ${z("Reklamationen",rk.map(r=>`${r.offen?"● ":"✓ "}${esc(URSACHEN[r.ursache]||r.ursache||"")}: ${esc(r.text||"")}`).join("<br>"))}
+    ${z("Reklamationen",rk.map(r=>`${r.offen?"● ":"✓ "}${esc(URSACHEN[r.ursache]||r.ursache||"")}: ${esc(r.text||"")}${r.verursacher?` <i class="mute">(Verursacher: ${esc(verursacherText(r))})</i>`:""}`).join("<br>"))}
     ${z("Sichtabnahme",o.unterschrift?`unterschrieben von ${esc(o.unterschrift.name||"")} am ${fmtDT(o.unterschrift.am)}`:o.abnahmePapier?"auf Papier":"steht noch aus")}
    </dl>
    ${gruppe("Vorher",fk("vorher"))}${(()=>{ const gr={}; Object.values(S.fotos).filter(f=>f.kat==="montage").sort((a,c)=>(a.am||0)-(c.am||0)).forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push("/_blob/"+f.assetId); }); return Object.entries(gr).map(([k,l])=>gruppe("Fertigstellung · "+esc(k),l)).join(""); })()}${gruppe("Nachher",fk("nachher"))}${(o.nachweise||[]).map(x=>gruppe(`Nachweis · ${esc(x.label)} · ${esc(String(x.menge).replace(".",","))}`,fk("nachweis:"+x.id))).join("")}${sonderFertig(b).map(x=>gruppe(`Mehraufwand · ${esc(x.arbeit)}`,fk("sonder:"+x.id))).join("")}${gruppe("Sichtabnahme",[...fk("abnahme"),...(o.unterschrift?.assetId?["/_blob/"+o.unterschrift.assetId]:[])])}${gruppe("Reklamationen",rk.flatMap(r=>(r.fotos||[]).map(a=>"/_blob/"+a)))}
@@ -2349,10 +2351,19 @@ function thumbs(list, kat, canAdd){
   ${canAdd&&S.assets?`<label class="add"><span>＋</span>Foto<input type="file" accept="image/*,application/pdf" multiple hidden data-upload="${kat}"></label>`:""}</div>
   ${canAdd&&!S.assets?`<div class="small mute">Fotos hochladen ist für dich gerade nicht freigeschaltet (Zugriff als „Bearbeiter“ nötig).</div>`:""}`;
 }
+// Reklamation: wer hat sie verursacht? JD Brüder (Monteur-Nr.), ein eingeteilter Monteur/Sub oder meta (Fertigung)
+function verursacherListe(o){
+  const leute=[...new Set((o?.monteure||[]))].filter(u=>u!==S.settings?.ownerId||true);
+  return [["jd",`JD Brüder (${S.settings?.monteurNr||"286"})`],...leute.filter(u=>S.roles[u]==="sub"||S.roles[u]==="monteur").map(u=>["u:"+u,`${nameOf(u)}${S.roles[u]==="sub"?" (Sub)":" (Monteur)"}`]),["meta","meta (Fertigung)"]];
+}
+const verursacherText=r=>{ const v=r?.verursacher||""; if(!v) return ""; if(v==="jd") return `JD Brüder (${S.settings?.monteurNr||"286"})`; if(v==="meta") return "meta (Fertigung)"; if(v.startsWith("u:")) return nameOf(v.slice(2)); return v; };
+const verursacherWahl=(o,sel="")=>`<label class="f">Verursacher</label><div class="erf-wahl vu-wahl">${verursacherListe(o).map(([k,l])=>`<button type="button" class="fp ${sel===k?"on":""}" data-vu="${esc(k)}">${esc(l)}</button>`).join("")}</div><div class="small mute" style="margin-top:4px">Wer hat den Schaden/Fehler verursacht? Bleibt intern – steht nicht im Bericht an meta.</div>`;
+const verursacherBinden=m=>m.querySelectorAll("[data-vu]").forEach(b=>b.onclick=()=>{ const an=!b.classList.contains("on"); m.querySelectorAll("[data-vu]").forEach(x=>x.classList.remove("on")); if(an) b.classList.add("on"); });
+const verursacherWert=m=>m.querySelector("[data-vu].on")?.dataset.vu||"";
 function reklaItem(r){
   return `<div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px">
     <div class="row between"><span class="chip ${r.offen?"bad":"ok"}">${r.offen?"● offen":"● erledigt"}</span><span class="small mute">${fmtDT(r.am)} · ${esc(nameOf(r.von))}</span></div>
-    <div style="font-weight:650;margin-top:6px">${esc(URSACHEN[r.ursache]||r.ursache)}${r.leerfahrt?" · Leerfahrt":""}</div>
+    <div style="font-weight:650;margin-top:6px">${esc(URSACHEN[r.ursache]||r.ursache)}${r.leerfahrt?" · Leerfahrt":""}${r.verursacher?` <span class="chip ${r.verursacher==="meta"?"info":"warn"}" style="font-size:11px">Verursacher: ${esc(verursacherText(r))}</span>`:""}</div>
     <div style="white-space:pre-wrap">${esc(r.text||"")}</div>
     ${r.bearbeitetAm?`<div class="small mute" style="margin-top:2px">bearbeitet ${fmtDT(r.bearbeitetAm)} · ${esc(nameOf(r.bearbeitetVon))}</div>`:""}
     ${r.fotos?.length?`<div class="thumbs" style="margin-top:6px">${r.fotos.map(a=>`<div class="t" data-zoom="/_blob/${esc(a)}"><img loading="lazy" src="/_blob/${esc(a)}" alt=""></div>`).join("")}</div>`:""}
@@ -2374,12 +2385,49 @@ const kundeVon=f=>f?.kunde||(/lux/i.test([f?.bemerkung,...(f?.positionen||[]).ma
 const KUNDEN={de:["🇩🇪","meta Deutschland"],lu:["🇱🇺","meta Luxemburg"]};
 const kundeText=f=>KUNDEN[kundeVon(f)].join(" ");
 const LEX_LINK="https://app.lexware.de/permalink/invoices/edit/";
+const BEAN_GRUENDE=["Kilometer fehlen / falsch","Position fehlt","Menge stimmt nicht","Geschosse / Etagen fehlen","Übernachtung fehlt","Mehraufwand fehlt"];
+function beanstandenDialog(id){
+  const o=S.orders[id], f=S.fin[id]; if(!o||!f) return;
+  const an0=istTest(o)?testAn():"info@meta.de";
+  const betreff=`Montageabrechnung für Auftrag ${o.nr} – bitte korrigieren`;
+  const brief=g=>`Guten Tag,\n\nvielen Dank für die Montageabrechnung zu Auftrag ${o.nr}${o.bauvorhaben?" ("+o.bauvorhaben+")":""} vom ${new Date(f.datum||Date.now()).toLocaleDateString("de-DE")}.\n\nBeim Prüfen ist uns aufgefallen, dass etwas nicht stimmt:\n${g||"- …"}\n\nKönnten Sie die Abrechnung bitte korrigieren und uns neu zuschicken? Den Montagebericht haben wir zur Kontrolle beigefügt.\n\nVielen Dank und freundliche Grüße\n${S.settings.monteurName||"JD Brüder"}`;
+  modalZurueck(`<h2 style="margin-top:0">⚠️ Abrechnung beanstanden</h2>
+   <div class="small mute" style="margin-bottom:8px">${esc(o.nr)} · ${fmtEUR(f.summe)} vom ${new Date(f.datum||0).toLocaleDateString("de-DE")}. Tipp: Fehlt bei euch selbst etwas (z. B. km), zuerst den Montagebericht korrigieren – er geht als PDF mit.</div>
+   ${testHinweis(o)}
+   <label class="f">Was stimmt nicht?</label><div class="erf-wahl">${BEAN_GRUENDE.map(g=>`<button type="button" class="fp" data-bg="${esc(g)}">${esc(g)}</button>`).join("")}</div>
+   <textarea class="i" id="bgText" style="margin-top:8px;min-height:70px" placeholder="z. B. Es fehlen 140 km (2 Fahrten à 70 km), Etagen 3. OG nicht berechnet"></textarea>
+   <label class="f">An</label><input class="i" id="bgAn" value="${esc(an0)}">
+   <label class="f">Betreff</label><input class="i" id="bgSj" value="${esc(betreff)}">
+   <label class="f">Mail</label><textarea class="i" id="bgBrief" style="min-height:220px"></textarea>
+   <label class="row" style="flex-wrap:nowrap;gap:10px;margin-top:8px;cursor:pointer"><input type="checkbox" id="bgPdf" checked style="width:22px;height:22px"><span>Montagebericht als PDF mitschicken</span></label>
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn warn" id="bgSend">✉️ An meta senden</button></div>`,(m,close)=>{
+    const gruende=new Set(), liste=()=>[...gruende].map(g=>"- "+g).concat(m.querySelector("#bgText").value.trim()?["- "+m.querySelector("#bgText").value.trim()]:[]).join("\n");
+    let selbst=false; const neu=()=>{ if(!selbst) m.querySelector("#bgBrief").value=brief(liste()); };
+    neu(); m.querySelector("#bgBrief").oninput=()=>{ selbst=true; };
+    m.querySelectorAll("[data-bg]").forEach(b=>b.onclick=()=>{ const g=b.dataset.bg; gruende.has(g)?gruende.delete(g):gruende.add(g); b.classList.toggle("on",gruende.has(g)); neu(); });
+    m.querySelector("#bgText").oninput=neu;
+    m.querySelector("#bgSend").onclick=async()=>{
+      const an=m.querySelector("#bgAn").value.trim(), g=liste(); if(!an) return toast("Bitte Empfänger eintragen"); if(!g) return toast("Bitte angeben, was nicht stimmt");
+      const bt=m.querySelector("#bgSend"); bt.disabled=true; bt.innerHTML=`<span class="spin"></span> wird gesendet …`;
+      try{ const atts=[]; if(m.querySelector("#bgPdf").checked){ try{ const blob=await makeVordruckPdf(o); atts.push({content:await blobToB64(blob),filename:`Montagebericht_${idOf(o.nr)}.pdf`,mimeType:"application/pdf"}); }catch(e){} }
+        await S.mcp.callTool(GM,"send_message",{to:[an],subject:m.querySelector("#bgSj").value.trim(),body:m.querySelector("#bgBrief").value,attachments:atts});
+        const b={am:Date.now(),von:myId(),grund:g,an}; await upd("finanzen/"+id,{beanstandet:b}); S.fin[id]={...S.fin[id],beanstandet:b};
+        close(); render(); toast("✉️ Beanstandung an meta gesendet – die korrigierte Abrechnung ersetzt dann die alte",4000);
+      }catch(e){ bt.disabled=false; bt.textContent="✉️ An meta senden"; toast("Senden fehlgeschlagen: "+(e.message||e)); }
+    };
+  });
+}
 function finanzCard(o,f){
   if(!f) return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3><div class="small mute">Noch keine Montageabrechnung von meta zu diesem Auftrag.</div>${fahrtZeile(o)}
    <button class="btn sm ghost" id="manFin" style="margin-top:8px">Summe von Hand eintragen</button></div>`;
   const st=f.rechnungStatus||"offen"; const order=["offen","freigegeben","erstellt","versendet","bezahlt"]; const idx=order.indexOf(st);
   let actions="";
   if(st==="offen") actions=`<button class="btn pri block" id="rgFrei">Rechnung schreiben? → Freigeben</button>`;
+  // Abrechnung stimmt nicht: freundliche Mail an meta, bis die korrigierte kommt ist die Freigabe gesperrt
+  const bean=f.beanstandet, darfBean=!f.lexId&&(st==="offen"||st==="freigegeben")&&can.senden();
+  if(bean) actions=`<div class="banner warn small" style="margin:0 0 8px">⚠️ <b>Beanstandet am ${fmtDT(bean.am)}</b> – wartet auf die korrigierte Abrechnung von meta.<div style="margin-top:4px;white-space:pre-wrap">${esc(bean.grund||"")}</div></div>
+    <button class="btn sm ghost block" id="beanZurueck">Beanstandung zurücknehmen</button>`;
+  else if(darfBean) actions+=`<button class="btn ghost block" id="beanstanden" style="margin-top:8px;color:var(--warn)">⚠️ Stimmt nicht – an meta zurückschicken</button>`;
   if(st==="freigegeben") actions=(f.lexId?`<a class="btn pri block" href="${LEX_LINK}${esc(f.lexId)}" target="_blank" rel="noopener">📄 Entwurf in Lexware öffnen</a><button class="btn block" id="lexAbgl" style="margin-top:8px">🔄 Rechnungsnummer aus Lexware holen</button>`
     :`<button class="btn pri block" id="lexNeu">📑 Entwurf in Lexware anlegen</button>`)
     +`<details style="margin-top:10px"><summary class="small mute" style="cursor:pointer">Von Hand in Lexware schreiben …</summary><button class="btn block" id="rgCopy" style="margin-top:8px">📋 Rechnungsdaten für Lexware kopieren</button><label class="f">Rechnungsnummer aus Lexware</label><input class="i" id="rgNr" placeholder="z. B. RE261105"><button class="btn block" id="rgErstellt" style="margin-top:8px">In Lexware erstellt ✓</button></details>`;
@@ -2391,6 +2439,7 @@ function finanzCard(o,f){
    ${(()=>{ const k=kostenAuftrag(o.id); const g=r2((Number(f.summe)||0)-k); return `<div class="grid3" style="margin-top:10px;text-align:center"><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Vergütung meta</div><b>${fmtEUR(f.summe)}</b></div><div style="background:var(--greybg);border-radius:10px;padding:8px"><div class="small mute">Akkord / Subs</div><b>− ${fmtEUR(k)}</b></div><div style="background:${g>=0?"var(--okbg)":"var(--badbg)"};border-radius:10px;padding:8px"><div class="small mute">Gewinn</div><b style="color:${g>=0?"var(--ok)":"var(--bad)"}">${fmtEUR(g)}</b></div></div>`; })()}
    ${fahrtZeile(o)}
    ${f.bemerkung?`<div class="small mute">Bem.: ${esc(f.bemerkung)}</div>`:""}
+   ${f.korrigiertAus?`<div class="banner ok small" style="margin:8px 0 0">✓ <b>Korrigierte Abrechnung</b> – ersetzt die vom ${new Date(f.korrigiertAus.datum||0).toLocaleDateString("de-DE")} (vorher ${fmtEUR(f.korrigiertAus.summe)}).</div>`:""}
    ${f.positionen?.length?`<table class="pos" style="margin-top:10px"><thead><tr><th>Artikel</th><th>Menge</th><th>EP</th><th>GP</th></tr></thead><tbody>${f.positionen.map(p=>`<tr><td>${esc(p.artikel)}</td><td>${esc(p.menge)}</td><td>${esc(Number(p.ep).toFixed(2))}</td><td>${esc(Number(p.gp).toFixed(2))}</td></tr>`).join("")}</tbody><tfoot><tr><td colspan="3">Summe netto</td><td>${Number(f.summe).toFixed(2)}</td></tr></tfoot></table>`:""}
    <div class="steps">${order.slice(0,4).map((s,i)=>`<div class="${i<=idx&&st!=="offen"?"on":""}"></div>`).join("")}</div>
    ${f.rechnungsNr?`<div class="small">Rechnung: <b>${esc(f.rechnungsNr)}</b></div>`:""}
@@ -2772,10 +2821,11 @@ function reklaSchnellDialog(id){
    <label class="f">Was ist los?</label><div class="erf-wahl">${RK_ART.map(([k,l])=>`<button class="fp" data-ra="${k}">${esc(l)}</button>`).join("")}</div>
    <label class="f">Anzahl</label>
    <div class="row" style="flex-wrap:nowrap"><button class="btn" data-rn="-1" style="width:56px">−</button><input class="i" id="rkM" inputmode="numeric" value="1" style="text-align:center;font-weight:700;font-size:18px"><button class="btn" data-rn="1" style="width:56px">＋</button></div>
+   ${verursacherWahl(o)}
    <label class="f">Foto *</label>${fotoWahlHtml()}
    <input class="i" id="rkN" placeholder="Notiz (optional), z. B. Kabine 3, Delle unten" style="margin-top:8px">
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn warn" id="ok">Reklamation speichern</button></div>`,(m,close)=>{
-    const fotos=[]; fotoWahlBinden(m,fotos);
+    const fotos=[]; fotoWahlBinden(m,fotos); verursacherBinden(m);
     m.querySelectorAll("[data-rt]").forEach(b=>b.onclick=()=>{ teil=b.dataset.rt; m.querySelectorAll("[data-rt]").forEach(x=>x.classList.toggle("on",x===b)); m.querySelector("#rkTx").style.display=/Sonstiges/.test(teil)?"":"none"; });
     m.querySelectorAll("[data-ra]").forEach(b=>b.onclick=()=>{ art=b.dataset.ra; m.querySelectorAll("[data-ra]").forEach(x=>x.classList.toggle("on",x===b)); });
     m.querySelectorAll("[data-rn]").forEach(b=>b.onclick=()=>{ const i=m.querySelector("#rkM"); i.value=Math.max(1,(parseInt(i.value,10)||0)+Number(b.dataset.rn)); });
@@ -2791,7 +2841,7 @@ function reklaSchnellDialog(id){
       const menge=parseInt(m.querySelector("#rkM").value,10)||1, a=RK_ART.find(x=>x[0]===art), notiz=m.querySelector("#rkN").value.trim();
       const text=`${name}${menge>1?` (${menge}×)`:""} – ${a[1].replace(/^\S+\s/,"")}${notiz?": "+notiz:""}`;
       const rid=id+"_"+Date.now().toString(36);
-      await setDoc("reklamationen/"+rid,{auftragId:id,ursache:a[2],text,teil:name,art,menge,fotos:ids,offen:true,am:Date.now(),von:myId(),leerfahrt:false,waehrendMontage:true});
+      await setDoc("reklamationen/"+rid,{auftragId:id,ursache:a[2],text,teil:name,art,menge,fotos:ids,offen:true,am:Date.now(),von:myId(),leerfahrt:false,waehrendMontage:true,verursacher:verursacherWert(m)});
       S.sync?.run({reklamation:rid}).catch(()=>{});
       if((S.orders[id]||o).bericht?.reklaFrage!=="ja") upd(orderPath(id),{bericht:{reklaFrage:"ja"}}).catch(()=>{});
       close(); toast("⚠️ Reklamation gespeichert – JD Brüder bekommt Bescheid",3500);
@@ -4820,6 +4870,24 @@ function bindSubAbrechnung(){
 /* ---------- Zugänge: Code wird persönlich herausgegeben, Rolle legt der Chef fest ---------- */
 const ZUGANG_ROLLEN=[["monteur","Mitarbeiter"],["sub","Subunternehmer"],["chef","Chef"],["hersteller","meta (Hersteller)"]];
 const codeText=c=>String(c||"").replace(/(\d{3})(\d{3})/,"$1 $2");
+const ROLLEN_TEXT={monteur:"Zeiterfassung, eigene Einsätze Schritt für Schritt, Fahrten, Fotos und Montagebericht.",
+  sub:"Nur die eigenen Aufträge, eigener Bericht bzw. Anteil, eigene Abrechnung – keine Preise von JD Brüder.",
+  chef:"Alles: planen, einteilen, Berichte prüfen, an meta senden, Team verwalten.",
+  hersteller:"Nur die Liste „abholbereit“ bestätigen – sonst nichts."};
+const APP_LINK=()=>location.origin+location.pathname.replace(/vorschau\/?(index\.html)?$/,"").replace(/index\.html$/,"");
+const VIDEO_LINK=()=>APP_LINK()+"video/jd-montage-app.mp4";
+function einladungText(z,code,bis){
+  const vor=(z.name||"").split(" ")[0];
+  return `Hallo${vor?" "+vor:""}, hier ist dein Zugang zur JD Brüder Montage-App 👷
+👉 ${APP_LINK()}?e=${encodeURIComponent(z.email)}
+
+1. Link öffnen (iPhone: Safari, Android: Chrome)
+2. Deine E-Mail ist schon eingetragen → „Weiter“
+3. Code eingeben: ${codeText(code)} (gültig bis ${new Date(bis).toLocaleDateString("de-DE")}, nur einmal)
+4. App auf den Startbildschirm holen – die Anleitung erscheint automatisch
+
+🎬 Kurzes Video, wie alles funktioniert: ${VIDEO_LINK()}`;
+}
 function zugangCard(){
   const list=Object.values(S.zugang||{}).sort((a,b)=>(b.am||b.codeAm||0)-(a.am||a.codeAm||0));
   const wartend=list.filter(z=>!z.code).length;
@@ -4832,7 +4900,7 @@ function zugangCard(){
         <div class="row" style="gap:6px"><select class="i" style="width:auto;min-height:36px;padding:5px 8px" data-zrole="${esc(z.id)}">${ZUGANG_ROLLEN.map(([k,l])=>`<option value="${k}" ${rolle===k?"selected":""}>${l}</option>`).join("")}</select>
         <button class="btn sm ${z.code&&!abgel&&!gesperrt?"":"pri"}" data-zcode="${esc(z.id)}">🔑 ${z.code?"Neuer Code":"Code erzeugen"}</button>
         <button class="btn sm ghost" data-zdel="${esc(z.id)}" title="Entfernen">✕</button></div></div>`; }).join("")||`<div class="small mute">Gerade keine offenen Anmeldungen.</div>`}
-    <div class="grid2" style="margin-top:10px"><button class="btn sm" id="zNeu">＋ Zugang für jemanden anlegen</button><button class="btn sm ghost" id="zInst">📲 Anleitung: App installieren</button></div></div>`;
+    <div class="grid2" style="margin-top:10px"><button class="btn sm pri" id="zNeu">＋ Neue Person einladen</button><button class="btn sm ghost" id="zInst">📲 Anleitung: App installieren</button></div></div>`;
 }
 async function zugangCode(email, rolle, extra={}){
   const ex=S.zugang[email]||{};
@@ -4844,20 +4912,27 @@ async function zugangCode(email, rolle, extra={}){
     <div style="font-size:40px;font-weight:800;letter-spacing:6px;text-align:center;margin:14px 0;font-variant-numeric:tabular-nums">${esc(codeText(code))}</div>
     <div class="small">Bitte <b>persönlich</b> weitergeben (mündlich, SMS oder WhatsApp). ${esc(name)} öffnet den App-Link, gibt <b>${esc(email)}</b> ein und dann diesen Code.</div>
     <div class="small mute" style="margin-top:6px">Kommt rein als <b>${esc(rl)}</b> · gültig bis ${new Date(doc.codeBis).toLocaleDateString("de-DE")} · nur einmal nutzbar</div>
-    <div class="grid2" style="margin-top:14px"><button class="btn" id="zCopy">📋 Kopieren</button><button class="btn pri" data-close>Fertig</button></div>`,(m)=>{
-      m.querySelector("#zCopy").onclick=async()=>{ const t=`Dein Zugang zur JD Brüder Montage-App:\n${location.origin+location.pathname}\nE-Mail: ${email}\nCode: ${codeText(code)} (gültig bis ${new Date(doc.codeBis).toLocaleDateString("de-DE")})`;
-        try{ await navigator.clipboard.writeText(t); toast("Kopiert ✓"); }catch(e){ toast("Kopieren ging nicht – bitte abschreiben"); } };
+    ${ROLLEN_TEXT[rolle]?`<div class="small" style="margin-top:6px;background:var(--greybg);border-radius:10px;padding:8px 10px"><b>${esc(rl)} sieht:</b> ${esc(ROLLEN_TEXT[rolle])}</div>`:""}
+    <button class="btn pri block" id="zShare" style="margin-top:14px">📤 Einladung schicken (WhatsApp, SMS …)</button>
+    <div class="grid2" style="margin-top:8px"><button class="btn" id="zCopy">📋 Text kopieren</button><button class="btn" data-close>Fertig</button></div>
+    <div class="small mute" style="margin-top:8px">Die Einladung enthält den Link (E-Mail schon eingetragen), den Code, die Schritte und ein kurzes Erklärvideo.</div>`,(m)=>{
+      const t=einladungText({...doc,email},code,doc.codeBis);
+      m.querySelector("#zCopy").onclick=async()=>{ try{ await navigator.clipboard.writeText(t); toast("Kopiert ✓ – in WhatsApp oder SMS einfügen"); }catch(e){ toast("Kopieren ging nicht – bitte abschreiben"); } };
+      m.querySelector("#zShare").onclick=async()=>{ try{ if(navigator.share){ await navigator.share({title:"JD Brüder Montage-App",text:t}); return; } }catch(e){ if(e?.name==="AbortError") return; }
+        try{ await navigator.clipboard.writeText(t); toast("Kopiert ✓ – in WhatsApp oder SMS einfügen",3500); }catch(e){ toast("Teilen ging nicht – bitte „Text kopieren“"); } };
     });
   render();
 }
 function zugangNeuDialog(){
-  modal(`<h2>Zugang anlegen</h2><div class="small mute">Für jemanden, der sich noch nicht angemeldet hat. Du bekommst gleich den Code zum Weitergeben.</div>
+  modal(`<h2>Neue Person einladen</h2><div class="small mute">Lege fest, was die Person in der App macht. Danach schickst du ihr die fertige Einladung per WhatsApp oder SMS.</div>
     <label class="f">E-Mail *</label><input class="i" id="zE" type="email" inputmode="email">
     <label class="f">Name *</label><input class="i" id="zN">
     <label class="f">Firma</label><input class="i" id="zF" placeholder="bei Subunternehmern">
     <label class="f">Telefon</label><input class="i" id="zT" inputmode="tel">
-    <label class="f">Kommt rein als</label><select class="i" id="zR">${ZUGANG_ROLLEN.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
-    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="zOk">🔑 Code erzeugen</button></div>`,(m,close)=>{
+    <label class="f">Aufgabengebiet – kommt rein als</label><select class="i" id="zR">${ZUGANG_ROLLEN.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
+    <div class="small mute" id="zRt" style="margin-top:4px">${esc(ROLLEN_TEXT.monteur)}</div>
+    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="zOk">🔑 Einladung erstellen</button></div>`,(m,close)=>{
+    m.querySelector("#zR").onchange=()=>{ m.querySelector("#zRt").textContent=ROLLEN_TEXT[m.querySelector("#zR").value]||""; };
     m.querySelector("#zOk").onclick=async()=>{ const email=m.querySelector("#zE").value.trim().toLowerCase(), name=m.querySelector("#zN").value.trim();
       if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast("Bitte eine gültige E-Mail eintragen");
       if(!name) return toast("Bitte den Namen eintragen");
@@ -4983,6 +5058,9 @@ function bind(r){
   app.querySelectorAll("[data-kal-tag]").forEach(c=>c.onclick=()=>{ S.kal={ansicht:"woche",start:montagVon(new Date(+c.dataset.kalTag)).getTime()}; render(); });
   app.querySelectorAll("[data-nv]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.nv]; if(!o) return;
     const nv={am:Date.now(),von:myId()}; await upd(orderPath(o.id),{nichtVerplant:nv}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:nv}; render(); toast(`${o.nr} steht jetzt unter „Neu“`,3000); });
+  app.querySelectorAll("[data-fertigprod]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); e.stopPropagation(); const o=S.orders[b.dataset.fertigprod]; if(!o) return;
+    const p={prodStatus:"abholbereit",abholbereitAm:o.abholbereitAm||Date.now(),abholbereitManuell:{am:Date.now(),von:myId()},nichtVerplant:null};
+    await upd(orderPath(o.id),p); S.orders[o.id]={...S.orders[o.id],...p}; render(); toast(`🏭 ${o.nr} ist fertig produziert – steht jetzt unter „Abholbereit“`,3500); });
   app.querySelectorAll("[data-nv-zurueck]").forEach(b=>b.onclick=async e=>{ e.preventDefault(); const o=S.orders[b.dataset.nvZurueck]; if(!o) return;
     await upd(orderPath(o.id),{nichtVerplant:null}); S.orders[o.id]={...S.orders[o.id],nichtVerplant:null}; render(); toast(`${o.nr} steht wieder unter „Abholbereit“`,3000); });
   app.querySelectorAll("[data-rk-toggle]").forEach(b=>b.onclick=async()=>{ const rk=S.reklas[b.dataset.rkToggle]; await upd("reklamationen/"+rk.id,{offen:!rk.offen, erledigtAm:rk.offen?Date.now():null, erledigtVon:rk.offen?myId():null}); toast(rk.offen?"Reklamation erledigt ✓":"Wieder geöffnet"); });
@@ -5169,6 +5247,8 @@ function bindDetail(id){
   const lexAnlegen=async()=>{ toast("📑 Entwurf wird in Lexware angelegt …",9000);
     try{ const r=await S.sync.run({lexRechnung:id}); toast(r?.ok?`Entwurf in Lexware ✓ – ${r.kunde||kundeText(S.fin[id])}`:(r?.fehler||"Lexware: unbekannter Fehler"),r?.ok?4000:9000); }
     catch(e){ toast("Lexware: "+(e.message||e),9000); } };
+  $("#beanstanden") && ($("#beanstanden").onclick=()=>beanstandenDialog(id));
+  $("#beanZurueck") && ($("#beanZurueck").onclick=async()=>{ if(!await confirmBox("Beanstandung zurücknehmen?","Die Abrechnung gilt dann wieder so, wie meta sie geschickt hat. Eine Mail an meta geht dabei nicht raus.","Zurücknehmen")) return; await upd("finanzen/"+id,{beanstandet:null}); S.fin[id]={...S.fin[id],beanstandet:null}; render(); });
   $("#rgFrei") && ($("#rgFrei").onclick=async()=>{ const f=S.fin[id];
     if(!await confirmBox("Rechnung schreiben?",`Rechnung über <b>${fmtEUR(f.summe)}</b> netto an <b>${kundeText(f)}</b> für Auftrag ${esc(o.nr)} freigeben?<div class="small mute" style="margin-top:6px">Die App legt sie als Entwurf in Lexware Office an – dort prüfen und abschicken.</div>`,"Ja, freigeben","ok")) return;
     await upd(FP,{rechnungStatus:"freigegeben",freigegebenAm:Date.now()}); await lexAnlegen(); });
@@ -5383,10 +5463,12 @@ function reklaBearbeiten(rid){
    <label class="f">Grund</label>
    <select class="i" id="u" ${r.leerfahrt?"disabled":""}>${Object.entries(URSACHEN).map(([k,l])=>`<option value="${k}" ${r.ursache===k?"selected":""}>${l}</option>`).join("")}</select>
    <label class="f">Beschreibung – was ist passiert? *</label><textarea class="i" id="t">${esc(r.text||"")}</textarea>
+   ${r.leerfahrt?"":verursacherWahl(S.orders[r.auftragId],r.verursacher||"")}
    <label class="f">Fotos</label><div class="thumbs" id="rf"></div>
    <label class="btn sm ghost" style="margin-top:6px">＋ Fotos hinzufügen<input type="file" accept="image/*" multiple hidden id="rfi"></label>
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>
    <button class="btn sm ghost block" id="rkDel" style="margin-top:10px;color:var(--bad)">🗑 Reklamation löschen</button>`,(m,close)=>{
+    verursacherBinden(m);
     m.querySelector("#rkDel").onclick=async()=>{
       if(!await confirmBox("Reklamation löschen?",`„${esc(String(r.text||"").slice(0,80))}${String(r.text||"").length>80?"…":""}“ wird gelöscht und erscheint nicht mehr im Montagebericht. Das lässt sich nicht rückgängig machen.`,"Löschen","bad")) return;
       try{ await S.db.doc("reklamationen/"+rid).delete(); delete S.reklas[rid]; close(); render(); toast("Reklamation gelöscht"); }catch(e){ toast("Löschen fehlgeschlagen"); }
@@ -5402,7 +5484,7 @@ function reklaBearbeiten(rid){
       const text=m.querySelector("#t").value.trim(); if(!text) return toast("Bitte Beschreibung eintragen");
       if(!fotos.length && (r.fotos||[]).length) return toast("Bitte mindestens ein Foto behalten");
       m.querySelector("#ok").disabled=true;
-      const neu={ursache:r.leerfahrt?r.ursache:m.querySelector("#u").value,text,fotos:fotos.map(f=>f.id),bearbeitetAm:Date.now(),bearbeitetVon:myId()};
+      const neu={ursache:r.leerfahrt?r.ursache:m.querySelector("#u").value,text,fotos:fotos.map(f=>f.id),bearbeitetAm:Date.now(),bearbeitetVon:myId(),...(r.leerfahrt?{}:{verursacher:verursacherWert(m)})};
       try{ await upd("reklamationen/"+rid,neu); S.reklas[rid]={...r,...neu}; close(); render(); toast("Reklamation geändert ✓"); }catch(e){ m.querySelector("#ok").disabled=false; }
     };
   });
@@ -5417,9 +5499,10 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
    <label class="f">Beschreibung – was ist passiert? *</label><textarea class="i" id="t" placeholder="${leerfahrt?"z. B. Fliesen noch nicht verlegt, Räume nicht zugänglich …":"z. B. Trennwand beschädigt geliefert, 2 Türen fehlen …"}"></textarea>
    ${leerfahrt?`<div class="grid2"><div><label class="f">Gefahrene km</label><input class="i" id="km" inputmode="decimal" value="${esc(o.bericht?.istKm||o.sollKm||"")}"></div><div><label class="f">Personen</label><input class="i" id="pp" inputmode="numeric" value="${esc(o.bericht?.personen||"")}"></div></div>
    <div class="small mute" style="margin-top:4px">Zeit laut Stoppuhr: ${fmtHM(totalMs(o))}</div>`:""}
+   ${leerfahrt?"":verursacherWahl(S.orders[id])}
    <label class="f">Fotos * (mind. 1)</label><div class="thumbs" id="rf"></div>
    <label class="btn sm ghost" style="margin-top:6px">＋ Fotos hinzufügen<input type="file" accept="image/*" multiple hidden id="rfi"></label>
-   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ${leerfahrt?"bad":"warn"}" id="ok">Speichern</button></div>`,(m,close)=>{
+   <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn ${leerfahrt?"bad":"warn"}" id="ok">Speichern</button></div>`,(m,close)=>{ verursacherBinden(m);
     const show=()=>m.querySelector("#rf").innerHTML=fotos.map(f=>`<div class="t"><img src="${f.url}" alt=""></div>`).join("");
     m.querySelector("#rfi").onchange=async e=>{
       if(!S.assets) return toast("Foto-Upload nicht freigeschaltet");
@@ -5431,7 +5514,7 @@ function reklaDialog(id,{abschluss:abs,leerfahrt}={}){
       if(!fotos.length) return toast("Bitte mindestens ein Foto hinzufügen");
       const btn=m.querySelector("#ok"); btn.disabled=true;
       const rid=id+"_"+Date.now().toString(36);
-      await setDoc("reklamationen/"+rid,{auftragId:id,ursache:u,text,fotos:fotos.map(f=>f.id),offen:true,am:Date.now(),von:myId(),leerfahrt:!!leerfahrt});
+      await setDoc("reklamationen/"+rid,{auftragId:id,ursache:u,text,fotos:fotos.map(f=>f.id),offen:true,am:Date.now(),von:myId(),leerfahrt:!!leerfahrt,verursacher:verursacherWert(m)});
       S.sync?.run({reklamation:rid}).catch(()=>{}); // Chefs bekommen eine Benachrichtigung aufs Handy
       if(leerfahrt){
         const z=[...(o.zeiten||[])].map(x=>({...x})); if(z.length&&!z[z.length-1].e) z[z.length-1].e=Date.now();
