@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
       if (body?.mailText) return json(await mailText(db, String(body.mailText)));
       if (body?.mailZuordnen) return json(await mailZuordnen(db, body.mailZuordnen));
       if (body?.lexAbgleich) return json(await lexAbgleich(db, String(body.lexAbgleich)));
+      if (body?.lexSuche) return json(await lexSuche(db));
       if (body?.lexStorno) return json(await lexStorno(db, String(body.lexStorno), String(body.grund || "").slice(0, 300)));
       // Admin: Unterlagen eines Auftrags komplett neu auslesen
       if (body?.dokLesen) {
@@ -1240,6 +1241,37 @@ async function lexStorno(db: any, fid: string, grund: string) {
     await updDoc(db, "finanzen", fid, { rechnungStatus: "offen", lexId: null, lexAm: null, lexKunde: null, rechnungsNr: "", lexBetrag: null, erstelltAm: null, versendetAm: null, bezahltAm: null, freigegebenAm: null,
       stornos: [...(Array.isArray(f.stornos) ? f.stornos : []), eintrag].slice(-10) });
     return { ok: true, gutschrift, entwurf, link: entwurf ? LEX_LINK + f.lexId : "" };
+  } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
+}
+/** Suche: alle Rechnungen und Rechnungskorrekturen an meta-Kunden aus Lexware. Der Text jeder Rechnung (Auftrag, Ort)
+ *  wird einmal gelesen und in lohn/lexindex gemerkt (nur Inhaber); danach nur Neues/Geändertes nachlesen. */
+async function lexSuche(db: any) {
+  try {
+    const start = Date.now();
+    const k = await lexKunden(db);
+    const alt = ((await getDoc(db, "lohn", "lexindex")) || {}).belege || {};
+    const liste: any[] = [];
+    for (const c of k.alle) {
+      for (let seite = 0; seite < 8; seite++) {
+        const l = await lex(`/voucherlist?voucherType=invoice,creditnote&voucherStatus=any&contactId=${c.id}&size=250&page=${seite}`);
+        for (const v of l.content || []) liste.push({ id: v.id, typ: v.voucherType, nr: v.voucherNumber || "", datum: v.voucherDate || "", betrag: v.totalAmount ?? null, offen: v.openAmount ?? null,
+          status: v.voucherStatus || "", geaendert: v.updatedDate || "", kunde: c.name, land: c.land || "" });
+        if (l.last !== false) break;
+      }
+    }
+    const belege: Record<string, any> = {};
+    let fehlen = 0;
+    for (const b of liste) {
+      const a = alt[b.id];
+      if (a && a.geaendert === b.geaendert && a.text != null) { belege[b.id] = { ...b, text: a.text, netto: a.netto }; continue; }
+      if (Date.now() - start > 70_000) { belege[b.id] = { ...b, text: a?.text ?? null, netto: a?.netto ?? null }; fehlen++; continue; }
+      try { const d = await lex(`/${b.typ === "creditnote" ? "credit-notes" : "invoices"}/${b.id}`);
+        const text = [d.title, d.introduction, d.remark, ...(d.lineItems || []).flatMap((x: any) => [x.name, x.description])].filter(Boolean).join(" · ").replace(/\s+/g, " ").slice(0, 700);
+        belege[b.id] = { ...b, text, netto: d.totalPrice?.totalNetAmount ?? null };
+      } catch (_) { belege[b.id] = { ...b, text: a?.text ?? null, netto: a?.netto ?? null }; fehlen++; }
+    }
+    await setDoc(db, "lohn", "lexindex", { belege, stand: Date.now() });
+    return { ok: true, belege: Object.values(belege), fehlen, stand: Date.now(), kunden: k.alle.map((c: any) => c.name) };
   } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
 }
 /** Zeitplan: freigegebene Rechnungen mit Lexware-Entwurf nachsehen (höchstens 6 je Lauf) */

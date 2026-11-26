@@ -152,6 +152,7 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .spez-kopf .btn{margin-left:auto;min-width:40px}
 .li-gr{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
 .li-gr.heute{border:2px solid var(--brand2)}.li-gr.heute .kal-kopf{color:var(--brand2)}
+.lx-z{padding:9px 2px;border-top:1px solid var(--line)}.lx-z:first-of-type{border-top:0}
 .li-gr.stufe .kal-kopf{font-size:13px;color:var(--ink);padding:2px 2px 4px}.li-gr.stufe.warn{border-left:4px solid var(--accent)}
 .kal-kopf .rot{color:var(--bad)}.kal-kopf .jetzt{color:var(--accent)}
 .li-grid{display:grid;gap:0 8px}
@@ -4865,6 +4866,50 @@ async function urlaubEntscheiden(rid,ja){
   toast(ja?"Genehmigt ✓":"Abgelehnt",2500); render();
 }
 /* ---------- Abrechnung ---------- */
+/* ---------- Lexware: Rechnungen an meta suchen (nur Inhaber) ---------- */
+const LX_STATUS={draft:["Entwurf","warn"],open:["offen","info"],overdue:["überfällig","bad"],paid:["bezahlt","ok"],paidoff:["bezahlt","ok"],voided:["storniert",""],transferred:["übertragen",""],sepadebit:["Lastschrift","ok"]};
+const LX_FILTER=[["alle","Alle"],["offen","Offen"],["bezahlt","Bezahlt"],["entwurf","Entwürfe"],["korrektur","Korrekturen"]];
+const lxPasst=(b,f)=>f==="alle"?true:f==="offen"?["open","overdue"].includes(b.status)&&b.typ==="invoice":f==="bezahlt"?["paid","paidoff"].includes(b.status):f==="entwurf"?b.status==="draft":f==="korrektur"?b.typ==="creditnote":true;
+const lxDatum=d=>d?new Date(d).toLocaleDateString("de-DE"):"";
+const lxLink=b=>`https://app.lexware.de/permalink/${b.typ==="creditnote"?"credit-notes":"invoices"}/${b.status==="draft"?"edit":"view"}/${encodeURIComponent(b.id)}`;
+function lxAuftraege(b){ // Aufträge der App, deren Nummer in der Rechnung steht
+  const t=" "+(b.text||"")+" ", out=[];
+  for(const o of Object.values(S.orders)){ const nr=String(o.nr||"").trim(); if(nr.length<4) continue;
+    const e=nr.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/\//g,"\\s*/\\s*").replace(/^R-?/i,"R\\s*-?\\s*");
+    if(new RegExp(`(^|[^\\d])${e}(?![\\d/])`,"i").test(t)) out.push(o); if(out.length>=4) break; }
+  return out; }
+function lexErgebnisHtml(){ const x=S.lexSuche||{}; if(x.fehler) return `<div class="banner bad small" style="margin-top:8px">${esc(x.fehler)}</div>`;
+  if(!x.belege) return `<div class="small mute" style="margin-top:10px">${x.laedt?`<span class="spin"></span> Rechnungen werden aus Lexware geholt …`:"Noch nicht geladen."}</div>`;
+  const toks=(x.q||"").toLowerCase().split(/\s+/).filter(Boolean);
+  const heu=b=>[b.nr,lxDatum(b.datum),b.kunde,b.land==="LU"?"luxemburg":"",fmtEUR(b.betrag),String(b.betrag??"").replace(".",","),String(b.betrag??""),b.netto!=null?String(b.netto).replace(".",","):"",b.text||"",LX_STATUS[b.status]?.[0]||""].join(" ").toLowerCase();
+  const alle=x.belege.filter(b=>lxPasst(b,x.f||"alle")&&toks.every(t=>heu(b).includes(t))).sort((a,b)=>String(b.datum).localeCompare(String(a.datum)));
+  const zeig=alle.slice(0,toks.length||(x.f&&x.f!=="alle")?40:8); // ohne Suchbegriff nur die neuesten
+  return `<div class="small mute" style="margin:8px 0 4px">${alle.length} von ${x.belege.length}${x.laedt?` · <span class="spin"></span> wird aktualisiert`:x.stand?` · Stand ${fmtDT(x.stand)}`:""}${x.fehlen?` · ${x.fehlen} noch nicht ganz eingelesen`:""}</div>
+   ${zeig.map(b=>{ const [st,cls]=LX_STATUS[b.status]||[b.status,""], au=lxAuftraege(b), snip=(b.text||"").replace(/^Rechnung(skorrektur)?\s*·\s*/i,"").slice(0,140);
+     return `<div class="lx-z"><div class="row between" style="flex-wrap:nowrap;gap:8px"><b>${b.typ==="creditnote"?"↩︎ ":""}${esc(b.nr||"Entwurf")}</b><b>${fmtEUR(b.betrag)}</b></div>
+      <div class="small mute">${b.typ==="creditnote"?"Rechnungskorrektur · ":""}${lxDatum(b.datum)} · ${b.land==="LU"?"🇱🇺":"🇩🇪"} ${esc(b.kunde||"")} · <span class="chip ${cls}" style="font-size:11px;padding:1px 7px">${esc(st)}</span>${b.offen&&["open","overdue"].includes(b.status)&&b.offen!==b.betrag?` · offen ${fmtEUR(b.offen)}`:""}</div>
+      ${snip?`<div class="small" style="margin-top:2px">${esc(snip)}${(b.text||"").length>140?" …":""}</div>`:""}
+      <div class="row" style="gap:6px;margin-top:5px;flex-wrap:wrap">${au.map(o=>`<a class="chip info" href="#a-${esc(o.id)}">Auftrag ${esc(o.nr)} ›</a>`).join("")}<a class="chip" href="${lxLink(b)}" target="_blank" rel="noopener">In Lexware ›</a></div></div>`; }).join("")||`<div class="small mute" style="margin-top:6px">Nichts gefunden.</div>`}
+   ${alle.length>zeig.length?`<div class="small mute" style="margin-top:6px">… ${alle.length-zeig.length} weitere – Suche genauer eingeben.</div>`:""}`; }
+function lexSucheCard(){ const x=S.lexSuche||{};
+  return `<div class="card" id="lexSucheCard"><div class="row between"><h3 style="margin:0">🔎 Lexware-Rechnungen an meta</h3><button class="btn sm ghost" id="lexNeuLaden" ${x.laedt?"disabled":""}>🔄</button></div>
+   <input class="i" id="lexQ" style="margin-top:10px" placeholder="Rechnungsnr., Auftrag, Ort, Betrag …" value="${esc(x.q||"")}" autocomplete="off">
+   <div class="fzeile" style="margin-top:8px">${LX_FILTER.map(([k,l])=>`<button class="fp ${(x.f||"alle")===k?"on":""}" data-lxf="${k}">${l}</button>`).join("")}</div>
+   <div id="lexErg">${lexErgebnisHtml()}</div></div>`; }
+async function lexSucheLaden(){ const x=S.lexSuche=S.lexSuche||{}; if(x.laedt) return; x.laedt=true; x.fehler="";
+  const zeige=()=>{ const e=$("#lexErg"); if(e) e.innerHTML=lexErgebnisHtml(); const b=$("#lexNeuLaden"); if(b) b.disabled=!!x.laedt; };
+  zeige();
+  try{ for(let runde=0;runde<6;runde++){ const r=await S.sync.run({lexSuche:1});
+      if(r?.fehler){ x.fehler=r.fehler; break; }
+      Object.assign(x,{belege:r.belege||[],stand:r.stand,fehlen:r.fehlen||0}); zeige();
+      if(!r.fehlen) break; } }
+  catch(e){ x.fehler="Lexware: "+(e.message||e); }
+  x.laedt=false; zeige(); }
+function bindLexSuche(){ const q=$("#lexQ"); if(!q) return; const x=S.lexSuche=S.lexSuche||{};
+  q.oninput=()=>{ x.q=q.value; clearTimeout(q._t); q._t=setTimeout(()=>{ const e=$("#lexErg"); if(e) e.innerHTML=lexErgebnisHtml(); },150); };
+  document.querySelectorAll("[data-lxf]").forEach(b=>b.onclick=()=>{ x.f=b.dataset.lxf; document.querySelectorAll("[data-lxf]").forEach(c=>c.classList.toggle("on",c===b)); const e=$("#lexErg"); if(e) e.innerHTML=lexErgebnisHtml(); });
+  $("#lexNeuLaden").onclick=()=>lexSucheLaden();
+  if(!x.belege && !x.laedt && !x.fehler) lexSucheLaden(); }
 function viewGeld(){
   const rows=Object.values(S.fin).map(f=>({f,o:S.orders[f.auftragId||f.id]||{nr:f.nr||f.id,id:f.auftragId||f.id}})).sort((a,b)=>(b.f.datum||0)-(a.f.datum||0));
   const m=new Date(); const thisMonth=rows.filter(r=>{ const d=new Date(r.f.datum||0); return d.getMonth()===m.getMonth()&&d.getFullYear()===m.getFullYear(); });
@@ -4872,6 +4917,7 @@ function viewGeld(){
   const offen=rows.filter(r=>(r.f.rechnungStatus||"offen")!=="versendet"&&r.f.rechnungStatus!=="bezahlt");
   let h=`<h2 style="margin:0 0 10px;font-size:20px">Abrechnung <span class="small mute">(nur für dich)</span></h2>
   <div class="sum"><div class="card"><b>${fmtEUR(sum(thisMonth))}</b><span>${m.toLocaleDateString("de-DE",{month:"long"})}</span></div><div class="card"><b>${fmtEUR(sum(offen))}</b><span>noch nicht in Rechnung</span></div><div class="card"><b>${rows.length}</b><span>Abrechnungen</span></div></div>
+  ${S.isOwner?lexSucheCard():""}
   <div class="banner info">Ablauf: Abrechnung von meta kommt rein (Push) → du gibst die Rechnung frei → die App legt den Rechnungsentwurf in Lexware an → dort prüfen und versenden → „Abgleichen“ holt Rechnungsnummer und Zahlung.</div>`;
   { const ein=sum(thisMonth); const kost=r2(thisMonth.reduce((s2,r)=>s2+kostenAuftrag(r.f.id),0)); const gew=r2(ein-kost);
     h+=`<div class="card"><h3>Gewinn · ${m.toLocaleDateString("de-DE",{month:"long",year:"numeric"})}</h3><div class="grid3" style="text-align:center"><div><div class="small mute">Von meta</div><b style="font-size:17px">${fmtEUR(ein)}</b></div><div><div class="small mute">An Subs / Akkord</div><b style="font-size:17px">− ${fmtEUR(kost)}</b></div><div><div class="small mute">Gewinn</div><b style="font-size:17px;color:${gew>=0?"var(--ok)":"var(--bad)"}">${fmtEUR(gew)}</b></div></div><div class="small mute" style="margin-top:6px">Aufträge, deren meta-Abrechnung in diesem Monat kam.</div></div>`; }
@@ -5105,6 +5151,7 @@ function bindNachrichten(id){
 }
 function bind(r){
   const app=$("#app");
+  if($("#lexQ")) bindLexSuche();
   app.querySelectorAll("[data-fotos-handy]").forEach(b=>b.onclick=()=>fotosAufsHandy(b.dataset.fotosHandy));
   app.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>history.length>1?history.back():go(can.mitarbeiter()?"zeit":"auftraege"));
   app.querySelectorAll("[data-zoom]").forEach(t=>t.onclick=e=>{ if(e.target.closest("[data-delfoto],[data-umfoto]")) return; t.dataset.scan?dokViewer(t.dataset.zoom,"scan","Unterlage"):lightbox(t.dataset.zoom); });
