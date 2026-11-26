@@ -98,6 +98,8 @@ Deno.serve(async (req) => {
     }
     const ergebnis: any = await abruf(db, quelle);
     const rest = 125_000 - (Date.now() - startZeit); // Edge-Funktion darf nicht zu lange laufen
+    // Entwürfe in Lexware: sobald dort fertig geschrieben, Rechnungsnummer holen → Auftrag rutscht nach „Erledigt“
+    if (quelle === "zeitplan" && rest > 25_000) { try { ergebnis.lexEntwuerfe = await lexEntwuerfePruefen(db); } catch (e: any) { ergebnis.lexEntwuerfeFehler = e.message || String(e); } }
     if (quelle === "zeitplan" && rest > 15_000) { try { ergebnis.mailArchiv = await mailArchiv(db, Math.min(40_000, rest - 10_000)); } catch (e: any) { ergebnis.mailArchivFehler = e.message || String(e); } }
     return json(ergebnis);
   } catch (e: any) {
@@ -1206,6 +1208,15 @@ async function mailZuordnen(db: any, x: any) {
   for (const r of data || []) await updDoc(db, "mails", r.id, { auftragId: ign ? "" : aid, zuordnung: ign ? "ignoriert" : aid ? "hand" : "", grund: ign ? "" : aid ? "von Hand" : "", label: null });
   await mailAnzahlSetzen(db, new Set([vorher, aid].filter(Boolean)));
   return { ok: true, anzahl: (data || []).length, offen: await mailOffenZaehlen(db) };
+}
+/** Zeitplan: freigegebene Rechnungen mit Lexware-Entwurf nachsehen (höchstens 6 je Lauf) */
+async function lexEntwuerfePruefen(db: any) {
+  if (!Deno.env.get("LEXWARE_API_KEY")) return 0;
+  const fin = await getCol(db, "finanzen");
+  const offen = Object.entries(fin).filter(([, f]: any) => f?.lexId && f.rechnungStatus === "freigegeben").slice(0, 6);
+  let fertig = 0;
+  for (const [id] of offen) { const r: any = await lexAbgleich(db, id); if (r?.ok && r.status && r.status !== "draft") fertig++; }
+  return fertig;
 }
 /** Stand der Rechnung aus Lexware holen: sobald sie dort fertig ist, Rechnungsnummer übernehmen */
 async function lexAbgleich(db: any, fid: string) {
