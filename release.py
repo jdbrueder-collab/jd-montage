@@ -9,6 +9,8 @@ aus dieser Markierung, baut neu, lädt hoch und markiert das Ergebnis wieder –
 Daten (Datenbank) werden dabei nie verändert, nur die Darstellung/App-Dateien.
 """
 import subprocess, sys, shutil, datetime
+try: sys.stdout.reconfigure(encoding="utf-8")
+except Exception: pass
 from pathlib import Path
 
 here = Path(__file__).parent
