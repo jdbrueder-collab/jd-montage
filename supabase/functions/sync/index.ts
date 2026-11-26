@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
       if (body?.mailText) return json(await mailText(db, String(body.mailText)));
       if (body?.mailZuordnen) return json(await mailZuordnen(db, body.mailZuordnen));
       if (body?.lexAbgleich) return json(await lexAbgleich(db, String(body.lexAbgleich)));
+      if (body?.lexStorno) return json(await lexStorno(db, String(body.lexStorno), String(body.grund || "").slice(0, 300)));
       // Admin: Unterlagen eines Auftrags komplett neu auslesen
       if (body?.dokLesen) {
         const id = String(body.dokLesen), o = await getDoc(db, "auftraege", id); const log: string[] = [];
@@ -1208,6 +1209,38 @@ async function mailZuordnen(db: any, x: any) {
   for (const r of data || []) await updDoc(db, "mails", r.id, { auftragId: ign ? "" : aid, zuordnung: ign ? "ignoriert" : aid ? "hand" : "", grund: ign ? "" : aid ? "von Hand" : "", label: null });
   await mailAnzahlSetzen(db, new Set([vorher, aid].filter(Boolean)));
   return { ok: true, anzahl: (data || []).length, offen: await mailOffenZaehlen(db) };
+}
+/** Rechnung stornieren: zur fertigen Lexware-Rechnung eine Rechnungskorrektur (Gutschrift) als ENTWURF anlegen –
+ *  der Chef prüft und schließt sie in Lexware ab. In der App ist die Abrechnung danach wieder offen (neue Rechnung möglich). */
+const LEX_GS_LINK = "https://app.lexware.de/permalink/credit-notes/edit/";
+async function lexStorno(db: any, fid: string, grund: string) {
+  try {
+    const f = await getDoc(db, "finanzen", fid);
+    if (!f) return { fehler: "Abrechnung nicht gefunden." };
+    let gutschrift: any = null, entwurf = false;
+    if (f.lexId) {
+      const r = await lex(`/invoices/${f.lexId}`);
+      if (r.voucherStatus === "draft") entwurf = true; // nur ein Entwurf: in Lexware einfach löschen
+      else {
+        const tag = (t: number) => new Date(t).toISOString().replace("Z", "+00:00");
+        const zeilen = (mitId: boolean) => (r.lineItems || []).filter((x: any) => x.type !== "text").map((x: any) => ({
+          type: mitId && x.id ? x.type : "custom", ...(mitId && x.id ? { id: x.id } : {}), name: x.name, description: x.description || "",
+          quantity: x.quantity, unitName: x.unitName || "pauschal",
+          unitPrice: { currency: "EUR", netAmount: x.unitPrice?.netAmount, taxRatePercentage: x.unitPrice?.taxRatePercentage ?? 19 } }));
+        const body: any = { voucherDate: tag(Date.now()), address: r.address?.contactId ? { contactId: r.address.contactId } : r.address,
+          lineItems: zeilen(true), totalPrice: { currency: "EUR" }, taxConditions: r.taxConditions || { taxType: "net" }, title: "Rechnungskorrektur",
+          introduction: `Storno der Rechnung ${r.voucherNumber || ""}${grund ? ` – ${grund}` : ""}` };
+        let g: any;
+        try { g = await lex(`/credit-notes?precedingSalesVoucherId=${f.lexId}`, { method: "POST", body: JSON.stringify(body) }); }
+        catch (e: any) { if (e.code !== "lex_fehler") throw e; body.lineItems = zeilen(false); g = await lex(`/credit-notes?precedingSalesVoucherId=${f.lexId}`, { method: "POST", body: JSON.stringify(body) }); }
+        gutschrift = { id: g.id, link: LEX_GS_LINK + g.id };
+      }
+    }
+    const eintrag = { am: Date.now(), grund, rechnungsNr: f.rechnungsNr || "", lexId: f.lexId || "", status: f.rechnungStatus || "", gutschriftId: gutschrift?.id || "", entwurf };
+    await updDoc(db, "finanzen", fid, { rechnungStatus: "offen", lexId: null, lexAm: null, lexKunde: null, rechnungsNr: "", lexBetrag: null, erstelltAm: null, versendetAm: null, bezahltAm: null, freigegebenAm: null,
+      stornos: [...(Array.isArray(f.stornos) ? f.stornos : []), eintrag].slice(-10) });
+    return { ok: true, gutschrift, entwurf, link: entwurf ? LEX_LINK + f.lexId : "" };
+  } catch (e: any) { return { fehler: e.message || String(e), code: e.code || "" }; }
 }
 /** Zeitplan: freigegebene Rechnungen mit Lexware-Entwurf nachsehen (höchstens 6 je Lauf) */
 async function lexEntwuerfePruefen(db: any) {
