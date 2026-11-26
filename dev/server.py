@@ -29,8 +29,12 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.split("?")[0] in ("/dev/", "/dev/index.html"):
-            html = (ROOT / "original-claude.html").read_text(encoding="utf-8")
-            html = html.replace("</head>", '<script src="/dev/mock-shim.js"></script>\n</head>', 1).encode("utf-8")
+            q = self.path.split("?", 1)[1] if "?" in self.path else ""
+            schl = [x.split("=")[0] for x in q.split("&")]
+            quelle = ROOT / "vorschau" / "original.html" if "vorschau" in schl and (ROOT / "vorschau" / "original.html").exists() else ROOT / "original-claude.html"
+            html = quelle.read_text(encoding="utf-8")
+            extra = '<script src="/dev/szenen.js"></script>\n' if "szene" in schl else ""
+            html = html.replace("</head>", '<script src="/dev/mock-shim.js"></script>\n' + extra + '</head>', 1).encode("utf-8")
             self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length", str(len(html))); self.end_headers()
             self.wfile.write(html); return
         if self.path.startswith("/_blob/"):

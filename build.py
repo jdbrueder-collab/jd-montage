@@ -1,8 +1,12 @@
 """Baut index.html aus der Claude-Version: Supabase-Ersatz einbinden, Bildpfade relativ machen, Claude-Hinweise anpassen."""
 from pathlib import Path
+import sys
 
 here = Path(__file__).parent
-html = (here / "original-claude.html").read_text(encoding="utf-8")
+# python build.py            → normale App (index.html) aus original-claude.html
+# python build.py --vorschau → Vorschau (vorschau/index.html) aus vorschau/original.html – zum Ausprobieren, die normale App bleibt unverändert
+VORSCHAU = "--vorschau" in sys.argv
+html = (here / ("vorschau/original.html" if VORSCHAU else "original-claude.html")).read_text(encoding="utf-8")
 
 HEAD = """<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1d3a5f">
@@ -41,10 +45,23 @@ for old, new in REPLACE:
     assert old in html, f"nicht gefunden: {old}"
     html = html.replace(old, new)
 assert "/_blob/" not in html.replace('"_blob/', "")
+if VORSCHAU:
+    # gleiche Daten wie die App, Dateien eine Ebene höher; deutlicher Hinweis „Vorschau“
+    for old, new in [('href="manifest.webmanifest"', 'href="../manifest.webmanifest"'), ('href="icon-192.png"', 'href="../icon-192.png"'),
+                     ('src="config.js"', 'src="../config.js"'), ('src="claude-shim.js"', 'src="../claude-shim.js"'), ('"_blob/', '"../_blob/'),
+                     ('.replace(/[^/]*$/,"");', r'.replace(/[^/]*$/,"").replace(/vorschau\/$/,"");')]:
+        assert old in html, f"Vorschau: nicht gefunden: {old}"
+        html = html.replace(old, new)
+    html = html.replace('<script src="../claude-shim.js"></script>', """<script>if(navigator.serviceWorker){const r=navigator.serviceWorker.register.bind(navigator.serviceWorker);navigator.serviceWorker.register=(u,o)=>r(u==="sw.js"?"../sw.js":u,{...(o||{}),scope:"../"});}</script>
+<script src="../claude-shim.js"></script>
+<style>.vorschau-band{position:fixed;left:0;right:0;top:0;z-index:9999;background:#7c3aed;color:#fff;font:700 12px/1.2 system-ui,sans-serif;text-align:center;padding:4px 8px calc(4px);padding-top:max(4px,env(safe-area-inset-top))}.vorschau-band a{color:#fff;margin-left:8px}body{padding-top:22px}</style>""", 1)
+    html = html.replace("<body>", '<body><div class="vorschau-band">VORSCHAU – zum Ausprobieren, gleiche Daten wie die App <a href="../">zur normalen App ›</a></div>', 1)
+    assert 'class="vorschau-band"' in html, "body-Tag nicht gefunden"
 # Versionskennung: ändert sich mit App, Anmelde-Hülle und Service Worker → App zeigt „neue Version da“
 import hashlib, json
 build = hashlib.sha1((html + (here / "claude-shim.js").read_text(encoding="utf-8") + (here / "sw.js").read_text(encoding="utf-8")).encode("utf-8")).hexdigest()[:12]
 html = html.replace("</head>", f'<script>window.JD_BUILD="{build}";</script>' + chr(10) + '</head>', 1)
-(here / "version.json").write_text(json.dumps({"build": build}), encoding="utf-8")
-(here / "index.html").write_text(html, encoding="utf-8")
-print("index.html gebaut")
+ziel = here / ("vorschau" if VORSCHAU else ".")
+(ziel / "version.json").write_text(json.dumps({"build": build}), encoding="utf-8")
+(ziel / "index.html").write_text(html, encoding="utf-8")
+print(("vorschau/" if VORSCHAU else "") + "index.html gebaut")

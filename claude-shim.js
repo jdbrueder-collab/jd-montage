@@ -29,7 +29,9 @@
     const inApp = /FBAN|FBAV|Instagram|WhatsApp|GSA\/|Line\//.test(navigator.userAgent);
     const teil = (k, titel, schritte) => `<details ${g === k ? "open" : ""} style="margin-top:8px"><summary style="cursor:pointer;font-weight:650">${titel}${g === k ? " <span class=\"small mute\">(dein Gerät)</span>" : ""}</summary>
       <ol style="margin:6px 0 0;padding-left:20px;line-height:1.55">${schritte.map(s => `<li>${s}</li>`).join("")}</ol></details>`;
-    return `<h3 style="margin:0 0 4px">📲 App auf den Startbildschirm holen</h3>
+    const video = location.pathname.replace(/vorschau\/?(index\.html)?$/, "").replace(/index\.html$/, "") + "video/jd-montage-app.mp4";
+    return `<a class="btn block" href="${video}" target="_blank" rel="noopener" style="margin-bottom:10px">🎬 Video: So funktioniert die App</a>
+      <h3 style="margin:0 0 4px">📲 App auf den Startbildschirm holen</h3>
       <div class="small mute">Dann öffnest du die Montage-App mit einem Tipp wie jede andere App – ohne Link suchen.</div>
       ${inApp ? `<div class="small" style="margin-top:8px;color:var(--warn)">⚠️ Du hast den Link in einer anderen App geöffnet (z. B. WhatsApp). Öffne ihn zuerst im Browser: oben/unten auf ⋯ bzw. ⋮ tippen → „Im Browser öffnen“.</div>` : ""}
       <button class="btn pri block ${installEvent ? "" : "hide"}" data-jd-install style="margin-top:10px">📲 Jetzt installieren</button>
@@ -72,6 +74,7 @@
       document.body.appendChild(d); installBinden(d);
       const $ = s => d.querySelector(s), msg = t => ($("#lm").textContent = t || "");
       let email = ""; try { email = localStorage.getItem("jdLoginMail") || ""; } catch (e) {}
+      try { const ein = new URLSearchParams(location.search).get("e"); if (ein && /^\S+@\S+\.\S+$/.test(ein)) email = ein.trim().toLowerCase(); } catch (e) {} // Einladungslink
       let modus = "persoenlich"; // „mail“ = Code kam per Mail
       const knopf = (id, text) => `<button class="btn pri block" id="${id}" style="margin-top:12px">${text}</button>`;
       const busy = async (b, fn) => { b.disabled = true; msg(""); try { await fn(); } catch (e) { msg(e.message || String(e)); } b.disabled = false; };

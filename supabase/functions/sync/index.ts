@@ -215,6 +215,8 @@ const URSACHEN_TEXT: Record<string, string> = { selbst: "Selbst verursacht", bau
 async function pushAbrechnung(db: any, id: string, f: any) {
   const kunde = f.kunde === "lu" ? "meta Luxemburg 🇱🇺" : "meta Deutschland 🇩🇪";
   const betrag = Number(f.summe || 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+  if (f.korrigiertAus) { const alt = Number(f.korrigiertAus.summe || 0).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+    return await pushSenden(db, await chefIds(db), { titel: `✓ Korrigierte Abrechnung ${f.nr}`, text: `meta hat korrigiert: ${betrag} netto (vorher ${alt}) – antippen zum Prüfen und Freigeben`, url: APP_URL + "#a-" + id }); }
   await pushSenden(db, await chefIds(db), { titel: `💶 Abrechnung ${f.nr}: Rechnung freigeben?`, text: `${kunde} · ${betrag} netto${f.art === "abnahme" ? " (Sichtabnahme)" : ""} – antippen zum Freigeben`, url: APP_URL + "#a-" + id }).catch((e) => console.error(e));
 }
 async function pushReklamation(db: any, rid: string) {
@@ -624,9 +626,11 @@ async function abruf(db: any, quelle: string, nachholen = "", opt: { abfrage?: s
               st.msgs[m.id] = 1; continue;
             }
             if (!ex || (ex.datum || 0) <= d) {
-              const doc = { ...(ex?.lexId ? { lexId: ex.lexId, lexAm: ex.lexAm } : {}), nr: a.nr, kunde: kundeAusAbrechnung(a), bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
+              // Beanstandete Abrechnung wird durch die neue (korrigierte) ersetzt – alter Betrag bleibt zum Vergleich
+              const korr = ex?.beanstandet && (ex.datum || 0) < d ? { korrigiertAus: { summe: ex.summe, datum: ex.datum, beanstandet: ex.beanstandet } } : {};
+              const doc = { ...korr, ...(ex?.lexId ? { lexId: ex.lexId, lexAm: ex.lexAm } : {}), nr: a.nr, kunde: kundeAusAbrechnung(a), bauvorhaben: a.bv, summe: a.summe, positionen: a.positionen, bemerkung: a.bemerkung, datum: d, mailId: m.id, rechnungStatus: ex?.rechnungStatus || "offen", rechnungsNr: ex?.rechnungsNr || "", quelle: "mail" };
               await setDoc(db, "finanzen", id, doc); fin[id] = doc;
-              if (!ex) await pushAbrechnung(db, id, doc);
+              if (!ex || (korr as any).korrigiertAus) await pushAbrechnung(db, id, doc);
             }
             if (!orders[id]) { const bv = splitBV(a.bv); const doc = { nr: a.nr, bauvorhaben: bv.bauvorhaben, plzOrt: bv.plzOrt, terminStatus: "fest", prodStatus: "abholbereit", erstelltAm: Date.now(), quelle: "mail", abgerechnet: true, abschluss: { typ: "ok", am: d, by: null }, berichtStatus: "gesendet", berichtGesendetAm: d }; await setDoc(db, "auftraege", id, doc); orders[id] = doc; }
             else if (!orders[id].abgerechnet) await updDoc(db, "auftraege", id, { abgerechnet: true });
