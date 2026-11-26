@@ -613,7 +613,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="f89e2bb386f9";</script>
+<script>window.JD_BUILD="fa8b19a2d733";</script>
 </head>
 <body>
 <header class="top">
@@ -2506,6 +2506,8 @@ function finanzCard(o,f){
     +`<details style="margin-top:10px"><summary class="small mute" style="cursor:pointer">Von Hand in Lexware schreiben …</summary><button class="btn block" id="rgCopy" style="margin-top:8px">📋 Rechnungsdaten für Lexware kopieren</button><label class="f">Rechnungsnummer aus Lexware</label><input class="i" id="rgNr" placeholder="z. B. RE261105"><button class="btn block" id="rgErstellt" style="margin-top:8px">In Lexware erstellt ✓</button></details>`;
   if(st==="erstellt") actions=`<button class="btn pri block" id="rgSend">Rechnung abschicken? → Als versendet markieren</button>${f.lexId?`<button class="btn sm ghost block" id="lexAbgl" style="margin-top:6px">🔄 Betrag mit Lexware abgleichen</button>`:""}`;
   if(st==="versendet") actions=`<button class="btn ghost block" id="rgPaid">Zahlung eingegangen ✓</button>${f.lexId?`<button class="btn sm ghost block" id="lexAbgl" style="margin-top:6px">🔄 Zahlung in Lexware prüfen</button>`:""}`;
+  // Rechnung (oder Freigabe) zurücknehmen: kleiner Link ganz unten
+  if(st!=="offen"&&!bean) actions+=`<button class="btn sm ghost block" id="rgStorno" style="margin-top:8px;color:var(--bad)">↩︎ ${st==="freigegeben"?"Freigabe zurücknehmen":"Rechnung stornieren"}</button>`;
   return `<div class="card"><h3>Abrechnung (nur für dich sichtbar)</h3>
    <div class="row between"><div><div class="small mute">Montageabrechnung meta${f.datum?" vom "+new Date(f.datum).toLocaleDateString("de-DE"):""}</div><div class="big">${fmtEUR(f.summe)}</div>${ustZeile(f)}</div><span class="chip ${RECHNUNG[st][1]}">${RECHNUNG[st][0]}</span></div>
    <div class="small" style="margin-top:6px">Rechnung an <b>${kundeText(f)}</b>${f.lexKunde?` <span class="mute">(Lexware: ${esc(f.lexKunde)})</span>`:""}${landOf(o)&&landOf(o)!==kundeVon(f)?` <span class="chip warn">Baustelle liegt in ${esc(LAENDER[landOf(o)]?.[1]||landOf(o))} – bitte prüfen</span>`:""}</div>
@@ -2517,6 +2519,7 @@ function finanzCard(o,f){
    <div class="steps">${order.slice(0,4).map((s,i)=>`<div class="${i<=idx&&st!=="offen"?"on":""}"></div>`).join("")}</div>
    ${f.rechnungsNr?`<div class="small">Rechnung: <b>${esc(f.rechnungsNr)}</b></div>`:""}
    ${lexBetragZeile(f)}
+   ${(f.stornos||[]).map(x=>`<div class="small mute" style="margin-top:6px">↩︎ ${x.rechnungsNr?"Rechnung "+esc(x.rechnungsNr):"Freigabe"} storniert am ${fmtDT(x.am)}${x.grund?` – ${esc(x.grund)}`:""}${x.gutschriftId?` · <a href="https://app.lexware.de/permalink/credit-notes/edit/${esc(x.gutschriftId)}" target="_blank" rel="noopener">Rechnungskorrektur in Lexware</a>`:""}</div>`).join("")}
    ${actions}</div>`;
 }
 
@@ -5360,6 +5363,24 @@ function bindDetail(id){
   $("#rgErstellt") && ($("#rgErstellt").onclick=()=>upd(FP,{rechnungStatus:"erstellt",rechnungsNr:($("#rgNr").value||"").trim(),erstelltAm:Date.now()}));
   $("#rgSend") && ($("#rgSend").onclick=async()=>{ if(await confirmBox("Rechnung abschicken?",`Hast du die Rechnung ${esc(S.fin[id].rechnungsNr||"")} aus Lexware an den Kunden geschickt?`,"Ja, ist versendet","ok")) upd(FP,{rechnungStatus:"versendet",versendetAm:Date.now()}); });
   $("#rgPaid") && ($("#rgPaid").onclick=()=>upd(FP,{rechnungStatus:"bezahlt",bezahltAm:Date.now()}));
+  $("#rgStorno") && ($("#rgStorno").onclick=()=>stornoDialog(id));
+}
+// Rechnung stornieren: in Lexware entsteht eine Rechnungskorrektur als Entwurf, in der App ist die Abrechnung wieder offen
+function stornoDialog(id){ const f=S.fin[id], o=S.orders[id]||{}, nurFrei=(f.rechnungStatus||"offen")==="freigegeben";
+  modal(`<h2>${nurFrei?"Freigabe zurücknehmen?":"Rechnung stornieren?"}</h2>
+   <div class="small" style="margin-bottom:10px">${nurFrei
+     ?`Die Rechnung für ${esc(o.nr||f.nr||"")} ist noch nicht geschrieben.${f.lexId?" Den Entwurf in Lexware bitte danach dort löschen.":""}`
+     :`Rechnung <b>${esc(f.rechnungsNr||"")}</b> über ${fmtEUR(f.summe)} netto an ${kundeText(f)}.${f.lexId?" In Lexware wird dazu eine <b>Rechnungskorrektur als Entwurf</b> angelegt – dort prüfen und abschließen, dann ist die Rechnung storniert.":" Die Rechnung wurde nicht über die App angelegt – bitte in Lexware selbst stornieren."}`}
+     Danach steht die Abrechnung wieder unter „Rechnung“ und du kannst eine neue Rechnung schreiben.</div>
+   <label class="f">Grund (optional)</label><input class="i" id="stGrund" placeholder="z. B. falscher Betrag, gehört nicht zu uns">
+   <div class="grid2" style="margin-top:12px"><button class="btn" data-close>Abbrechen</button><button class="btn bad" id="stOk">${nurFrei?"Zurücknehmen":"Stornieren"}</button></div>`,(m,close)=>{
+    m.querySelector("#stOk").onclick=async()=>{ const b=m.querySelector("#stOk"); b.disabled=true; b.innerHTML=`<span class="spin"></span>`;
+      try{ const r=await S.sync.run({lexStorno:id,grund:m.querySelector("#stGrund").value.trim()});
+        if(r?.fehler){ toast(r.fehler,9000); b.disabled=false; b.textContent="Nochmal"; return; }
+        close(); toast(r?.gutschrift?"↩︎ Storniert – Rechnungskorrektur liegt als Entwurf in Lexware":r?.entwurf?"↩︎ Zurückgenommen – Entwurf bitte in Lexware löschen":"↩︎ Zurückgenommen",7000);
+        if(r?.gutschrift?.link) window.open(r.gutschrift.link,"_blank","noopener"); else if(r?.link) window.open(r.link,"_blank","noopener"); }
+      catch(e){ toast("Lexware: "+(e.message||e),8000); b.disabled=false; b.textContent="Nochmal"; } };
+  });
 }
 function rechnungsText(o,f){
   const lines=[`Rechnung – Montageleistung Auftrag ${o.nr}`,`Bauvorhaben: ${[o.bauvorhaben,o.plzOrt].filter(Boolean).join(", ")}`, o.vorgang?`meta-Vorgang: ${o.vorgang}`:"", `Leistungszeitraum: ${o.abschluss?new Date(o.abschluss.am).toLocaleDateString("de-DE"):"KW "+(o.kw||"")}`,"","Pos.\tArtikel\tMenge\tEP\tGP"];
