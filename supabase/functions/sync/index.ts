@@ -920,11 +920,14 @@ async function lexArtikelListe() {
   const alle: any[] = [];
   for (let seite = 0; seite < 8; seite++) {
     const r = await lex(`/articles?size=250&page=${seite}`);
-    for (const a of r.content || []) if (!a.archived) alle.push({ id: a.id, name: a.title || "", typ: a.type || "", einheit: a.unitName || "" });
+    for (const a of r.content || []) if (!a.archived) alle.push({ id: a.id, nr: String(a.articleNumber ?? "").trim(), name: a.title || "", typ: a.type || "", einheit: a.unitName || "" });
     if (r.last !== false) break;
   }
   return alle;
 }
+// Fester Artikel je Kunde (Lexware → Artikel → Service): Nr. 11 = meta Luxemburg, Nr. 12 = meta Deutschland
+const ARTIKEL_NR: Record<string, string> = { lu: "11", de: "12" };
+const artikelNachNr = (alle: any[], kunde: string) => { const t = (alle || []).filter((a) => a.nr === ARTIKEL_NR[kunde]); return t.find((a) => /service/i.test(a.typ)) || t[0] || null; };
 const istBauleistung = (t: string) => /bau\s*-?\s*leistung/i.test(t || "");
 async function lexArtikel(db: any) {
   const fest = ((await getDoc(db, "lohn", "lexware")) || {}).artikel;
@@ -938,7 +941,8 @@ async function lexStatus(db: any) {
   try { const k = await lexKunden(db); let a: any = { artikel: null, artikelAlle: [] }, artikelFehler = "";
     try { a = await lexArtikel(db); } catch (e: any) { artikelFehler = e.message || String(e); }
     if (!a.artikel) { for (const c of [k.de, k.lu]) { if (!c || a.artikel) continue; try { const v = ausVorlage(await lexVorlage(c.id)); if (v) a.artikel = { ...v, ausRechnung: true }; } catch (_) { /* weiter */ } } }
-    return { ok: true, ...k, ...a, artikelFehler }; }
+    const artikelKunde = { lu: artikelNachNr(a.artikelAlle, "lu"), de: artikelNachNr(a.artikelAlle, "de") };
+    return { ok: true, ...k, ...a, artikelKunde, artikelFehler }; }
   catch (e: any) { return { ok: false, code: e.code || "", fehler: e.message || String(e) }; }
 }
 async function lexVorlage(kontaktId: string) {
@@ -963,9 +967,11 @@ async function lexRechnung(db: any, fid: string) {
     const satz = kunde === "lu" ? UST_LU : vorlage.lineItems?.find((x: any) => x.unitPrice)?.unitPrice?.taxRatePercentage ?? 19;
     const o = (await getDoc(db, "auftraege", f.auftragId || fid)) || {};
     // Eine Position „Bauleistung Meta“ (Dienstleistung aus Lexware) über die ganze Summe, darunter Auftrag bzw. Reklamation und Ort
-    const art: any = (await lexArtikel(db).then((x) => x.artikel).catch(() => null)) || ausVorlage(vorlage);
+    // Artikel 11 (Luxemburg) bzw. 12 (Deutschland); fehlt er, wie bisher „Bauleistung Meta“
+    const art: any = artikelNachNr(await lexArtikelListe().catch(() => []), kunde) || (await lexArtikel(db).then((x) => x.artikel).catch(() => null)) || ausVorlage(vorlage);
+    const artTyp = /product/i.test(art?.typ || "") ? "material" : "service";
     const text = rechnungsZeile(f, o);
-    const zeile = (mitArtikel: boolean) => [{ type: mitArtikel ? "service" : "custom", ...(mitArtikel ? { id: art!.id } : {}), name: art?.name || "Bauleistung Meta", description: text.slice(0, 2000),
+    const zeile = (mitArtikel: boolean) => [{ type: mitArtikel ? artTyp : "custom", ...(mitArtikel ? { id: art!.id } : {}), name: art?.name || "Bauleistung Meta", description: text.slice(0, 2000),
       quantity: 1, unitName: art?.einheit || "pauschal", unitPrice: { currency: "EUR", netAmount: Math.round(Number(f.summe) * 100) / 100, taxRatePercentage: satz } }];
     let zeilen = zeile(!!art?.id);
     const tag = (t: number) => new Date(t).toISOString().replace("Z", "+00:00");
