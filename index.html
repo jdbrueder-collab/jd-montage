@@ -152,6 +152,7 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .spez-kopf .btn{margin-left:auto;min-width:40px}
 .li-gr{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
 .li-gr.heute{border:2px solid var(--brand2)}.li-gr.heute .kal-kopf{color:var(--brand2)}
+.so-foto{display:inline-flex;align-items:center;gap:4px;margin-top:6px;padding:5px 10px;border-radius:9px;font-size:12.5px;font-weight:650;cursor:pointer;background:var(--greybg);color:var(--ink)}.so-foto.fehlt{background:var(--warnbg,#fff4e0);color:var(--warn);border:1px solid currentColor}
 .lx-z{padding:9px 2px;border-top:1px solid var(--line)}.lx-z:first-of-type{border-top:0}
 .li-gr.stufe .kal-kopf{font-size:13px;color:var(--ink);padding:2px 2px 4px}.li-gr.stufe.warn{border-left:4px solid var(--accent)}
 .kal-kopf .rot{color:var(--bad)}.kal-kopf .jetzt{color:var(--accent)}
@@ -614,7 +615,7 @@ input,select,textarea{font-size:16px!important}
 img,canvas,table{max-width:100%}
 </style>
 <script>document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});</script>
-<script>window.JD_BUILD="33863a529c00";</script>
+<script>window.JD_BUILD="9f3a2d314f9c";</script>
 </head>
 <body>
 <header class="top">
@@ -767,9 +768,9 @@ function modalZurueck(html,onMount){
   try{ history.pushState({...(history.state||{}),jdFenster:1},""); window.addEventListener("popstate",pop); }catch(e){}
   return close;
 }
-function confirmBox(title, text, okLabel="Ja", cls="pri"){
+function confirmBox(title, text, okLabel="Ja", cls="pri", noLabel="Abbrechen"){
   return new Promise(res=>{
-    modal(`<h2>${esc(title)}</h2><div class="mute">${text}</div><div class="grid2" style="margin-top:14px"><button class="btn" data-no>Abbrechen</button><button class="btn ${cls}" data-yes>${esc(okLabel)}</button></div>`,(m,close)=>{
+    modal(`<h2>${esc(title)}</h2><div class="mute">${text}</div><div class="grid2" style="margin-top:14px"><button class="btn" data-no>${esc(noLabel)}</button><button class="btn ${cls}" data-yes>${esc(okLabel)}</button></div>`,(m,close)=>{
       m.querySelector("[data-no]").onclick=()=>{close();res(false)};
       m.querySelector("[data-yes]").onclick=()=>{close();res(true)};
     });
@@ -2350,7 +2351,7 @@ function abschlussStand(o,f,reklas){
   if(ae?.status==="angefragt") z+=`<div class="ab-z warn"><span class="ab-i">✏️</span><div style="flex:1"><b>${chef?`${esc(nameOf(ae.von))} möchte ${ae.art==="anteil"?"den Anteil":"den Bericht"} ändern`:"Änderung angefragt – wartet auf Freigabe"}</b><div class="small mute">„${esc(ae.grund||"")}“ · ${fmtDT(ae.am)}</div>
     ${chef?`<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div>`:""}</div></div>`;
   else if(ae?.status==="frei" && ae.von===myId()) z+=`<div class="ab-z ok"><span class="ab-i">✏️</span><div style="flex:1"><b>Änderung freigegeben</b><div class="small mute">Du kannst jetzt bearbeiten.</div><button class="btn sm ok" id="aendLos" style="margin-top:6px">✏️ Jetzt bearbeiten</button></div></div>`;
-  return `<div class="card ab-k"><div class="ab-liste">${z}</div>${chef?`<button class="btn sm ghost block" id="mitDazu" style="margin-top:8px">👷 Mitmonteur / Subunternehmer dazunehmen</button>`:""}</div>`;
+  return `<div class="card ab-k"><div class="ab-liste">${z}</div>${chef&&can.einsatz()&&berichtGesperrt(o)&&o.aenderung?.status!=="frei"?`<button class="btn sm ghost block" id="chefAendern" style="margin-top:8px">✏️ Bericht / Positionen nachträglich ändern</button>`:""}${chef?`<button class="btn sm ghost block" id="mitDazu" style="margin-top:8px">👷 Mitmonteur / Subunternehmer dazunehmen</button>`:""}</div>`;
 }
 // Bericht kurz zusammengefasst – mit allen Bildern (antippen = groß)
 // Sub/Monteur: Änderung am abgegebenen/bestätigten Bericht oder Anteil anfragen – der Chef gibt frei
@@ -2362,6 +2363,28 @@ function aenderungAnfragen(id,art){
       await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art,grund:g.slice(0,500),status:"angefragt"}});
       nachrichtSenden(id,`✏️ Änderungsanfrage zum ${art==="anteil"?"Anteil":"Bericht"}: ${g}`); close(); toast("Anfrage gesendet ✓ – du bekommst Bescheid",3500); };
   });
+}
+// Chef öffnet einen fertigen (bestätigten / gesendeten) Bericht zum Ändern – Mengen je Person werden vorher gemerkt
+const lohnStand=id=>Object.fromEntries(Object.values(S.lohn).filter(l=>l.auftragId===id&&l.uid).map(l=>[l.uid,{...(l.mengen||{})}]));
+async function chefBerichtOeffnen(id){ const o=S.orders[id];
+  if(!await confirmBox("Bericht nachträglich ändern?",`Der Bericht ist ${o.berichtStatus==="gesendet"?"schon an meta gesendet":"bestätigt"}. Du kannst Positionen und Angaben ändern${o.berichtStatus==="gesendet"?" und ihn danach erneut an meta senden":""}.${subsVon(o).length?` Ist ${subsVon(o).map(nameOf).map(esc).join(", ")} beteiligt, fragt die App am Ende, ob die Änderung dort auch gelten soll.`:""}`,"Ändern","warn")) return;
+  await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art:"bericht",grund:"vom Chef geöffnet",status:"frei",vorher:lohnStand(id)}}); S.bearbeiten[id]=true; render(); scrollTo(0,0); }
+// Nach dem Ändern: was hat sich an den Positionen geändert? (nur Personen, die keine Subunternehmer sind)
+function positionsAenderung(o){ const vor=o.aenderung?.vorher||{}, jetzt=lohnStand(o.id), d={};
+  for(const uid of new Set([...Object.keys(vor),...Object.keys(jetzt)])){ if(istSubUid(uid)) continue;
+    const a=vor[uid]||{}, b=jetzt[uid]||{};
+    for(const k of new Set([...Object.keys(a),...Object.keys(b)])){ const x=r2(nn(b[k])-nn(a[k])); if(x) d[k]=r2((d[k]||0)+x); } }
+  return Object.entries(d).filter(([,x])=>x).map(([k,x])=>({k,x,label:(S.lohnPos.find(p=>p.k===k)||{}).label||k})); }
+const aendText=l=>l.map(c=>`${c.x>0?"+":"−"}${String(Math.abs(c.x)).replace(".",",")}× ${c.label}`).join(", ");
+async function subAenderungFragen(id,liste){ const o=S.orders[id];
+  for(const u of subsVon(o)){
+    const ja=await confirmBox(`Auch bei ${nameOf(u)} ändern?`,`Du hast geändert: <b>${esc(aendText(liste))}</b>.<br><br>Soll das auch in der Montageabrechnung von <b>${esc(nameOf(u))}</b> übernommen werden? ${esc(nameOf(u))} bekommt dann eine Nachricht.`,`Ja, bei ${nameOf(u).split(" ")[0]} auch`,"ok","Nein, nur bei mir");
+    if(!ja) continue;
+    const cur=S.lohn[lohnDocId(id,u)]?.mengen||{}, neu={};
+    liste.forEach(c=>{ neu[c.k]=Math.max(0,r2(nn(cur[c.k])+c.x))||""; });
+    await saveLohn(S.orders[id],u,{mengen:neu,geaendert:{am:Date.now(),von:myId(),was:aendText(liste)}});
+    await nachrichtSenden(id,`✏️ JD Brüder hat deine Montageabrechnung zu ${o.nr} nachträglich geändert: ${aendText(liste)}. Bitte kurz ansehen.`,u);
+    toast(`✓ Bei ${nameOf(u)} geändert – Nachricht ist raus`,3000); }
 }
 function berichtAnsicht(id,opt={}){
   const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o), rek=istReklaAuftrag(o);
@@ -2389,7 +2412,7 @@ function berichtAnsicht(id,opt={}){
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
     <button class="btn block" id="fotosHandy">📲 Fotos aufs Handy</button>
     ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
-      :can.planen()&&can.einsatz()?`<button class="btn ghost block" id="oeffnen">🔓 Bericht wieder öffnen</button>`
+      :can.planen()&&can.einsatz()?`<button class="btn ghost block" id="oeffnen">✏️ Nachträglich ändern</button>`
       :o.aenderung?.status==="angefragt"?`<div class="small mute" style="text-align:center">✏️ Änderung angefragt – wartet auf Freigabe</div>`
       :(o.abschluss?.by===myId()||o.berichtVonSub===myId()||o.berichtVon===myId())?`<button class="btn ghost block" id="anfrage">✏️ Änderung anfragen</button>`:""}
     <button class="btn block" data-close>Schließen</button></div>`,(m,close)=>{
@@ -2401,9 +2424,7 @@ function berichtAnsicht(id,opt={}){
     m.querySelector("#pdfAns").onclick=async()=>{ const bt=m.querySelector("#pdfAns"); bt.disabled=true; bt.innerHTML=`<span class="spin"></span> wird erstellt …`;
       try{ const cs=await renderVordruck(o); vorschauZeigen(o.unterschrift?cs:cs.slice(0,1),`${titel} ${o.nr}`); }catch(e){ toast("Vorschau nicht möglich"); } bt.disabled=false; bt.textContent="📄 Bericht-PDF ansehen"; };
     m.querySelector("#bearb") && (m.querySelector("#bearb").onclick=()=>{ S.bearbeiten[id]=true; close(); render(); scrollTo(0,0); });
-    m.querySelector("#oeffnen") && (m.querySelector("#oeffnen").onclick=async()=>{ close();
-      if(!await confirmBox("Bericht wieder öffnen?",`Der Bericht ist ${o.berichtStatus==="gesendet"?"schon an meta gesendet":"bestätigt"}. Du kannst ihn ändern${o.berichtStatus==="gesendet"?" und danach erneut an meta senden":""}.`,"Öffnen","warn")) return;
-      await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art:"bericht",grund:"vom Chef geöffnet",status:"frei"}}); S.bearbeiten[id]=true; render(); scrollTo(0,0); });
+    m.querySelector("#oeffnen") && (m.querySelector("#oeffnen").onclick=()=>{ close(); chefBerichtOeffnen(id); });
     m.querySelector("#anfrage") && (m.querySelector("#anfrage").onclick=()=>{ close(); aenderungAnfragen(id,"bericht"); });
   });
 }
@@ -2934,7 +2955,8 @@ function erfassenTeil(o,fk,imBericht=false){
   const fotoKlappe=(n,inhalt)=>n?`<details class="mini-f"><summary>📷 ${n} Foto${n>1?"s":""}</summary>${inhalt}</details>`:"";
   const rkThumbs=r=>`<div class="thumbs">${(r.fotos||[]).map(a=>`<div class="t" data-zoom="_blob/${esc(a)}"><img loading="lazy" src="_blob/${esc(a)}" alt=""></div>`).join("")}</div>`;
   const gr={}; mf.forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push(f); });
-  const teile=[nw.length+so.length?`✂️ ${nw.length+so.length}`:"",rk.length?`⚠️ ${rk.length}`:"",mf.length?`📷 ${mf.length}`:""].filter(Boolean);
+  const soOhne=so.filter(x=>!anz("sonder:"+x.id)).length;
+  const teile=[nw.length+so.length?`✂️ ${nw.length+so.length}`:"",rk.length?`⚠️ ${rk.length}`:"",mf.length?`📷 ${mf.length}`:"",soOhne?`<b style="color:var(--warn)">📷 ${soOhne} Foto fehlt</b>`:""].filter(Boolean);
   return `<div class="erf" id="nachweise">
    <div class="erf-t">📸 ${imBericht?"Erfasst während der Arbeit":"Während der Arbeit erfassen"}</div>
    <div class="erf-g">
@@ -2945,7 +2967,8 @@ function erfassenTeil(o,fk,imBericht=false){
    ${teile.length?`<details class="erf-sum" data-fold="${esc(id)}:erf" ${S.fold[id+":erf"]?"open":""}><summary><span>📂 Erfasst</span><span class="erf-zahl">${teile.join(" · ")}</span></summary>
     ${nw.length?`<div class="erf-h">✂️ Nachweise</div>${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b>${vonTag(x)} · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?` <span class="mute small">· ${esc(x.bem)}</span>`:""}${fotoKlappe(anz("nachweis:"+x.id),thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false))}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}`:""}
     ${rk.length?`<div class="erf-h">⚠️ Reklamationen</div>${rk.map(r=>`<div class="nw-z rk"><div style="flex:1;min-width:0"><b>${esc(r.text||"")}</b> <span class="chip ${r.offen?"bad":"ok"}" style="font-size:11px">${r.offen?"offen":"erledigt"}</span>${fotoKlappe((r.fotos||[]).length,rkThumbs(r))}</div>${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}" title="Bearbeiten">✏️</button>`:""}</div>`).join("")}`:""}
-    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b>${vonTag(x)} · ${x.min?fmtStd(x.min)+" Std. · ":`<a href="#" class="chip warn" style="font-size:11px;text-decoration:none" data-soedit="${esc(x.id)}" data-umo="${esc(id)}">⏱ Stunden fehlen</a> · `}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-soedit="${esc(x.id)}" data-umo="${esc(id)}" title="Bearbeiten">✏️</button><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
+    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b>${vonTag(x)} · ${x.min?fmtStd(x.min)+" Std. · ":`<a href="#" class="chip warn" style="font-size:11px;text-decoration:none" data-soedit="${esc(x.id)}" data-umo="${esc(id)}">⏱ Stunden fehlen</a> · `}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}
+      ${S.assets?`<label class="${anz("sonder:"+x.id)?"so-foto":"so-foto fehlt"}">📷 ${anz("sonder:"+x.id)?"Weiteres Foto":"Foto fehlt – jetzt hinzufügen"}<input type="file" accept="image/*" multiple hidden data-sofoto="${esc(x.id)}"></label>`:""}</div><button class="btn sm ghost" data-soedit="${esc(x.id)}" data-umo="${esc(id)}" title="Bearbeiten">✏️</button><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
     ${mf.length?`<div class="erf-h">📷 Fertigstellung</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div>${a.some(f=>f.von===myId()||can.planen())?`<button class="btn sm ghost" data-umgr="${esc(a.filter(f=>f.von===myId()||can.planen()).map(f=>f.id).join(","))}" data-umo="${esc(id)}" title="Falsch einsortiert? Umstellen">↔</button>`:""}</div>`).join("")}`:""}
    </details>`:`<div class="small mute" style="margin-top:8px">${imBericht?"Nichts erfasst.":"Noch nichts erfasst. Nachweise zählen automatisch im Montagebericht mit."}</div>`}
   </div>`;
@@ -2968,6 +2991,7 @@ function mehrAufwandDialog(id){
       const t=m.querySelector("#maT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
       const sv=m.querySelector("#maS").value.trim(), min=sv?parseMin(sv):null; if(sv && min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
       const pers=mehrPersonen(m,"#maP"); if(!pers) return;
+      if(!fotos.length && S.assets && !await confirmBox("Ohne Foto speichern?","Ein Foto zeigt meta, warum der Mehraufwand nötig war (z. B. Profil muss geschnitten werden). Du kannst es auch später unter „Erfasst“ hinzufügen.","Ohne Foto speichern")) return;
       const bt=m.querySelector("#ok"); bt.disabled=true;
       const sid="s"+Date.now().toString(36), c=S.orders[id]||o;
       const neu=[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:pers,min:min||null,bemerkung:"",von:myId(),am:Date.now()}];
@@ -3052,7 +3076,9 @@ function sonderBearbeiten(id,sid){
   modal(`<h2>⏱ Mehraufwand</h2>
    <label class="f">Was ist passiert?</label><textarea class="i" id="seT">${esc(x.arbeit||"")}</textarea>
    <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="seS" inputmode="decimal" value="${x.min?fmtHMin(x.min):""}" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen beteiligt *</label><input class="i" id="seP" inputmode="numeric" value="${esc(x.personen||"")}" placeholder="z. B. 2"></div></div>
+   ${S.assets?`<label class="f">Fotos hinzufügen${(()=>{ const n=Object.values(S.fotos).filter(f=>f.auftragId===id&&f.kat==="sonder:"+sid).length; return n?` <span class="mute">(${n} schon da)</span>`:` <span style="color:var(--warn)">– noch keins</span>`; })()}</label>${fotoWahlHtml()}`:""}
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    const fotos=[]; if(S.assets) fotoWahlBinden(m,fotos);
     setTimeout(()=>m.querySelector(x.min?"#seT":"#seS")?.focus(),60);
     m.querySelector("#ok").onclick=async()=>{
       const t=m.querySelector("#seT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
@@ -3060,7 +3086,8 @@ function sonderBearbeiten(id,sid){
       const pers=mehrPersonen(m,"#seP"); if(!pers) return;
       const c=S.orders[id]||o;
       await upd(orderPath(id),{bericht:{sonder:sonderListe(c.bericht||{}).map(e=>e.id===sid?{...e,arbeit:t.slice(0,300),min:min||null,personen:pers}:e)}});
-      close(); toast("Mehraufwand gespeichert ✓",2200);
+      close(); if(fotos.length) await uploadFotos(id,"sonder:"+sid,fotos.map(f=>f.file),{position:"Mehraufwand"});
+      toast(fotos.length?"Mehraufwand und Fotos gespeichert ✓":"Mehraufwand gespeichert ✓",2200);
     };
   });
 }
@@ -3197,6 +3224,7 @@ function fehlendeAngaben(o,fk){
   if(leer(b.istKm)) r.push({t:"Kilometer fehlen",soft:true,z:zB});
   if(leer(b.geschosse) && !rk) r.push({t:"Geschosse fehlen",z:zB});
   if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Mehraufwand: Personen und Stunden angeben",z:rk?"#berichtCard":"#bz-erfassen"});
+  { const ohne=sonderFertig(b).filter(x=>!fk("sonder:"+x.id).length); if(ohne.length) r.push({t:`Foto zum Mehraufwand fehlt: ${ohne.map(x=>String(x.arbeit||"").slice(0,40)).join(", ")}`,soft:true,z:rk?"#berichtCard":"#bz-erfassen"}); }
   if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true,z:"#bz-ueb"});
   else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben",z:"#bz-ueb"});
   if(rk){
@@ -3286,6 +3314,7 @@ function bindEinsatz(o){
   $("#unterPdf") && ($("#unterPdf").onclick=async()=>{ const b=$("#unterPdf"); b.disabled=true; try{ await unterlagenPdf(id); }catch(e){ console.error(e); toast("PDF konnte nicht erstellt werden: "+(e.message||e)); } finally{ b.disabled=false; } });
   document.querySelectorAll("[data-nw]").forEach(b=>b.onclick=()=>nachweisDialog(id,b.dataset.nw));
   $("#mehrAufw") && ($("#mehrAufw").onclick=()=>mehrAufwandDialog(id));
+  document.querySelectorAll("[data-sofoto]").forEach(inp=>inp.onchange=async()=>{ const f=[...inp.files]; if(!f.length) return; await uploadFotos(id,"sonder:"+inp.dataset.sofoto,f,{position:"Mehraufwand"}); toast(`📷 ${f.length>1?f.length+" Fotos":"Foto"} beim Mehraufwand gespeichert ✓`,2600); });
   $("#erfNw") && ($("#erfNw").onclick=()=>nachweisDialog(id,""));
   $("#erfRk") && ($("#erfRk").onclick=()=>reklaSchnellDialog(id));
   document.querySelectorAll("[data-nwdel]").forEach(b=>b.onclick=async()=>{ const c=S.orders[id], x=(c.nachweise||[]).find(n=>n.id===b.dataset.nwdel); if(!x) return;
@@ -5245,6 +5274,7 @@ function bindDetail(id){
   document.querySelectorAll("[data-pruef]").forEach(b=>b.onclick=()=>b.dataset.pruef==="einzel"?berichtAnsicht(id,{bestaetigen:true}):pruefDialog(id,b.dataset.pruef));
   $("#uebermitteln") && ($("#uebermitteln").onclick=()=>berichtDialog(id,true));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
+  $("#chefAendern") && ($("#chefAendern").onclick=()=>chefBerichtOeffnen(id));
   $("#subDazu") && ($("#subDazu").onclick=()=>subImEinsatzDialog(id));
   document.querySelectorAll("[data-bs]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bs||null; if((o.berichtSchreiber||null)===u) return;
     await upd(P,{berichtSchreiber:u}); S.orders[id]={...S.orders[id],berichtSchreiber:u}; render();
@@ -5259,7 +5289,14 @@ function bindDetail(id){
         await upd(P,{...p,aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now()}});
         nachrichtSenden(id,`✏️ Meine Änderung ist fertig – bitte den ${art==="anteil"?"Anteil":"Bericht"} nochmal prüfen.`);
         toast("Änderung abgegeben ✓ – JD Brüder prüft sie",3500);
-      } else await upd(P,{aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now()}});
+      } else {
+        const liste=c.aenderung.vorher?positionsAenderung(c):[];
+        await upd(P,{aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now(),aenderungen:aendText(liste)}});
+        delete S.bearbeiten[id]; render();
+        if(liste.length && subsVon(c).length) await subAenderungFragen(id,liste);
+        if(c.berichtStatus==="gesendet" && await confirmBox("Geänderten Bericht an meta senden?",liste.length?`Geändert: <b>${esc(aendText(liste))}</b>. meta hat noch den alten Stand.`:"meta hat noch den alten Stand.","Jetzt senden","ok","Später")) berichtDialog(id);
+        scrollTo(0,0); return;
+      }
     }
     delete S.bearbeiten[id]; render(); scrollTo(0,0); });
   $("#aendFrei") && ($("#aendFrei").onclick=async()=>{ const c=S.orders[id], a=c.aenderung;
