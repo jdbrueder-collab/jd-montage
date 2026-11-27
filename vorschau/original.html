@@ -152,6 +152,7 @@ table.pos tfoot td{font-weight:800;border-bottom:0}
 .spez-kopf .btn{margin-left:auto;min-width:40px}
 .li-gr{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
 .li-gr.heute{border:2px solid var(--brand2)}.li-gr.heute .kal-kopf{color:var(--brand2)}
+.so-foto{display:inline-flex;align-items:center;gap:4px;margin-top:6px;padding:5px 10px;border-radius:9px;font-size:12.5px;font-weight:650;cursor:pointer;background:var(--greybg);color:var(--ink)}.so-foto.fehlt{background:var(--warnbg,#fff4e0);color:var(--warn);border:1px solid currentColor}
 .lx-z{padding:9px 2px;border-top:1px solid var(--line)}.lx-z:first-of-type{border-top:0}
 .li-gr.stufe .kal-kopf{font-size:13px;color:var(--ink);padding:2px 2px 4px}.li-gr.stufe.warn{border-left:4px solid var(--accent)}
 .kal-kopf .rot{color:var(--bad)}.kal-kopf .jetzt{color:var(--accent)}
@@ -2917,7 +2918,8 @@ function erfassenTeil(o,fk,imBericht=false){
   const fotoKlappe=(n,inhalt)=>n?`<details class="mini-f"><summary>📷 ${n} Foto${n>1?"s":""}</summary>${inhalt}</details>`:"";
   const rkThumbs=r=>`<div class="thumbs">${(r.fotos||[]).map(a=>`<div class="t" data-zoom="/_blob/${esc(a)}"><img loading="lazy" src="/_blob/${esc(a)}" alt=""></div>`).join("")}</div>`;
   const gr={}; mf.forEach(f=>{ const k=f.position||"ohne Position"; (gr[k]=gr[k]||[]).push(f); });
-  const teile=[nw.length+so.length?`✂️ ${nw.length+so.length}`:"",rk.length?`⚠️ ${rk.length}`:"",mf.length?`📷 ${mf.length}`:""].filter(Boolean);
+  const soOhne=so.filter(x=>!anz("sonder:"+x.id)).length;
+  const teile=[nw.length+so.length?`✂️ ${nw.length+so.length}`:"",rk.length?`⚠️ ${rk.length}`:"",mf.length?`📷 ${mf.length}`:"",soOhne?`<b style="color:var(--warn)">📷 ${soOhne} Foto fehlt</b>`:""].filter(Boolean);
   return `<div class="erf" id="nachweise">
    <div class="erf-t">📸 ${imBericht?"Erfasst während der Arbeit":"Während der Arbeit erfassen"}</div>
    <div class="erf-g">
@@ -2928,7 +2930,8 @@ function erfassenTeil(o,fk,imBericht=false){
    ${teile.length?`<details class="erf-sum" data-fold="${esc(id)}:erf" ${S.fold[id+":erf"]?"open":""}><summary><span>📂 Erfasst</span><span class="erf-zahl">${teile.join(" · ")}</span></summary>
     ${nw.length?`<div class="erf-h">✂️ Nachweise</div>${nw.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.label||nwLabel(x.k))}</b>${vonTag(x)} · ${esc(String(x.menge).replace(".",","))} ${esc(x.einheit||"")}${x.bem?` <span class="mute small">· ${esc(x.bem)}</span>`:""}${fotoKlappe(anz("nachweis:"+x.id),thumbs(fk("nachweis:"+x.id),"nachweis:"+x.id,false))}</div>${x.von===myId()||can.planen()?`<button class="btn sm ghost" data-nwdel="${esc(x.id)}" title="Entfernen">✕</button>`:""}</div>`).join("")}`:""}
     ${rk.length?`<div class="erf-h">⚠️ Reklamationen</div>${rk.map(r=>`<div class="nw-z rk"><div style="flex:1;min-width:0"><b>${esc(r.text||"")}</b> <span class="chip ${r.offen?"bad":"ok"}" style="font-size:11px">${r.offen?"offen":"erledigt"}</span>${fotoKlappe((r.fotos||[]).length,rkThumbs(r))}</div>${reklaDarfAendern(r)?`<button class="btn sm ghost" data-rk-edit="${esc(r.id)}" title="Bearbeiten">✏️</button>`:""}</div>`).join("")}`:""}
-    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b>${vonTag(x)} · ${x.min?fmtStd(x.min)+" Std. · ":`<a href="#" class="chip warn" style="font-size:11px;text-decoration:none" data-soedit="${esc(x.id)}" data-umo="${esc(id)}">⏱ Stunden fehlen</a> · `}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}</div><button class="btn sm ghost" data-soedit="${esc(x.id)}" data-umo="${esc(id)}" title="Bearbeiten">✏️</button><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
+    ${so.length?`<div class="erf-h">⏱ Mehraufwand</div>${so.map(x=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>${esc(x.arbeit)}</b>${vonTag(x)} · ${x.min?fmtStd(x.min)+" Std. · ":`<a href="#" class="chip warn" style="font-size:11px;text-decoration:none" data-soedit="${esc(x.id)}" data-umo="${esc(id)}">⏱ Stunden fehlen</a> · `}${esc(x.personen||1)} Pers.${fotoKlappe(anz("sonder:"+x.id),thumbs(fk("sonder:"+x.id),"sonder:"+x.id,false))}
+      ${S.assets?`<label class="${anz("sonder:"+x.id)?"so-foto":"so-foto fehlt"}">📷 ${anz("sonder:"+x.id)?"Weiteres Foto":"Foto fehlt – jetzt hinzufügen"}<input type="file" accept="image/*" multiple hidden data-sofoto="${esc(x.id)}"></label>`:""}</div><button class="btn sm ghost" data-soedit="${esc(x.id)}" data-umo="${esc(id)}" title="Bearbeiten">✏️</button><button class="btn sm ghost" data-sodel="${esc(x.id)}" title="Entfernen">✕</button></div>`).join("")}`:""}
     ${mf.length?`<div class="erf-h">📷 Fertigstellung</div>${Object.entries(gr).map(([k,a])=>`<div class="nw-z"><div style="flex:1;min-width:0"><b>📍 ${esc(k)}</b>${fotoKlappe(a.length,thumbs(a,"montage",false))}</div>${a.some(f=>f.von===myId()||can.planen())?`<button class="btn sm ghost" data-umgr="${esc(a.filter(f=>f.von===myId()||can.planen()).map(f=>f.id).join(","))}" data-umo="${esc(id)}" title="Falsch einsortiert? Umstellen">↔</button>`:""}</div>`).join("")}`:""}
    </details>`:`<div class="small mute" style="margin-top:8px">${imBericht?"Nichts erfasst.":"Noch nichts erfasst. Nachweise zählen automatisch im Montagebericht mit."}</div>`}
   </div>`;
@@ -2951,6 +2954,7 @@ function mehrAufwandDialog(id){
       const t=m.querySelector("#maT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
       const sv=m.querySelector("#maS").value.trim(), min=sv?parseMin(sv):null; if(sv && min==null) return toast("Stunden bitte z. B. als 30 oder 2:30 eintragen");
       const pers=mehrPersonen(m,"#maP"); if(!pers) return;
+      if(!fotos.length && S.assets && !await confirmBox("Ohne Foto speichern?","Ein Foto zeigt meta, warum der Mehraufwand nötig war (z. B. Profil muss geschnitten werden). Du kannst es auch später unter „Erfasst“ hinzufügen.","Ohne Foto speichern")) return;
       const bt=m.querySelector("#ok"); bt.disabled=true;
       const sid="s"+Date.now().toString(36), c=S.orders[id]||o;
       const neu=[...sonderListe(c.bericht||{}),{id:sid,arbeit:t.slice(0,300),personen:pers,min:min||null,bemerkung:"",von:myId(),am:Date.now()}];
@@ -3035,7 +3039,9 @@ function sonderBearbeiten(id,sid){
   modal(`<h2>⏱ Mehraufwand</h2>
    <label class="f">Was ist passiert?</label><textarea class="i" id="seT">${esc(x.arbeit||"")}</textarea>
    <div class="grid2"><div><label class="f">Stunden</label><input class="i" id="seS" inputmode="decimal" value="${x.min?fmtHMin(x.min):""}" placeholder="z. B. 30 oder 2:30"></div><div><label class="f">Personen beteiligt *</label><input class="i" id="seP" inputmode="numeric" value="${esc(x.personen||"")}" placeholder="z. B. 2"></div></div>
+   ${S.assets?`<label class="f">Fotos hinzufügen${(()=>{ const n=Object.values(S.fotos).filter(f=>f.auftragId===id&&f.kat==="sonder:"+sid).length; return n?` <span class="mute">(${n} schon da)</span>`:` <span style="color:var(--warn)">– noch keins</span>`; })()}</label>${fotoWahlHtml()}`:""}
    <div class="grid2" style="margin-top:14px"><button class="btn" data-close>Abbrechen</button><button class="btn pri" id="ok">Speichern</button></div>`,(m,close)=>{
+    const fotos=[]; if(S.assets) fotoWahlBinden(m,fotos);
     setTimeout(()=>m.querySelector(x.min?"#seT":"#seS")?.focus(),60);
     m.querySelector("#ok").onclick=async()=>{
       const t=m.querySelector("#seT").value.trim(); if(!t) return toast("Bitte kurz beschreiben, was passiert ist");
@@ -3043,7 +3049,8 @@ function sonderBearbeiten(id,sid){
       const pers=mehrPersonen(m,"#seP"); if(!pers) return;
       const c=S.orders[id]||o;
       await upd(orderPath(id),{bericht:{sonder:sonderListe(c.bericht||{}).map(e=>e.id===sid?{...e,arbeit:t.slice(0,300),min:min||null,personen:pers}:e)}});
-      close(); toast("Mehraufwand gespeichert ✓",2200);
+      close(); if(fotos.length) await uploadFotos(id,"sonder:"+sid,fotos.map(f=>f.file),{position:"Mehraufwand"});
+      toast(fotos.length?"Mehraufwand und Fotos gespeichert ✓":"Mehraufwand gespeichert ✓",2200);
     };
   });
 }
@@ -3180,6 +3187,7 @@ function fehlendeAngaben(o,fk){
   if(leer(b.istKm)) r.push({t:"Kilometer fehlen",soft:true,z:zB});
   if(leer(b.geschosse) && !rk) r.push({t:"Geschosse fehlen",z:zB});
   if(sonderFertig(b).some(x=>!nn(x.personen)||!x.min)) r.push({t:"Mehraufwand: Personen und Stunden angeben",z:rk?"#berichtCard":"#bz-erfassen"});
+  { const ohne=sonderFertig(b).filter(x=>!fk("sonder:"+x.id).length); if(ohne.length) r.push({t:`Foto zum Mehraufwand fehlt: ${ohne.map(x=>String(x.arbeit||"").slice(0,40)).join(", ")}`,soft:true,z:rk?"#berichtCard":"#bz-erfassen"}); }
   if(!uebernachtet(b)) r.push({t:"Übernachtung? (Ja/Nein) nicht angegeben",soft:true,z:"#bz-ueb"});
   else if(uebernachtet(b)==="ja" && (!(b.naechte||[]).length || b.naechte.some(x=>!x.datum||!nn(x.personen)))) r.push({t:"Übernachtung: Tag und Personen je Nacht angeben",z:"#bz-ueb"});
   if(rk){
@@ -3269,6 +3277,7 @@ function bindEinsatz(o){
   $("#unterPdf") && ($("#unterPdf").onclick=async()=>{ const b=$("#unterPdf"); b.disabled=true; try{ await unterlagenPdf(id); }catch(e){ console.error(e); toast("PDF konnte nicht erstellt werden: "+(e.message||e)); } finally{ b.disabled=false; } });
   document.querySelectorAll("[data-nw]").forEach(b=>b.onclick=()=>nachweisDialog(id,b.dataset.nw));
   $("#mehrAufw") && ($("#mehrAufw").onclick=()=>mehrAufwandDialog(id));
+  document.querySelectorAll("[data-sofoto]").forEach(inp=>inp.onchange=async()=>{ const f=[...inp.files]; if(!f.length) return; await uploadFotos(id,"sonder:"+inp.dataset.sofoto,f,{position:"Mehraufwand"}); toast(`📷 ${f.length>1?f.length+" Fotos":"Foto"} beim Mehraufwand gespeichert ✓`,2600); });
   $("#erfNw") && ($("#erfNw").onclick=()=>nachweisDialog(id,""));
   $("#erfRk") && ($("#erfRk").onclick=()=>reklaSchnellDialog(id));
   document.querySelectorAll("[data-nwdel]").forEach(b=>b.onclick=async()=>{ const c=S.orders[id], x=(c.nachweise||[]).find(n=>n.id===b.dataset.nwdel); if(!x) return;
