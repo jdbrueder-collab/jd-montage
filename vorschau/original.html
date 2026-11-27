@@ -751,9 +751,9 @@ function modalZurueck(html,onMount){
   try{ history.pushState({...(history.state||{}),jdFenster:1},""); window.addEventListener("popstate",pop); }catch(e){}
   return close;
 }
-function confirmBox(title, text, okLabel="Ja", cls="pri"){
+function confirmBox(title, text, okLabel="Ja", cls="pri", noLabel="Abbrechen"){
   return new Promise(res=>{
-    modal(`<h2>${esc(title)}</h2><div class="mute">${text}</div><div class="grid2" style="margin-top:14px"><button class="btn" data-no>Abbrechen</button><button class="btn ${cls}" data-yes>${esc(okLabel)}</button></div>`,(m,close)=>{
+    modal(`<h2>${esc(title)}</h2><div class="mute">${text}</div><div class="grid2" style="margin-top:14px"><button class="btn" data-no>${esc(noLabel)}</button><button class="btn ${cls}" data-yes>${esc(okLabel)}</button></div>`,(m,close)=>{
       m.querySelector("[data-no]").onclick=()=>{close();res(false)};
       m.querySelector("[data-yes]").onclick=()=>{close();res(true)};
     });
@@ -2334,7 +2334,7 @@ function abschlussStand(o,f,reklas){
   if(ae?.status==="angefragt") z+=`<div class="ab-z warn"><span class="ab-i">✏️</span><div style="flex:1"><b>${chef?`${esc(nameOf(ae.von))} möchte ${ae.art==="anteil"?"den Anteil":"den Bericht"} ändern`:"Änderung angefragt – wartet auf Freigabe"}</b><div class="small mute">„${esc(ae.grund||"")}“ · ${fmtDT(ae.am)}</div>
     ${chef?`<div class="row" style="margin-top:6px;gap:6px"><button class="btn sm ok" id="aendFrei">✓ Freigeben</button><button class="btn sm ghost" id="aendNein">Ablehnen</button></div>`:""}</div></div>`;
   else if(ae?.status==="frei" && ae.von===myId()) z+=`<div class="ab-z ok"><span class="ab-i">✏️</span><div style="flex:1"><b>Änderung freigegeben</b><div class="small mute">Du kannst jetzt bearbeiten.</div><button class="btn sm ok" id="aendLos" style="margin-top:6px">✏️ Jetzt bearbeiten</button></div></div>`;
-  return `<div class="card ab-k"><div class="ab-liste">${z}</div>${chef?`<button class="btn sm ghost block" id="mitDazu" style="margin-top:8px">👷 Mitmonteur / Subunternehmer dazunehmen</button>`:""}</div>`;
+  return `<div class="card ab-k"><div class="ab-liste">${z}</div>${chef&&can.einsatz()&&berichtGesperrt(o)&&o.aenderung?.status!=="frei"?`<button class="btn sm ghost block" id="chefAendern" style="margin-top:8px">✏️ Bericht / Positionen nachträglich ändern</button>`:""}${chef?`<button class="btn sm ghost block" id="mitDazu" style="margin-top:8px">👷 Mitmonteur / Subunternehmer dazunehmen</button>`:""}</div>`;
 }
 // Bericht kurz zusammengefasst – mit allen Bildern (antippen = groß)
 // Sub/Monteur: Änderung am abgegebenen/bestätigten Bericht oder Anteil anfragen – der Chef gibt frei
@@ -2346,6 +2346,28 @@ function aenderungAnfragen(id,art){
       await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art,grund:g.slice(0,500),status:"angefragt"}});
       nachrichtSenden(id,`✏️ Änderungsanfrage zum ${art==="anteil"?"Anteil":"Bericht"}: ${g}`); close(); toast("Anfrage gesendet ✓ – du bekommst Bescheid",3500); };
   });
+}
+// Chef öffnet einen fertigen (bestätigten / gesendeten) Bericht zum Ändern – Mengen je Person werden vorher gemerkt
+const lohnStand=id=>Object.fromEntries(Object.values(S.lohn).filter(l=>l.auftragId===id&&l.uid).map(l=>[l.uid,{...(l.mengen||{})}]));
+async function chefBerichtOeffnen(id){ const o=S.orders[id];
+  if(!await confirmBox("Bericht nachträglich ändern?",`Der Bericht ist ${o.berichtStatus==="gesendet"?"schon an meta gesendet":"bestätigt"}. Du kannst Positionen und Angaben ändern${o.berichtStatus==="gesendet"?" und ihn danach erneut an meta senden":""}.${subsVon(o).length?` Ist ${subsVon(o).map(nameOf).map(esc).join(", ")} beteiligt, fragt die App am Ende, ob die Änderung dort auch gelten soll.`:""}`,"Ändern","warn")) return;
+  await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art:"bericht",grund:"vom Chef geöffnet",status:"frei",vorher:lohnStand(id)}}); S.bearbeiten[id]=true; render(); scrollTo(0,0); }
+// Nach dem Ändern: was hat sich an den Positionen geändert? (nur Personen, die keine Subunternehmer sind)
+function positionsAenderung(o){ const vor=o.aenderung?.vorher||{}, jetzt=lohnStand(o.id), d={};
+  for(const uid of new Set([...Object.keys(vor),...Object.keys(jetzt)])){ if(istSubUid(uid)) continue;
+    const a=vor[uid]||{}, b=jetzt[uid]||{};
+    for(const k of new Set([...Object.keys(a),...Object.keys(b)])){ const x=r2(nn(b[k])-nn(a[k])); if(x) d[k]=r2((d[k]||0)+x); } }
+  return Object.entries(d).filter(([,x])=>x).map(([k,x])=>({k,x,label:(S.lohnPos.find(p=>p.k===k)||{}).label||k})); }
+const aendText=l=>l.map(c=>`${c.x>0?"+":"−"}${String(Math.abs(c.x)).replace(".",",")}× ${c.label}`).join(", ");
+async function subAenderungFragen(id,liste){ const o=S.orders[id];
+  for(const u of subsVon(o)){
+    const ja=await confirmBox(`Auch bei ${nameOf(u)} ändern?`,`Du hast geändert: <b>${esc(aendText(liste))}</b>.<br><br>Soll das auch in der Montageabrechnung von <b>${esc(nameOf(u))}</b> übernommen werden? ${esc(nameOf(u))} bekommt dann eine Nachricht.`,`Ja, bei ${nameOf(u).split(" ")[0]} auch`,"ok","Nein, nur bei mir");
+    if(!ja) continue;
+    const cur=S.lohn[lohnDocId(id,u)]?.mengen||{}, neu={};
+    liste.forEach(c=>{ neu[c.k]=Math.max(0,r2(nn(cur[c.k])+c.x))||""; });
+    await saveLohn(S.orders[id],u,{mengen:neu,geaendert:{am:Date.now(),von:myId(),was:aendText(liste)}});
+    await nachrichtSenden(id,`✏️ JD Brüder hat deine Montageabrechnung zu ${o.nr} nachträglich geändert: ${aendText(liste)}. Bitte kurz ansehen.`,u);
+    toast(`✓ Bei ${nameOf(u)} geändert – Nachricht ist raus`,3000); }
 }
 function berichtAnsicht(id,opt={}){
   const o=S.orders[id]; const b=o.bericht||{}; const az=arbeitszeitMin(o), rek=istReklaAuftrag(o);
@@ -2373,7 +2395,7 @@ function berichtAnsicht(id,opt={}){
     <button class="btn block" id="pdfAns">📄 Bericht-PDF ansehen</button>
     <button class="btn block" id="fotosHandy">📲 Fotos aufs Handy</button>
     ${darfBearb?`<button class="btn ghost block" id="bearb">✏️ Bericht bearbeiten</button>`
-      :can.planen()&&can.einsatz()?`<button class="btn ghost block" id="oeffnen">🔓 Bericht wieder öffnen</button>`
+      :can.planen()&&can.einsatz()?`<button class="btn ghost block" id="oeffnen">✏️ Nachträglich ändern</button>`
       :o.aenderung?.status==="angefragt"?`<div class="small mute" style="text-align:center">✏️ Änderung angefragt – wartet auf Freigabe</div>`
       :(o.abschluss?.by===myId()||o.berichtVonSub===myId()||o.berichtVon===myId())?`<button class="btn ghost block" id="anfrage">✏️ Änderung anfragen</button>`:""}
     <button class="btn block" data-close>Schließen</button></div>`,(m,close)=>{
@@ -2385,9 +2407,7 @@ function berichtAnsicht(id,opt={}){
     m.querySelector("#pdfAns").onclick=async()=>{ const bt=m.querySelector("#pdfAns"); bt.disabled=true; bt.innerHTML=`<span class="spin"></span> wird erstellt …`;
       try{ const cs=await renderVordruck(o); vorschauZeigen(o.unterschrift?cs:cs.slice(0,1),`${titel} ${o.nr}`); }catch(e){ toast("Vorschau nicht möglich"); } bt.disabled=false; bt.textContent="📄 Bericht-PDF ansehen"; };
     m.querySelector("#bearb") && (m.querySelector("#bearb").onclick=()=>{ S.bearbeiten[id]=true; close(); render(); scrollTo(0,0); });
-    m.querySelector("#oeffnen") && (m.querySelector("#oeffnen").onclick=async()=>{ close();
-      if(!await confirmBox("Bericht wieder öffnen?",`Der Bericht ist ${o.berichtStatus==="gesendet"?"schon an meta gesendet":"bestätigt"}. Du kannst ihn ändern${o.berichtStatus==="gesendet"?" und danach erneut an meta senden":""}.`,"Öffnen","warn")) return;
-      await upd(orderPath(id),{aenderung:{von:myId(),am:Date.now(),art:"bericht",grund:"vom Chef geöffnet",status:"frei"}}); S.bearbeiten[id]=true; render(); scrollTo(0,0); });
+    m.querySelector("#oeffnen") && (m.querySelector("#oeffnen").onclick=()=>{ close(); chefBerichtOeffnen(id); });
     m.querySelector("#anfrage") && (m.querySelector("#anfrage").onclick=()=>{ close(); aenderungAnfragen(id,"bericht"); });
   });
 }
@@ -5237,6 +5257,7 @@ function bindDetail(id){
   document.querySelectorAll("[data-pruef]").forEach(b=>b.onclick=()=>b.dataset.pruef==="einzel"?berichtAnsicht(id,{bestaetigen:true}):pruefDialog(id,b.dataset.pruef));
   $("#uebermitteln") && ($("#uebermitteln").onclick=()=>berichtDialog(id,true));
   $("#mitDazu") && ($("#mitDazu").onclick=()=>mitDazuDialog(id));
+  $("#chefAendern") && ($("#chefAendern").onclick=()=>chefBerichtOeffnen(id));
   $("#subDazu") && ($("#subDazu").onclick=()=>subImEinsatzDialog(id));
   document.querySelectorAll("[data-bs]").forEach(b=>b.onclick=async()=>{ const u=b.dataset.bs||null; if((o.berichtSchreiber||null)===u) return;
     await upd(P,{berichtSchreiber:u}); S.orders[id]={...S.orders[id],berichtSchreiber:u}; render();
@@ -5251,7 +5272,14 @@ function bindDetail(id){
         await upd(P,{...p,aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now()}});
         nachrichtSenden(id,`✏️ Meine Änderung ist fertig – bitte den ${art==="anteil"?"Anteil":"Bericht"} nochmal prüfen.`);
         toast("Änderung abgegeben ✓ – JD Brüder prüft sie",3500);
-      } else await upd(P,{aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now()}});
+      } else {
+        const liste=c.aenderung.vorher?positionsAenderung(c):[];
+        await upd(P,{aenderung:{...c.aenderung,status:"erledigt",fertigAm:Date.now(),aenderungen:aendText(liste)}});
+        delete S.bearbeiten[id]; render();
+        if(liste.length && subsVon(c).length) await subAenderungFragen(id,liste);
+        if(c.berichtStatus==="gesendet" && await confirmBox("Geänderten Bericht an meta senden?",liste.length?`Geändert: <b>${esc(aendText(liste))}</b>. meta hat noch den alten Stand.`:"meta hat noch den alten Stand.","Jetzt senden","ok","Später")) berichtDialog(id);
+        scrollTo(0,0); return;
+      }
     }
     delete S.bearbeiten[id]; render(); scrollTo(0,0); });
   $("#aendFrei") && ($("#aendFrei").onclick=async()=>{ const c=S.orders[id], a=c.aenderung;
