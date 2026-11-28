@@ -1865,13 +1865,24 @@ function abrechnungTabelle(l,P){
   return `<table class="abr"><thead><tr><th>Position</th><th>Menge</th><th>Preis</th><th>Betrag</th></tr></thead><tbody>${c.lines.map(z=>`<tr><td>${esc(z.label)}</td><td>${z.menge!==""?String(z.menge).replace(".",","):""}</td><td>${z.ep!==""?fmtEUR(z.ep):""}</td><td>${fmtEUR(z.gp)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="3">Gesamt</td><td>${fmtEUR(c.total)}</td></tr></tfoot></table>`;
 }
+// Chef öffnet den Montagebericht selbst (auch wenn ein Monteur/Sub ihn schreiben soll).
+// Wurde der Einsatz nicht erfasst, springt er direkt zum Bericht; vorhandene Angaben bleiben.
+async function berichtSelbstOeffnen(id){
+  const o=S.orders[id]; if(!o||!can.planen()) return; const now=Date.now(), e=o.einsatz||{}, patch={berichtAuchChef:true};
+  if(!running(o) && ["fahrzeug","ankunft","start","vorher","nmb","montage"].includes(schrittBasis(o)))
+    patch.einsatz={fahrzeug:e.fahrzeug||"sonst",fahrzeugText:e.fahrzeug?(e.fahrzeugText||null):"nachgetragen",abfahrtAm:e.abfahrtAm||now,ankunftAm:e.ankunftAm||now,startAm:e.startAm||now,
+      bereit:e.bereit==="nein"&&!e.nmb?.weiter?"ja":(e.bereit||"ja"),vorherSkip:true,fertigAm:e.fertigAm||now,nachgetragenVon:myId()};
+  await upd(orderPath(id),patch); S.orders[id]={...S.orders[id],berichtAuchChef:true,...(patch.einsatz?{einsatz:{...e,...patch.einsatz}}:{})};
+  S.bearbeiten[id]=true; render(); toast("📝 Bericht geöffnet – du kannst ihn jetzt selbst schreiben",3000);
+  setTimeout(()=>$("#einsatzCard")?.scrollIntoView({behavior:"smooth",block:"start"}),200);
+}
 function subBerichtKarte(o){
   const subs=subsVon(o).filter(u=>!subNurAnteil(o,u)); if(!subs.length) return ""; // Anteil-Subs: Karte „Anteile“
   const zeilen=subs.map(u=>{ const da=subBerichtDa(o,u), fehlt=subBerichtFehlt(o,u), ang=o.berichtFehlt?.[u], art=subNurAnteil(o,u)?"Anteil":"Montagebericht";
     return `<div class="person" style="flex-wrap:wrap"><span class="av">${esc(initials(u))}</span><div style="flex:1;min-width:0"><b>${esc(nameOf(u))}</b><div class="small mute">${da?`✓ ${art} abgegeben`:ang?`📣 angefordert am ${fmtDT(ang.am)}`:`${art} noch nicht abgegeben`}</div></div>
-      ${da?`<span class="chip ok">✓ da</span>`:`<button class="btn sm ${fehlt?"pri":"ghost"}" data-bfehlt="${esc(u)}">${ang?"📣 Nochmal erinnern":"📣 Bericht fehlt – anfordern"}</button>`}</div>`; }).join("");
+      ${da?`<span class="chip ok">✓ da</span>`:`<div class="row" style="gap:6px"><button class="btn sm ${fehlt?"pri":"ghost"}" data-bfehlt="${esc(u)}">${ang?"📣 Nochmal erinnern":"📣 Bericht fehlt – anfordern"}</button>${!istFertig(o)?`<button class="btn sm ghost" data-bselbst="${esc(o.id)}">📝 Selbst öffnen</button>`:""}</div>`}</div>`; }).join("");
   return `<div class="card" ${subs.some(u=>subBerichtFehlt(o,u))?'style="border-left:5px solid var(--accent)"':""}><h3>📝 Berichte der Subunternehmer</h3>${zeilen}
-   <div class="small mute" style="margin-top:6px">Subunternehmer schreiben ihren Bericht immer selbst. „Anfordern“ schickt ihnen eine Nachricht aufs Handy.</div></div>`;
+   <div class="small mute" style="margin-top:6px">„Anfordern“ schickt eine Nachricht aufs Handy. Mit „Selbst öffnen“ kannst du den Bericht auch selbst schreiben.</div></div>`;
 }
 // „Bericht kontrollieren“: nur die eingetragenen Positionen; fehlende dazu wählen, Mengen ändern.
 // Mehr/zusätzlich → nur im Bericht an meta (Sub sieht nichts). Weniger → Sub-Abrechnung wird angepasst, Sub bekommt Bescheid.
@@ -2095,7 +2106,7 @@ function viewDetail(id){
       <div class="small mute" style="margin:2px 0 12px">${o.termin?`Termin: <b>${esc(langDatum(o.termin))}</b> – `:""}jetzt das Team einteilen – die Leute bekommen sofort Bescheid und bestätigen den Termin.</div>
       <button class="btn pri block" id="teamEinteilen" style="min-height:52px">👷 Team einteilen</button></div>`;
   } else if(can.einsatz() && !frueh && can.planen() && !(o.monteure||[]).includes(myId()) && !(o.einsatz?.abfahrtAm||(o.zeiten||[]).length)){
-    h+=`<details class="card fold" data-fold="${id}:einsatzChef" ${S.fold[id+":einsatzChef"]?"open":""}><summary><b>🚐 Einsatz</b><span class="small mute">fährt ${esc([...new Set((o.monteure||[]).map(nameOf))].join(", "))} · selbst mitfahren ›</span></summary><div class="foldin">${einsatzCard(o,fk).replace('class="card" id="einsatzCard"','class="" id="einsatzCard"')}</div></details>`;
+    h+=`<details class="card fold" data-fold="${id}:einsatzChef" ${S.fold[id+":einsatzChef"]?"open":""}><summary><b>🚐 Einsatz</b><span class="small mute">fährt ${esc([...new Set((o.monteure||[]).map(nameOf))].join(", "))} · selbst mitfahren ›</span></summary><div class="foldin">${o.termin&&terminTag(o)<=tagHeute()?`<button class="btn sm ghost block" data-bselbst="${esc(id)}" style="margin-bottom:8px">📝 Bericht fehlt? Selbst öffnen und schreiben</button>`:""}${einsatzCard(o,fk).replace('class="card" id="einsatzCard"','class="" id="einsatzCard"')}</div></details>`;
   } else if(can.einsatz() && !frueh){
     h+=einsatzCard(o,fk);
     const st=schritt(o);
@@ -2659,7 +2670,7 @@ function einsatzCard(o,fk){
    <div class="steps" style="margin-top:10px">${SCHRITTE.map((s,i)=>`<div class="${i<idx||st==="fertig"?"on":i===idx?"cur":""}"></div>`).join("")}</div>
    <div class="small mute" style="margin:-4px 0 12px">Schritt ${idx+1} von ${SCHRITTE.length}: <b>${st==="abnahme"&&can.sub()?"Bericht abgeben":SCHRITTE[idx][1]}</b>${stepBackPatch(o)?` · <a href="#" id="stepBack">Schritt zurück</a>`:""}</div>`;
   if(!darfBericht(o) && ["bericht","rekla","abnahme"].includes(st)){
-    return h+`<div class="banner info" style="margin:0">📝 Den Montagebericht schreibt <b>${esc(nameOf(schreiberVon(o)))}</b>${S.roles[schreiberVon(o)]==="sub"?" selbst":""}. Deine Zeit, Nachweise und Fotos sind gespeichert und fließen mit ein.</div></div>`;
+    return h+`<div class="banner info" style="margin:0">📝 Den Montagebericht schreibt <b>${esc(nameOf(schreiberVon(o)))}</b>${S.roles[schreiberVon(o)]==="sub"?" selbst":""}. Deine Zeit, Nachweise und Fotos sind gespeichert und fließen mit ein.${can.planen()?`<button class="btn sm pri" data-bselbst="${esc(o.id)}" style="display:flex;margin-top:8px">📝 Bericht selbst öffnen</button>`:""}</div></div>`;
   }
   if(st==="fahrzeug"){
     if((o.leerfahrten||[]).length) h+=`<div class="banner warn small">${vorleistungZeilen(o).map(esc).join("<br>")}</div>`;
@@ -2848,8 +2859,8 @@ const subNurAnteil=(o,u)=>!!(gem(o)||o?.nachgetragen?.[u]);
 function schreiberVon(o){ const subs=subsVon(o); if(!gem(o) && subs.length && !subs.includes(o.berichtSchreiber)) return subs[0]; return o?.berichtSchreiber||null; }
 const subBerichtDa=(o,u)=>subNurAnteil(o,u)?!!o.subAnteil?.[u]?.abgegebenAm:(o.berichtVonSub===u||o.abschluss?.by===u);
 // Fällig: angefordert, oder Montagetag vorbei und Auftrag noch nicht fertig
-const subBerichtFehlt=(o,u)=>!o.storniert && !subBerichtDa(o,u) && (!!o.berichtFehlt?.[u] || (!istFertig(o) && !abgerechnet(o) && !!o.termin && terminTag(o)<tagHeute()));
-const darfBericht=o=>{ const w=schreiberVon(o); if(!w||w===myId()) return true; return can.planen() && !(S.roles[w]==="sub" && !gem(o)); };
+const subBerichtFehlt=(o,u)=>!o.storniert && !subBerichtDa(o,u) && !(istFertig(o) && !subNurAnteil(o,u)) && (!!o.berichtFehlt?.[u] || (!istFertig(o) && !abgerechnet(o) && !!o.termin && terminTag(o)<tagHeute()));
+const darfBericht=o=>{ const w=schreiberVon(o); if(!w||w===myId()) return true; if(can.planen() && o.berichtAuchChef) return true; return can.planen() && !(S.roles[w]==="sub" && !gem(o)); };
 const offeneBerichte=()=>Object.values(S.orders).filter(o=>sichtbar(o)&&!o.storniert&&!istFertig(o)&&(o.monteure||[]).includes(myId())&&darfBericht(o)&&["bericht","rekla","abnahme"].includes(schritt(o)));
 // Chef legt fest, wer den Montagebericht schreibt
 function berichtSchreiberHtml(o){
@@ -3599,6 +3610,7 @@ document.addEventListener("click",e=>{ const b=e.target.closest("[data-plt]"); i
   const tabs=b.closest(".pl-tabs"), f=tabs?.nextElementSibling; if(!f) return;
   tabs.querySelectorAll("[data-plt]").forEach(x=>x.classList.toggle("on",x===b)); f.dataset.zeige=b.dataset.plt; S.plTab=b.dataset.plt; S.plScroll=0; f.scrollTop=0; plFenster(f.parentElement); });
 document.addEventListener("change",e=>{ if(e.target.closest?.(".pl-fenster")) setTimeout(()=>plFenster(),0); });
+document.addEventListener("click",e=>{ const b=e.target.closest?.("[data-bselbst]"); if(!b) return; e.preventDefault(); e.stopPropagation(); b.disabled=true; berichtSelbstOeffnen(b.dataset.bselbst).catch(err=>{ b.disabled=false; toast("Ging nicht: "+(err.message||err)); }); });
 document.addEventListener("toggle",()=>requestAnimationFrame(()=>plFenster()),true);
 document.addEventListener("click",()=>requestAnimationFrame(()=>plFenster()));
 function posNutzung(ohneAuftrag){
